@@ -128,6 +128,10 @@ $string['posts'] = '文章';
 $string['postscopiedfromview'] = '於%s複製文章';
 $string['posttitle'] = '標題';
 $string['progress_blog'] = '新增一本日誌';
+$string['progress_blogpost'] = array(
+'新增 1 篇文章到日誌',
+'新增 %s 篇文章到日誌',
+);
 $string['publish'] = '發表';
 $string['publishblogpost?'] = '您確定要發表這篇文章？';
 $string['published'] = '已發表';
