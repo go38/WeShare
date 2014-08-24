@@ -3718,7 +3718,7 @@ function build_pagination($params) {
         // Build the pagenumbers in the middle
         foreach ($pagenumbers as $k => $i) {
             if ($k != 0 && $prevpagenum < $i - 1) {
-                $output .= '??;
+                $output .= '…';
             }
             if ($i == $page) {
                 $output .= '<span class="selected">' . ($i + 1) . '</span>';
