@@ -110,6 +110,7 @@ $string['profilefailedsaved'] = '個人簡介資料儲存失敗';
 $string['profileinformation'] = '個人簡介資訊';
 $string['profilepage'] = '個人簡介頁面';
 $string['profilesaved'] = '個人簡介資料儲存成功';
+$string['progress_email'] = '增加一個電子郵件信箱';
 $string['progressbaritem_joingroup'] = '加入一個群組';
 $string['progressbaritem_makefriend'] = '結交一位朋友';
 $string['progressbaritem_messaging'] = '傳送訊息';
@@ -128,3 +129,11 @@ $string['viewallprofileinformation'] = '檢視全部個人簡介資訊';
 $string['viewmyprofile'] = '檢視我的個人簡介';
 $string['viewprofilepage'] = '檢視個人簡介頁面';
 $string['yahoochat'] = 'Yahoo聊天';
+$string['progress_joingroup'] = array(
+    '加入 1 個群組',
+    '加入 %s 個群組',
+);
+$string['progress_makefriend'] = array(
+    '結交朋友',
+    '結交 %s 位朋友',
+);
