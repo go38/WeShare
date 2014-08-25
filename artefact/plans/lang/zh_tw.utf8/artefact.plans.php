@@ -74,3 +74,15 @@ $string['tasks'] = '任務';
 $string['tasksavedsuccessfully'] = '任務儲存成功。';
 $string['title'] = '標題';
 $string['titledesc'] = '在計畫區塊，這標題將用來顯示每個任務。';
+$string['ntasks'] = array(
+        '1 個任務',
+        '%s 個任務',
+);
+$string['progress_plan'] = array(
+    '新增 1 個計畫',
+    '新增 %s 個計畫',
+);
+$string['progress_task'] = array(
+    '在計畫中新增1個任務',
+    '在計畫中新增%s個任務',
+);
