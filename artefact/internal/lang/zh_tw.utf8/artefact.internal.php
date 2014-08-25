@@ -70,6 +70,7 @@ $string['emailvalidation_body1'] = '%s 您好，
 如果這個信箱是您的，但是您並未要求加到 %s 的帳號裡，那麼請連結到下列網址以取消此電子郵件的啟用。
 %s';
 $string['emailvalidation_subject'] = '電子郵件確認';
+$string['existingprofilefieldvalues'] = '現有資料';
 $string['faxnumber'] = '傳真號碼';
 $string['firstname'] = '名字';
 $string['fullname'] = '全名';
@@ -114,10 +115,13 @@ $string['profilepage'] = '個人簡介頁面';
 $string['profilesaved'] = '個人簡介資料儲存成功';
 $string['progress_address'] = '填寫您的郵寄地址';
 $string['progress_blogaddress'] = '加入您的部落格網址';
+$string['progress_country'] = '填寫您的國家';
 $string['progress_email'] = '增加一個電子郵件信箱';
+$string['progress_faxnumber'] = '加上傳真電話';
 $string['progress_firstname'] = '填上您的名字';
 $string['progress_homenumber'] = '加入住家電話';
 $string['progress_messaging'] = '新增傳訊資料';
+$string['progress_occupation'] = '加入職業';
 $string['progress_officialwebsite'] = '加入一個正式網站';
 $string['progress_preferredname'] = '加入您要顯示的名稱';
 $string['progressbaritem_joingroup'] = '加入一個群組';
@@ -138,6 +142,7 @@ $string['viewallprofileinformation'] = '檢視全部個人簡介資訊';
 $string['viewmyprofile'] = '檢視我的個人簡介';
 $string['viewprofilepage'] = '檢視個人簡介頁面';
 $string['yahoochat'] = 'Yahoo聊天';
+$string['progress_introduction'] = '撰寫自我介紹';
 $string['progress_joingroup'] = array(
     '加入 1 個群組',
     '加入 %s 個群組',
