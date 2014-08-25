@@ -26,5 +26,5 @@
 
 $theme = new StdClass;
 
-$theme->displayname = 'Essential';
+$theme->displayname = 'M3_Essential';
 $theme->parent      = 'raw';
