@@ -269,3 +269,51 @@ $string['wrongfiletypeforblock'] = '您上傳的檔案不是這區塊的正確�
 $string['xml'] = 'XML 檔案';
 $string['youmustagreetothecopyrightnotice'] = '您必須同意這版權宣告';
 $string['zip'] = 'ZIP 壓縮檔';
+$string['fileattachedtoportfolioitems'] = array(
+    0 => 'This file is attached to %s other item in your portfolio.',
+    1 => 'This file is attached to %s other items in your portfolio.',
+);
+$string['foldercontainsprofileicons'] = array(
+        0 => 'The folder contains %s profile picture.',
+        1 => 'The folder contains %s profile pictures.',
+);
+$string['nprofilepictures'] = array(
+    '個人照片',
+    '個人照片',
+);
+$string['nfolders'] = array(
+    '%s 個資料夾',
+    '%s 個資料夾',
+);
+$string['nfiles'] = array(
+    '%s 個檔案',
+    '%s 個檔案',
+);
+$string['progress_archive'] = array(
+    '新增 1 個壓縮檔',
+    '新增 %s 個壓縮檔',
+);
+$string['progress_audio'] = array(
+    '新增 1 個聲音檔',
+    '新增 %s 個聲音檔',
+);
+$string['progress_file'] = array(
+    '新增 1 個檔案',
+    '新增 %s 個檔案',
+);
+$string['progress_folder'] = array(
+    '新增 1 個資料夾',
+    '新增 %s 個資料夾',
+);
+$string['progress_image'] = array(
+    '新增 1 個圖片檔',
+    '新增 %s 個圖片檔',
+);
+$string['progress_profileicon'] = array(
+    '新增  1 張個人照',
+    '新增  %s 張個人照',
+);
+$string['progress_video'] = array(
+    '新增 1 個影音檔',
+    '新增 %s 個影音檔',
+);
