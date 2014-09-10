@@ -83,3 +83,7 @@ $string['thiscommentisprivate'] = '這評論是私人的';
 $string['typefeedback'] = '回饋';
 $string['viewcomment'] = '檢視評論';
 $string['youhaverequestedpublic'] = '您已要求對此評論予以公開。';
+$string['progress_feedback'] = array(
+    '在其他人的個人頁面留下回饋意見',
+    '給 %s 位個人頁面留下回饋意',
+);
