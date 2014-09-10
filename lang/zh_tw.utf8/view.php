@@ -371,8 +371,8 @@ $string['youhavesubmittedon'] = '在%s，您已經發送<a href="%s">%s</a>到�
 $string['youhaveviews'] = '您有 %s 個頁面。';
 $string['100'] = '相同寬度';
 $string['addblock'] = '新增區塊: %s';
-$string['blockcell'] = '格';
+$string['blockcell'] = '方格';
 $string['cellposition'] = '%s 列 %s 欄';
 $string['blockorder'] = '位置';
-$string['blockordertop'] = '欄的最上端';
+$string['blockordertop'] = '最頂端';
 $string['blockorderafter'] = '在 %s 之後';
