@@ -17,7 +17,7 @@ function updateWYSIWYGText() {
         $('editsitepage_pagename').value = oldPageName;
         return;
     }
-    if (!tinyMCE.isMSIE) {
+    if (!tinyMCE.Env.ie) {
         // Disable changed content check for IE (see below)
         checkOldContent = true;
     }
@@ -43,15 +43,17 @@ function updateWYSIWYGText() {
 
 function updateSiteDefault(changed) {
     changedCheckbox = (changed) ? true : false;
+    var editor = getFirstElementByTagAndClassName('td', null, $('editsitepage_pagetext_container'));
+    editor.style.padding = '0px';
     if ($('editsitepage_pageusedefault').checked == true) {
         tinyMCE.activeEditor.getBody().setAttribute('contenteditable', false);
         $('changecheckboxdiv').style.display = 'block';
-        $('changecheckboxdiv').style.zIndex = '5';
+        $('changecheckboxdiv').style.zIndex = '1';
         $('changecheckboxdiv').style.position = 'absolute';
-        $('changecheckboxdiv').style.width = $('editsitepage_pagetext_tbl').offsetWidth + 'px';
-        $('changecheckboxdiv').style.height = $('editsitepage_pagetext_tbl').offsetHeight + 'px';
-        $('changecheckboxdiv').style.top = elementPosition('editsitepage_pagetext_tbl').y + 'px';
-        $('changecheckboxdiv').style.left = elementPosition('editsitepage_pagetext_tbl').x + 'px';
+        $('changecheckboxdiv').style.width = editor.offsetWidth + 'px';
+        $('changecheckboxdiv').style.height = editor.offsetHeight + 'px';
+        $('changecheckboxdiv').style.top = elementPosition(editor).y + 'px';
+        $('changecheckboxdiv').style.left = elementPosition(editor).x + 'px';
     }
     else {
         tinyMCE.activeEditor.getBody().setAttribute('contenteditable', true);
@@ -74,7 +76,7 @@ function connectElements() {
 function contentSaved(form, data) {
     connectElements();
     changedCheckbox = false;
-    if (!tinyMCE.isMSIE) {
+    if (!tinyMCE.Env.ie) {
         // Disabling changed content check for IE; Need to work out
         // why the getBody() call in getContent fails to return the
         // body element.

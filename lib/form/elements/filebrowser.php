@@ -782,7 +782,6 @@ function pieform_element_filebrowser_doupdate(Pieform $form, $element) {
 
 }
 
-//?asename?賣?⊥?甇?Ⅱ?? unicode銝剜?瑼?嚗蝚砌???望?摮?靘?
 function Xbasename($file= null) {
     if($file=== null || strlen($file)<= 0) {
         return null;
@@ -794,7 +793,6 @@ function Xbasename($file= null) {
 
     return $basename;  
 }
-
 
 function pieform_element_filebrowser_upload(Pieform $form, $element, $data) {
     global $USER;

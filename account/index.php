@@ -100,6 +100,9 @@ $elements['accountoptionsdesc'] = array(
 // Add general account options
 $elements = array_merge($elements, general_account_prefs_form_elements($prefs));
 
+// Add plugins account options.
+$elements = array_merge($elements, plugin_account_prefs_form_elements($prefs));
+
 $blogcount = count_records('artefact', 'artefacttype', 'blog', 'owner', $USER->get('id')) ;
 if ($blogcount != 1 && $prefs->multipleblogs == 1) {
     $elements['multipleblogs']['readonly'] = true;
@@ -173,6 +176,8 @@ function accountprefs_validate(Pieform $form, $values) {
             }
         }
     }
+
+    plugin_account_prefs_validate($form, $values);
 }
 
 function accountprefs_submit(Pieform $form, $values) {
@@ -192,7 +197,7 @@ function accountprefs_submit(Pieform $form, $values) {
     }
 
     // use this as looping through values is not safe.
-    $expectedprefs = expected_account_preferences(); 
+    $expectedprefs = expected_account_preferences();
     if ($values['maildisabled'] == 0 && get_account_preference($USER->get('id'), 'maildisabled') == 1) {
         // Reset the sent and bounce counts otherwise mail will be disabled
         // on the next send attempt
@@ -206,6 +211,8 @@ function accountprefs_submit(Pieform $form, $values) {
     // Remember the user's language & theme prefs, so we can reload the page if they change them
     $oldlang = $USER->get_account_preference('lang');
     $oldtheme = $USER->get_account_preference('theme');
+    $oldgroupsideblockmaxgroups = $USER->get_account_preference('groupsideblockmaxgroups');
+    $oldgroupsideblocksortby = $USER->get_account_preference('groupsideblocksortby');
 
     if (get_config('allowmobileuploads')) {
         // Make sure the mobile token is formatted / saved correctly
@@ -217,19 +224,19 @@ function accountprefs_submit(Pieform $form, $values) {
 
     // Set user account preferences
     foreach ($expectedprefs as $eprefkey => $epref) {
-        if (isset($values[$eprefkey]) && $values[$eprefkey] != get_account_preference($USER->get('id'), $eprefkey)) {
+        if (isset($values[$eprefkey]) && $values[$eprefkey] !== get_account_preference($USER->get('id'), $eprefkey)) {
             $USER->set_account_preference($eprefkey, $values[$eprefkey]);
         }
     }
 
     $returndata = array();
-
     if (isset($values['username']) && $values['username'] != $USER->get('username')) {
         $USER->username = $values['username'];
         $USER->commit();
         $returndata['username'] = $values['username'];
     }
 
+    $reload = false;
     if (get_config('cleanurls') && isset($values['urlid']) && $values['urlid'] != $USER->get('urlid')) {
         $USER->urlid = $values['urlid'];
         $USER->commit();
@@ -258,6 +265,14 @@ function accountprefs_submit(Pieform $form, $values) {
         $returndata['message'] = get_string_from_language($values['lang'], 'prefssaved', 'account');
         $reload = true;
     }
+    if (isset($values['groupsideblockmaxgroups']) && $values['groupsideblockmaxgroups'] != $oldgroupsideblockmaxgroups) {
+        $reload = true;
+    }
+    if ($values['groupsideblocksortby'] != $oldgroupsideblocksortby) {
+        $reload = true;
+    }
+
+    $reload = plugin_account_prefs_submit($form, $values) || $reload;
 
     if (!empty($reload)) {
         // Use PIEFORM_CANCEL here to force a page reload and show the new language.

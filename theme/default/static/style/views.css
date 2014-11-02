@@ -1,5 +1,5 @@
 /**
- * Views stylesheet - for Mahara's Aqua theme.
+ * Views stylesheet - for Mahara's Default theme.
  *
  * @author     Catalyst IT Ltd
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL version 3 or later
@@ -10,7 +10,7 @@
 /******************** Collection navigation ********************/
 /* Collections */
 #collectionnavwrap {
-	background: #F3F7EC;
+    background: #F3F7EC;
 }
 ul.colnav li a,
 ul.colnav li a:link,
@@ -18,11 +18,13 @@ ul.colnav li a:visited,
 ul.colnav li a:active {
     background: #d6e0c5;
 }
+
 /******************** Blocktype icons panel ********************/
 /* for 600px or less */
 @media screen and (max-width: 600px) {
     #editcontent-sidebar {
-        width: 39px;
+        /* width: 39px;  issue with mobile devices */
+        width: 64px;
         top: 0;
     }
     body.no-js #editcontent-sidebar {
@@ -30,7 +32,8 @@ ul.colnav li a:active {
     }
     #tabcontent #page,
     #tabcontent #page.open {
-        margin-left: 46px;
+        /* margin-left: 46px;  issue with mobile devices */
+        margin-left: 71px;
     }
     body.no-js #tabcontent #page,
     body.no-js #tabcontent #page.open {
@@ -38,7 +41,7 @@ ul.colnav li a:active {
     }
     .block-category-title .withjs,
     .block-category-title .nonjs {
-    	text-indent: -9999px;
+        text-indent: -9999px;
     }
     .blocktypetitle,
     .open #content-editor-header,
@@ -46,13 +49,22 @@ ul.colnav li a:active {
         display: none;
     }
     .ui-draggable-dragging .blocktype .blocktypetitle {
-    	display: inline;
+        display: inline;
     }
     #select-theme-header {
         text-indent: -9999px;
     }
     #select-theme select {
-        max-width: 30px;
+        height: 24px;
+        max-width: 100%;
+    }
+    /* for touch devices */
+    #editcontent-sidebar.withradio {
+        width: 64px;
+    }
+    #tabcontent #page,
+    #tabcontent #page.open {
+        margin-left: 71px;
     }
 }
 /******************** Blocks ********************/
@@ -60,10 +72,11 @@ ul.colnav li a:active {
 .blockinstance-header .title a:link,
 .blockinstance-header .title a:visited,
 .blockinstance-header .title a:active {
-	color: #1E6297;
+    color: #1E6297;
 }
-.blockinstance-header .title a:hover {
-	color: #267bbd;
+.blockinstance-header .title a:hover,
+.blockinstance-header .title a:focus {
+    color: #267bbd;
     text-decoration: none;
 }
 /******************** Responsive design ********************/
@@ -86,6 +99,7 @@ ul.colnav li a:active {
         left: 5% !important;
     }
 }
+
 /* for 600px or less */
 @media screen and (max-width: 600px) {
     .column {
@@ -94,6 +108,7 @@ ul.colnav li a:active {
         float: none;
     }
 }
+
 /* for 540px or less */
 @media screen and (max-width: 540px) {
     #toggle_watchlist_link,

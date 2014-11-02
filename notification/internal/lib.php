@@ -21,7 +21,7 @@ class PluginNotificationInternal extends PluginNotification {
         $toinsert->usr = $user->id;
         if (!empty($user->markasread)) {
             $toinsert->read = 1;
-        } 
+        }
         else {
             $toinsert->read = 0;
         }
@@ -42,13 +42,9 @@ class PluginNotificationInternal extends PluginNotification {
 
         return insert_record('notification_internal_activity', $toinsert, 'id', true);
     }
-    
+
     public static function postinst($prevversion) {
         if ($prevversion == 0) {
-            // Delete the triggers first, in case they already exist.
-            db_drop_trigger('update_unread_insert', 'notification_internal_activity');
-            db_drop_trigger('update_unread_update', 'notification_internal_activity');
-            db_drop_trigger('update_unread_delete', 'notification_internal_activity');
             // Add triggers to update user unread message count when updating
             // notification_internal_activity
             db_create_trigger(

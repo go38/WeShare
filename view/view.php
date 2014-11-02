@@ -19,6 +19,7 @@ require(dirname(dirname(__FILE__)) . '/init.php');
 
 require_once(get_config('libroot') . 'view.php');
 require_once(get_config('libroot') . 'collection.php');
+require_once(get_config('libroot') . 'objectionable.php');
 require_once('institution.php');
 require_once('group.php');
 safe_require('artefact', 'comment');
@@ -67,6 +68,15 @@ if (!isset($view)) {
 
 if (!can_view_view($view)) {
     throw new AccessDeniedException(get_string('accessdenied', 'error'));
+}
+else {
+    // To save the atime in the db - make it a millisecond in the past
+    // so it differs from the atime in the View constructor and so triggers
+    // the saving of the atime change. Can't use $view->set('dirty', true)
+    // as that will also get the view object to update the mtime which is not
+    // what we want.
+    $view->set('atime', (time()) - 1);
+    $view->commit();
 }
 
 // Feedback list pagination requires limit/offset params
@@ -117,23 +127,28 @@ if ($USER->is_logged_in() && $submittedgroup && group_user_can_assess_submitted_
     else {
         $text = get_string('viewsubmittedtogroup', 'view', group_homepage_url($submittedgroup), hsc($submittedgroup->name));
     }
-    $releaseform = pieform(array(
-        'name'     => 'releaseview',
-        'method'   => 'post',
-        'plugintype' => 'core',
-        'pluginname' => 'view',
-        'autofocus' => false,
-        'elements' => array(
-            'submittedview' => array(
-                'type'  => 'html',
-                'value' => $text,
+    if (($releasecollection && $collection->get('submittedstatus') == Collection::SUBMITTED) || $view->get('submittedstatus') == View::SUBMITTED) {
+        $releaseform = pieform(array(
+            'name'     => 'releaseview',
+            'method'   => 'post',
+            'plugintype' => 'core',
+            'pluginname' => 'view',
+            'autofocus' => false,
+            'elements' => array(
+                'submittedview' => array(
+                    'type'  => 'html',
+                    'value' => $text,
+                ),
+                'submit' => array(
+                    'type'  => 'submit',
+                    'value' => $releasecollection ? get_string('releasecollection', 'group') : get_string('releaseview', 'group'),
+                ),
             ),
-            'submit' => array(
-                'type'  => 'submit',
-                'value' => $releasecollection ? get_string('releasecollection', 'group') : get_string('releaseview', 'group'),
-            ),
-        ),
-    ));
+        ));
+    }
+    else {
+        $releaseform = $text . ' ' . get_string('submittedpendingrelease', 'view');
+    }
 }
 else {
     $releaseform = '';
@@ -141,13 +156,26 @@ else {
 
 function releaseview_submit() {
     global $USER, $SESSION, $view, $collection, $submittedgroup, $releasecollection;
+
     if ($releasecollection) {
-        $collection->release($USER);
-        $SESSION->add_ok_msg(get_string('collectionreleasedsuccess', 'group'));
+        if (is_object($submittedgroup) && $submittedgroup->allowarchives) {
+            $collection->pendingrelease($USER);
+            $SESSION->add_ok_msg(get_string('collectionreleasedpending', 'group'));
+        }
+        else {
+            $collection->release($USER);
+            $SESSION->add_ok_msg(get_string('collectionreleasedsuccess', 'group'));
+        }
     }
     else {
-        $view->release($USER);
-        $SESSION->add_ok_msg(get_string('viewreleasedsuccess', 'group'));
+        if (is_object($submittedgroup) && $submittedgroup->allowarchives) {
+            $view->pendingrelease($USER);
+            $SESSION->add_ok_msg(get_string('viewreleasedpending', 'group'));
+        }
+        else {
+            $view->release($USER);
+            $SESSION->add_ok_msg(get_string('viewreleasedsuccess', 'group'));
+        }
     }
     if ($submittedgroup) {
         // The tutor might not have access to the view any more; send
@@ -157,7 +185,7 @@ function releaseview_submit() {
     redirect($view->get_url());
 }
 
-$javascript = array('paginator', 'viewmenu', 'expandable');
+$javascript = array('paginator', 'viewmenu', 'expandable', 'author');
 $blocktype_js = $view->get_all_blocktype_javascript();
 $javascript = array_merge($javascript, $blocktype_js['jsfiles']);
 $inlinejs = "addLoadEvent( function() {\n" . join("\n", $blocktype_js['initjs']) . "\n});";
@@ -175,7 +203,7 @@ if (!empty($releaseform) || ($commenttype = $view->user_comments_allowed($USER))
 }
 if ($USER->is_logged_in()) {
     $objectionform = pieform(objection_form());
-    if ($notrudeform = $view->notrude_form()) {
+    if ($notrudeform = notrude_form()) {
         $notrudeform = pieform($notrudeform);
     }
 }
@@ -266,9 +294,20 @@ $smarty->assign('viewtype', $viewtype);
 $smarty->assign('feedback', $feedback);
 $smarty->assign('owner', $owner);
 $smarty->assign('tags', $view->get('tags'));
-$smarty->assign('author', $view->display_author());
 
-$smarty->assign('PAGEAUTHOR', $view->formatted_owner());
+if ($view->is_anonymous()) {
+  $smarty->assign('PAGEAUTHOR', get_string('anonymoususer'));
+  $smarty->assign('author', get_string('anonymoususer'));
+  if ($view->is_staff_or_admin_for_page()) {
+    $smarty->assign('realauthor', $view->display_author());
+  }
+  $smarty->assign('anonymous', TRUE);
+} else {
+  $smarty->assign('PAGEAUTHOR', $view->formatted_owner());
+  $smarty->assign('author', $view->display_author());
+  $smarty->assign('anonymous', FALSE);
+}
+
 
 $titletext = ($collection && $shownav) ? hsc($collection->get('name')) : $view->display_title(true, false, false);
 

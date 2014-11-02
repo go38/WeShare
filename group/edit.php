@@ -54,8 +54,9 @@ else {
         'category'       => 0,
         'public'         => 0,
         'usersautoadded' => 0,
-        'viewnotify'     => 1,
+        'viewnotify'     => GROUP_ROLES_ALL,
         'submittableto'  => 0,
+        'allowarchives'  => 0,
         'editroles'      => 'all',
         'hidden'         => 0,
         'hidemembers'    => 0,
@@ -66,7 +67,8 @@ else {
         'urlid'          => null,
         'editwindowstart' => null,
         'editwindowend'  => null,
-        'sendnow'        => 0
+        'sendnow'        => 0,
+        'feedbacknotify' => GROUP_ROLES_ALL,
     );
 }
 
@@ -226,11 +228,23 @@ if ($cancreatecontrolled) {
         'description'  => get_string('allowssubmissionsdescription1', 'group'),
         'defaultvalue' => $group_data->submittableto,
     );
+    $elements['allowarchives'] = array(
+        'type'         => 'checkbox',
+        'title'        => get_string('allowsarchives', 'group'),
+        'description'  => get_string('allowsarchivesdescription', 'group'),
+        'defaultvalue' => $group_data->allowarchives,
+        'disabled'     => !$group_data->submittableto,
+        'help'         => true,
+    );
 }
 else {
     $form['elements']['submittableto'] = array(
         'type'         => 'hidden',
         'value'        => $group_data->submittableto,
+    );
+    $form['elements']['allowarchives'] = array(
+        'type'         => 'hidden',
+        'value'        => $group_data->allowarchives,
     );
 }
 
@@ -366,11 +380,20 @@ $elements['usersautoadded'] = array(
             'defaultvalue' => $group_data->usersautoadded,
             'help'         => true,
             'ignore'       => !$USER->get('admin'));
+$notifyroles = array(get_string('none', 'admin')) + group_get_editroles_options(true);
 $elements['viewnotify'] = array(
-    'type' => 'checkbox',
+    'type' => 'select',
     'title' => get_string('viewnotify', 'group'),
-    'description' => get_string('viewnotifydescription', 'group'),
+    'options' => $notifyroles,
+    'description' => get_string('viewnotifydescription2', 'group'),
     'defaultvalue' => $group_data->viewnotify
+);
+$elements['feedbacknotify'] = array(
+    'type' => 'select',
+    'title' => get_string('feedbacknotify', 'group'),
+    'options' => $notifyroles,
+    'description' => get_string('feedbacknotifydescription1', 'group'),
+    'defaultvalue' => $group_data->feedbacknotify
 );
 if ($cancreatecontrolled) {
     $elements['sendnow'] = array(
@@ -459,6 +482,7 @@ function editgroup_submit(Pieform $form, $values) {
         'public'         => ($publicallowed ? intval($values['public']) : 0),
         'viewnotify'     => intval($values['viewnotify']),
         'submittableto'  => intval($values['submittableto']),
+        'allowarchives'  => intval(!empty($values['allowarchives']) ? $values['allowarchives'] : 0),
         'editroles'      => $values['editroles'],
         'hidden'         => intval($values['hidden']),
         'hidemembers'    => intval(!empty($values['hidemembersfrommembers']) || !empty($values['hidemembers'])),
@@ -468,7 +492,8 @@ function editgroup_submit(Pieform $form, $values) {
         'suggestfriends' => intval($values['suggestfriends']),
         'editwindowstart' => db_format_timestamp($values['editwindowstart']),
         'editwindowend'  => db_format_timestamp($values['editwindowend']),
-        'sendnow'        => intval($values['sendnow'])
+        'sendnow'        => intval($values['sendnow']),
+        'feedbacknotify'     => intval($values['feedbacknotify']),
     );
 
     if (
@@ -561,6 +586,15 @@ $j(function() {
         }
         else {
             $j("#editgroup_hidemembers").removeAttr("disabled");
+        }
+    });
+    $j("#editgroup_submittableto").click(function() {
+        if (this.checked) {
+            $j("#editgroup_allowarchives").attr("disabled", false);
+        }
+        else {
+            $j("#editgroup_allowarchives").removeAttr("checked");
+            $j("#editgroup_allowarchives").attr("disabled", true);
         }
     });
 });

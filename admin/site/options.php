@@ -20,6 +20,7 @@ require(dirname(dirname(dirname(__FILE__))) . '/init.php');
 require_once('pieforms/pieform.php');
 require_once('searchlib.php');
 require_once('antispam.php');
+require_once(get_config('libroot') . 'activity.php');
 define('TITLE', get_string('siteoptions', 'admin'));
 
 $langoptions = get_languages();
@@ -33,13 +34,7 @@ $searchpluginoptions = get_search_plugins();
 
 $countries = getoptions_country();
 
-$notificationmethods = array();
-foreach (array_keys(plugins_installed('notification')) as $n) {
-    $notificationmethods[$n] = get_string('name', 'notification.' . $n);
-}
-if (!$notificationdefault = get_config('defaultnotificationmethod')) {
-    $notificationdefault = isset($notificationmethods['email']) ? 'email' : 'internal';
-}
+$notificationelements = get_notification_settings_elements(null, true);
 
 $spamtraps = available_spam_traps();
 $siteoptionform = array(
@@ -102,8 +97,8 @@ $siteoptionform = array(
                 ),
                 'homepageinfo' => array(
                     'type'         => 'checkbox',
-                    'title'        => get_string('homepageinfo', 'admin'),
-                    'description'  => get_string('homepageinfodescription', 'admin'),
+                    'title'        => get_string('homepageinfo1', 'admin'),
+                    'description'  => get_string('homepageinfodescription1', 'admin'),
                     'defaultvalue' => get_config('homepageinfo'),
                     'disabled'     => in_array('homepageinfo', $OVERRIDDEN),
                 ),
@@ -123,13 +118,6 @@ $siteoptionform = array(
             'collapsed'    => true,
             'legend'       => get_string('usersettingslegend', 'admin'),
             'elements'     => array(
-                'requireregistrationconfirm' => array(
-                    'type'         => 'checkbox',
-                    'title'        => get_string('requireregistrationconfirm', 'admin'),
-                    'description'  => get_string('requireregistrationconfirmdescription', 'admin'),
-                    'defaultvalue' => get_config('requireregistrationconfirm'),
-                    'help'         => true,
-                ),
                 'userscanchooseviewthemes' => array(
                     'type'         => 'checkbox',
                     'title'        => get_string('userscanchooseviewthemes', 'admin'),
@@ -223,6 +211,13 @@ $siteoptionform = array(
                     'defaultvalue' => get_config('showprogressbar'),
                     'disabled'     => in_array('showprogressbar', $OVERRIDDEN),
                 ),
+                'exporttoqueue' => array(
+                    'type'         => 'checkbox',
+                    'title'        => get_string('exporttoqueue', 'admin'),
+                    'description'  => get_string('exporttoqueuedescription1', 'admin'),
+                    'defaultvalue' => get_config('exporttoqueue'),
+                    'disabled'     => in_array('exporttoqueue', $OVERRIDDEN),
+                ),
             ),
         ),
         'searchsettings' => array(
@@ -288,6 +283,12 @@ $siteoptionform = array(
             'collapsed'    => true,
             'legend'       => get_string('institutionsettingslegend', 'admin'),
             'elements'     => array(
+                'requireregistrationconfirm' => array(
+                    'type'         => 'checkbox',
+                    'title'        => get_string('requireregistrationconfirm', 'admin'),
+                    'description'  => get_string('requireregistrationconfirmdescription', 'admin'),
+                    'defaultvalue' => get_config('requireregistrationconfirm'),
+                ),
                 'usersallowedmultipleinstitutions' => array(
                     'type'         => 'checkbox',
                     'title'        => get_string('usersallowedmultipleinstitutions', 'admin'),
@@ -545,16 +546,22 @@ $siteoptionform = array(
                     'disabled'      => in_array('noreplyaddress', $OVERRIDDEN),
                     'help'          => true,
                 ),
-                'defaultnotificationmethod' => array(
-                    'type'          => 'select',
-                    'title'         => get_string('defaultnotificationmethod', 'admin'),
-                    'description'   => get_string('defaultnotificationmethoddescription', 'admin'),
-                    'defaultvalue'  => $notificationdefault,
-                    'disabled'      => in_array('defaultnotificationmethod', $OVERRIDDEN),
-                    'options'       => $notificationmethods,
-                    'help'          => true,
-                ),
             ),
+        ),
+        'notificationsettings' => array(
+            'type'         => 'fieldset',
+            'collapsible'  => true,
+            'collapsed'    => true,
+            'legend'       => get_string('notificationsettings', 'admin'),
+            'elements'     => array_merge(
+                array(
+                    'activitydescription' => array(
+                        'type' => 'html',
+                        'class' => 'description',
+                        'value' => get_string('notificationsettingsdescription', 'admin'),
+                    )
+                ),
+                $notificationelements),
         ),
         'generalsettings' => array(
             'type'         => 'fieldset',
@@ -577,6 +584,14 @@ $siteoptionform = array(
                     'defaultvalue' => get_config('allowpublicprofiles'),
                     'help'         => true,
                     'disabled'     => in_array('allowpublicprofiles', $OVERRIDDEN) || get_config('allowpublicviews'),
+                ),
+                'allowanonymouspages' => array(
+                    'type'         => 'checkbox',
+                    'title'        => get_string('allowanonymouspages', 'admin'),
+                    'description'  => get_string('allowanonymouspagesdescription', 'admin'),
+                    'defaultvalue' => get_config('allowanonymouspages'),
+                    'help'         => true,
+                    'disabled'     => in_array('allowanonymouspages', $OVERRIDDEN),
                 ),
                 'generatesitemap' => array(
                     'type'         => 'checkbox',
@@ -740,18 +755,18 @@ function siteoptions_submit(Pieform $form, $values) {
     $fields = array(
         'sitename','lang','theme', 'dropdownmenu',
         'defaultaccountlifetime', 'defaultregistrationexpirylifetime', 'defaultaccountinactiveexpire', 'defaultaccountinactivewarn',
-        'defaultaccountlifetimeupdate', 'allowpublicviews', 'allowpublicprofiles', 'generatesitemap',
+        'defaultaccountlifetimeupdate', 'allowpublicviews', 'allowpublicprofiles', 'allowanonymouspages', 'generatesitemap',
         'registration_sendweeklyupdates', 'institutionexpirynotification', 'institutionautosuspend', 'requireregistrationconfirm',
         'showselfsearchsideblock', 'searchusernames', 'searchplugin', 'showtagssideblock',
         'tagssideblockmaxtags', 'country', 'viewmicroheaders', 'userscanchooseviewthemes',
         'remoteavatars', 'userscanhiderealnames', 'antispam', 'spamhaus', 'surbl', 'anonymouscomments',
         'recaptchaonregisterform', 'recaptchapublickey', 'recaptchaprivatekey', 'loggedinprofileviewaccess', 'disableexternalresources',
         'proxyaddress', 'proxyauthmodel', 'proxyauthcredentials', 'smtphosts', 'smtpport', 'smtpuser', 'smtppass', 'smtpsecure',
-        'noreplyaddress', 'defaultnotificationmethod', 'homepageinfo', 'showprogressbar', 'showonlineuserssideblock', 'onlineuserssideblockmaxusers',
+        'noreplyaddress', 'homepageinfo', 'showprogressbar', 'showonlineuserssideblock', 'onlineuserssideblockmaxusers',
         'registerterms', 'licensemetadata', 'licenseallowcustom', 'allowmobileuploads', 'creategroups', 'createpublicgroups', 'allowgroupcategories', 'wysiwyg',
         'staffreports', 'staffstats', 'userscandisabledevicedetection', 'watchlistnotification_delay',
         'masqueradingreasonrequired', 'masqueradingnotified', 'searchuserspublic',
-        'eventloglevel', 'eventlogexpiry', 'sitefilesaccess',
+        'eventloglevel', 'eventlogexpiry', 'sitefilesaccess', 'exporttoqueue',
     );
     $count = 0;
     $where_sql = " WHERE admin = 0 AND id != 0";
@@ -810,6 +825,8 @@ function siteoptions_submit(Pieform $form, $values) {
         safe_require('artefact', 'file');
         ArtefactTypeFolder::change_public_folder_name($oldlanguage, $values['lang']);
     }
+
+    save_notification_settings($values, null, true);
 
     // If they've changed the search plugin, give the new plugin a chance to initialize.
     if ($oldsearchplugin != $values['searchplugin']) {

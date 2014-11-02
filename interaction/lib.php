@@ -11,28 +11,35 @@
 
 defined('INTERNAL') || die();
 
+/**
+ * Helper interface to hold PluginInteraction's static abstract methods
+ */
+interface IPluginInteraction {
+    /**
+    * override this to add extra pieform elements to the edit instance form
+    */
+    public static function instance_config_form($group, $instance=null);
+
+    /**
+    * override this to save any extra fields in the instance form.
+    */
+    public static function instance_config_save($instance, $values);
+
+    /*
+    * override this to perform extra validation
+    * public function instance_config_validate(Pieform $form,  $values);
+    */
+}
 
 /**
  * Base interaction plugin class
  * @abstract
  */
-abstract class PluginInteraction extends Plugin { 
+abstract class PluginInteraction extends Plugin implements IPluginInteraction {
 
-    /**
-    * override this to add extra pieform elements to the edit instance form
-    */
-    public static abstract function instance_config_form($group, $instance=null);
-
-    /**
-    * override this to save any extra fields in the instance form.
-    */
-    public static abstract function instance_config_save($instance, $values);
-
-    /*
-    * override this to perform extra validation
-    * public abstract function instance_config_validate(Pieform $form,  $values);
-    */
-
+    public static function get_plugintype_name() {
+        return 'interaction';
+    }
 
     public static function instance_config_base_form($plugin, $group, $instance=null) {
         global $USER;
@@ -79,13 +86,44 @@ abstract class PluginInteraction extends Plugin {
         );
     }
 
+    /**
+     * This function returns an array of menu items
+     * to be displayed
+     *
+     * See the function find_menu_children() in lib/web.php
+     * for a description of the expected array structure.
+     *
+     * @return array
+     */
+    public static function menu_items() {
+        return array();
+    }
+
+    /**
+     * This function returns an array of menu items
+     * to be displayed in the top right navigation menu
+     *
+     * See the function find_menu_children() in lib/web.php
+     * for a description of the expected array structure.
+     *
+     * @return array
+     */
+    public static function right_nav_menu_items() {
+        return array();
+    }
 }
 
+/**
+ * Helper interface to hold InteractionInstance's abstract static methods
+ */
+interface IInteractionInstance {
+    public static function get_plugin();
+}
 
-/** 
+/**
  * Base class for interaction instances
  */
-abstract class InteractionInstance {
+abstract class InteractionInstance implements IInteractionInstance {
 
     protected $id;
     protected $title;
@@ -169,16 +207,13 @@ abstract class InteractionInstance {
             $this->dirty = false;
             return;
         }
-       
+
         set_field('interaction_instance', 'deleted', 1, 'id', $this->id);
 
         $this->dirty = false;
     }
 
-    public static abstract function get_plugin();
-
     public abstract function interaction_remove_user($userid);
-
 }
 
 function interaction_check_plugin_sanity($pluginname) {
@@ -231,7 +266,7 @@ function edit_interaction_submit(Pieform $form, $values) {
 }
 
 function delete_interaction_submit(Pieform $form, $values) {
-   
+
     require_once(get_config('docroot') . 'interaction/lib.php');
     $instance = interaction_instance_from_id($values['id']);
 

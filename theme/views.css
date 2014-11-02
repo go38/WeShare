@@ -251,7 +251,8 @@ ul.colnav li.selected span {
     padding: 4px 4px 4px 32px;
     vertical-align: middle;
 }
-.no-js .blocktype, .withradio .blocktype {
+.no-js .blocktype,
+.withradio .blocktype {
     padding-left: 50px;
 }
 .blocktype-list .blocktype-radio {
@@ -263,16 +264,20 @@ ul.colnav li.selected span {
     vertical-align: middle;
     margin-left: -28px;
 }
-.no-js .blocktype img, .withradio .blocktype img {
-	margin: 0;
+.no-js .blocktype img,
+.withradio .blocktype img {
+    margin: 0;
 }
 .blocktype .blocktypelink {
     display: block;
     color: #211C00;
     cursor: inherit;
-}
-.blocktype .blocktypelink:hover, .blocktype .blocktypelink:focus {
     text-decoration: none;
+}
+.blocktype .blocktypelink:hover,
+.blocktype .blocktypelink:focus {
+    text-decoration: none;
+    outline: none;
 }
 .blocktypetitle {
     vertical-align: middle;
@@ -384,8 +389,8 @@ ul.colnav li.selected span {
 .no-js #internal,
 .no-js #general,
 .no-js #fileimagevideo,
-.no-js #external { 
-	margin-top: -2px;
+.no-js #external {
+    margin-top: -2px;
 }
 /* adding blocks */
 .cellchooser {
@@ -589,6 +594,8 @@ img.retractablebtn {
 }
 div.blockinstance-header .arrow {
     float: right;
+}
+div.blockinstance-header .retractor {
     cursor: pointer;
 }
 /* block header */
@@ -758,7 +765,7 @@ ul.artefactchooser-subtabs li.current a:active {
 .no-js .blockconfig-background {
     background: #FFFFFF;
     position: relative;
-   	z-index: 11;
+    z-index: 11;
 }
 .no-js .blockinstance.configure {
     font-size: 1em;
@@ -971,13 +978,6 @@ nav#collection-nav ul li {
 .postlist .post {
     padding: 10px 0;
     border-top: 1px dotted #D1D1D1;
-}
-.postlist .title {
-    margin-top: 10px;
-    font-size: 1.333em;
-}
-.postlist .tags {
-    margin: 0 0 5px 0;
 }
 .postlist .postdetails {
     margin: 3px 0;

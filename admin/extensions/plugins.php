@@ -62,12 +62,12 @@ foreach (array_keys($plugins) as $plugin) {
                                 $plugins[$plugin]['installed'][$key]['types'][$collapseto] = true;
                             }
                             else {
-                                $plugins[$plugin]['installed'][$key]['types'][$t] = 
+                                $plugins[$plugin]['installed'][$key]['types'][$t] =
                                     call_static_method($classname, 'has_config');
                             }
                         }
                     }
-                } 
+                }
                 else {
                     $classname = generate_class_name($plugin, $i->name);
                     safe_require($plugin, $key);
@@ -77,7 +77,7 @@ foreach (array_keys($plugins) as $plugin) {
                 }
             }
         }
-    
+
         $dirhandle = opendir(get_config('docroot') . $plugin);
         while (false !== ($dir = readdir($dirhandle))) {
             $installed = false; // reinitialise
@@ -99,6 +99,8 @@ foreach (array_keys($plugins) as $plugin) {
                 $plugins[$plugin]['notinstalled'][$dir] = array();
                 try {
                     validate_plugin($plugin, $dir);
+                    $classname = generate_class_name($plugin, $dir);
+                    $classname::sanity_check();
                 }
                 catch (InstallationException $e) {
                     $plugins[$plugin]['notinstalled'][$dir]['notinstallable'] = $e->GetMessage();
@@ -123,7 +125,7 @@ foreach (array_keys($plugins) as $plugin) {
                             if (!array_key_exists($dir, $plugins['artefact']['installed'])) {
                                 throw new InstallationException(get_string('blocktypeprovidedbyartefactnotinstallable', 'error', $dir));
                             }
-                            validate_plugin('blocktype', $dir . '/' . $btdir, 
+                            validate_plugin('blocktype', $dir . '/' . $btdir,
                                 get_config('docroot') . 'artefact/' . $dir . '/blocktype/' . $btdir);
                             $plugins['blocktype']['notinstalled'][$dir . '/' . $btdir] = array();
                         }
@@ -156,17 +158,22 @@ function installplugin(name) {
             var message = {$successstring} + data.newversion;
             $(name + '.message').innerHTML = '<img src="{$successicon}" alt=":)" />  ' + message;
             $(name + '.install').innerHTML = '';
-            // move the whole thing into the list of installed plugins 
+            // move the whole thing into the list of installed plugins
             // new parent node
             var bits = name.split('\.');
             var newparent = $(bits[0] + '.installed');
-            appendChildNodes(newparent, $(name));
+            var oldparent = $(name).parentNode;
+            insertSiblingNodesBefore(newparent, $(name));
+            // If there are no more plugins left for this type to be installed
+            if (oldparent.children.length == 0) {
+                oldparent.parentNode.style.display = 'none';
+            }
         }
         else {
             var message = '';
             if (data.errormessage) {
                 message = data.errormessage;
-            } 
+            }
             else {
                 message = {$failurestring};
             }

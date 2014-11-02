@@ -24,7 +24,7 @@ class PluginArtefactFile extends PluginArtefact {
             'audio',
         );
     }
-    
+
     public static function get_block_types() {
         return array('image');
     }
@@ -68,6 +68,26 @@ class PluginArtefactFile extends PluginArtefact {
                 'event'        => 'createuser',
                 'callfunction' => 'newuser',
             ),
+            (object)array(
+                'plugin'        => 'file',
+                'event'         => 'saveartefact',
+                'callfunction'  => 'eventlistener_savedeleteartefact',
+            ),
+            (object)array(
+                'plugin'        => 'file',
+                'event'         => 'deleteartefact',
+                'callfunction'  => 'eventlistener_savedeleteartefact',
+            ),
+            (object)array(
+                'plugin'        => 'file',
+                'event'         => 'deleteartefacts',
+                'callfunction'  => 'eventlistener_savedeleteartefact',
+            ),
+            (object)array(
+                'plugin'        => 'file',
+                'event'         => 'updateuser',
+                'callfunction'  => 'eventlistener_savedeleteartefact',
+            ),
         );
 
         return $subscriptions;
@@ -80,9 +100,49 @@ class PluginArtefactFile extends PluginArtefact {
             set_config_plugin('artefact', 'file', 'defaultgroupquota', 52428800);
             set_config_plugin('artefact', 'file', 'folderdownloadzip', 1);
             set_config_plugin('artefact', 'file', 'folderdownloadkeepzipfor', 3600);
+            self::set_quota_triggers();
         }
         set_config_plugin('artefact', 'file', 'commentsallowedimage', 1);
         self::resync_filetype_list();
+    }
+
+    public static function set_quota_triggers() {
+        set_config_plugin('artefact', 'file', 'quotanotifylimit', 80);
+        set_config_plugin('artefact', 'file', 'quotanotifyadmin', false);
+
+        // Create triggers to reset the quota notification flag
+        if (is_postgres()) {
+            $sql = "DROP FUNCTION IF EXISTS {unmark_quota_exeed_upd_set}() CASCADE;";
+            execute_sql($sql);
+
+            db_create_trigger(
+                'unmark_quota_exceed_upd_usr_set',
+                'AFTER', 'UPDATE', 'usr', "
+                UPDATE {usr_account_preference}
+                SET value = 0 FROM {artefact_config}
+                WHERE {usr_account_preference}.field = 'quota_exceeded_notified'
+                AND {usr_account_preference}.usr = NEW.id
+                AND {artefact_config}.plugin = 'file'
+                AND {artefact_config}.field = 'quotanotifylimit'
+                AND CAST(NEW.quotaused AS float)/CAST(NEW.quota AS float) < CAST({artefact_config}.value AS float)/100;"
+            );
+        }
+        else {
+            $sql = "DROP TRIGGER IF EXISTS {unmark_quota_exceed_upd_set}";
+            execute_sql($sql);
+
+            db_create_trigger(
+                'unmark_quota_exceed_upd_usr_set',
+                'AFTER', 'UPDATE', 'usr', "
+                UPDATE {usr_account_preference}, {artefact_config}
+                SET {usr_account_preference}.value = 0
+                WHERE {usr_account_preference}.field = 'quota_exceeded_notified'
+                AND {usr_account_preference}.usr = NEW.id
+                AND {artefact_config}.plugin = 'file'
+                AND {artefact_config}.field = 'quotanotifylimit'
+                AND NEW.quotaused/NEW.quota < {artefact_config}.value/100;"
+            );
+        }
     }
 
     public static function newuser($event, $user) {
@@ -90,7 +150,7 @@ class PluginArtefactFile extends PluginArtefact {
             update_record('usr', array('quota' => get_config_plugin('artefact', 'file', 'defaultquota')), array('id' => $user['id']));
         }
     }
-    
+
 
     public static function sort_child_data($a, $b) {
         if ($a->container && !$b->container) {
@@ -199,7 +259,7 @@ class PluginArtefactFile extends PluginArtefact {
                 $count['removed']++;
             }
         }
-       
+
         db_commit();
         $changes = array();
         foreach (array_filter($count) as $k => $v) {
@@ -319,6 +379,95 @@ class PluginArtefactFile extends PluginArtefact {
             return false;
         }
     }
+
+    /**
+     * eventlistener to respond to saveartefact, deleteartefact and
+     * deleteartefacts.
+     * Check if the user just passed the critical amount of his quota with a new
+     * artefact or just deleted an artefact and now is below the critical percentage
+     *
+     * @param type $event
+     * @param type $eventdata
+     */
+    public static function eventlistener_savedeleteartefact($event, $eventdata) {
+        $userid = $group = null;
+        $owner = null;
+        $addsize = 0;
+
+        safe_require('notification', 'internal');
+
+        $filesize = 0;
+        $quotatypes = array('file','audio','video','image','archive','profileicon');
+        if (('saveartefact' === $event) && in_array($eventdata->get('artefacttype'), $quotatypes)) {
+            $owner = array($eventdata->get('owner'));
+            $group = $eventdata->get('group');
+            $filesize = $eventdata->get('size');
+        }
+        else if (('deleteartefact' === $event) && in_array($eventdata->get('artefacttype'), $quotatypes)) {
+            $owner = array($eventdata->get('owner'));
+            $group = $eventdata->get('group');
+            // we want to remove the size of the file from the quota check so we make it a negative integer
+            $filesize = intval('-' . $eventdata->get('size'));
+        }
+        else if ('updateuser' === $event) {
+            $userid = $eventdata;
+            if (is_array($userid)) {
+                $userid = reset($userid);
+            }
+        }
+        else if (is_array($eventdata)) {
+            foreach ($eventdata as $artefactid) {
+                if (!is_int($artefactid)) {
+                    continue;
+                }
+                $artefact = artefact_instance_from_id($artefactid);
+                $owner = $artefact->get('owner');
+                break;
+            }
+        }
+
+        if (is_array($owner)) {
+            $userid = reset($owner);
+        }
+
+        $quotanotifylimit = get_config_plugin('artefact', 'file', 'quotanotifylimit');
+        if ($quotanotifylimit <= 0 || $quotanotifylimit >= 100) {
+            $quotanotifylimit = 100;
+        }
+
+        if ($userid !== null) {
+            $userdata = get_user($userid);
+
+            $userdata->quotausedpercent = ($userdata->quotaused + $filesize ) / $userdata->quota * 100;
+            $overlimit = false;
+            if ($quotanotifylimit <= $userdata->quotausedpercent) {
+                $overlimit = true;
+            }
+
+            $notified = get_field('usr_account_preference', 'value', 'field', 'quota_exceeded_notified', 'usr', $userid);
+
+            if ($overlimit && '1' !== $notified) {
+                $notifyadmin = get_config_plugin('artefact', 'file', 'quotanotifyadmin');
+                ArtefactTypeFile::notify_users_threshold_exceeded(array($userdata), $notifyadmin);
+            }
+            else if ($notified && !$overlimit) {
+                set_account_preference($userid, 'quota_exceeded_notified', false);
+            }
+        }
+        else if ($group !== null) {
+            $groupdata = get_record('group', 'id', $group);
+
+            $groupdata->quotausedpercent = ($groupdata->quotaused + $filesize ) / $groupdata->quota * 100;
+            $overlimit = false;
+            if ($quotanotifylimit <= $groupdata->quotausedpercent) {
+                $overlimit = true;
+            }
+            if ($overlimit) {
+                require_once(get_config('docroot') . 'artefact/file/lib.php');
+                ArtefactTypeFile::notify_groups_threshold_exceeded(array($groupdata));
+            }
+        }
+    }
 }
 
 abstract class ArtefactTypeFileBase extends ArtefactType {
@@ -435,15 +584,21 @@ abstract class ArtefactTypeFileBase extends ArtefactType {
             if ($institution == 'mahara' && !$USER->get('admin')) {
                 // If non-admins are browsing site files, only let them see the public folder & its contents
                 $publicfolder = ArtefactTypeFolder::admin_public_folder_id();
-                $from .= '
-                LEFT OUTER JOIN {artefact_parent_cache} pub ON (a.id = pub.artefact AND pub.parent = ?)';
                 $where .= '
-                AND (pub.parent = ? OR a.id = ?)';
-                $phvals = array($publicfolder, $publicfolder, $publicfolder);
+                AND (a.path = ? OR a.path LIKE ?)';
+                $phvals = array("/$publicfolder", "/$publicfolder/%");
             }
-            $where .= '
-            AND a.institution = ? AND a.owner IS NULL';
-            $phvals[] = $institution;
+            else {
+                $from .= '
+                    LEFT OUTER JOIN {usr_institution} ui ON ui.institution = a.institution';
+                $where .= ' AND a.institution = ? ';
+                $phvals[] = $institution;
+                // Check if user is an admin in this institution.
+                if (!$USER->get('admin')) {
+                    $where .= ' AND ui.admin = 1 AND ui.usr = ? ';
+                    $phvals[] = $USER->get('id');
+                }
+            }
         }
         else if ($group) {
             $select .= ',
@@ -453,12 +608,12 @@ abstract class ArtefactTypeFileBase extends ArtefactType {
                     SELECT ar.artefact, ar.can_edit, ar.can_view, ar.can_republish
                     FROM {artefact_access_role} ar
                     INNER JOIN {group_member} gm ON ar.role = gm.role
-                    WHERE gm.group = ? AND gm.member = ? 
+                    WHERE gm.group = ? AND gm.member = ?
                 ) r ON r.artefact = a.id';
             $phvals[] = $group;
             $phvals[] = $USER->get('id');
             $where .= '
-            AND a.group = ? AND a.owner IS NULL AND (r.can_view = 1 OR a.author = ?)';
+            AND a.group = ? AND (r.can_view = 1 OR a.author = ?)';
             $phvals[] = $group;
             $phvals[] = $USER->get('id');
             $groupby .= ', r.can_edit, r.can_view, r.can_republish, a.author';
@@ -705,7 +860,7 @@ abstract class ArtefactTypeFileBase extends ArtefactType {
     }
 
     /**
-     * Works out a full path to a folder, given an ID. Implemented this way so 
+     * Works out a full path to a folder, given an ID. Implemented this way so
      * only one query is made.
      */
     public static function get_full_path($id, &$folderdata) {
@@ -763,7 +918,7 @@ abstract class ArtefactTypeFileBase extends ArtefactType {
      * Try to add digits before the filename extension: If the desired
      * title contains a ".", add "." plus digits before the final ".",
      * otherwise append "." and digits.
-     * 
+     *
      * @param string $desired
      * @param integer $parent
      * @param integer $owner
@@ -862,7 +1017,7 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
 
     public function __construct($id = 0, $data = null) {
         parent::__construct($id, $data);
-        
+
         if ($this->id && ($filedata = get_record('artefact_file_files', 'artefact', $this->id))) {
             foreach($filedata as $name => $value) {
                 if (property_exists($this, $name)) {
@@ -967,8 +1122,8 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
      * Takes the name of a file outside the myfiles area.
      * Returns a boolean indicating success or failure.
      *
-     * Note: this method is crappy because it returns false instead of throwing 
-     * exceptions. It's not used in many places, and should probably die in a 
+     * Note: this method is crappy because it returns false instead of throwing
+     * exceptions. It's not used in many places, and should probably die in a
      * future version. So think twice before using it :)
      */
     public static function save_file($pathname, $data, User &$user=null, $outsidedataroot=false) {
@@ -1183,7 +1338,7 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
 
     public function delete() {
         if (empty($this->id)) {
-            return; 
+            return;
         }
         $file = $this->get_path();
         if (is_file($file)) {
@@ -1296,15 +1451,16 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
         if (empty($defaultquota)) {
             $defaultquota = 1024 * 1024 * 50;
         }
-        $elements['quotafieldset'] = array(
+        $elements['userquotafieldset'] = array(
             'type' => 'fieldset',
-            'legend' => get_string('defaultquota', 'artefact.file'),
+            'legend' => get_string('defaultuserquota', 'artefact.file'),
             'elements' => array(
                 'defaultquotadescription' => array(
+                    'type' => 'html',
                     'value' => '<tr><td colspan="2">' . get_string('defaultquotadescription', 'artefact.file') . '</td></tr>'
                 ),
                 'defaultquota' => array(
-                    'title'        => get_string('defaultquota', 'artefact.file'), 
+                    'title'        => get_string('defaultquota', 'artefact.file'),
                     'type'         => 'bytes',
                     'defaultvalue' => $defaultquota,
                 ),
@@ -1314,24 +1470,8 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
                     'type'         => 'checkbox',
                 )
             ),
-            'collapsible' => true
-        );
-
-        $override = get_config_plugin('artefact', 'file', 'institutionaloverride');
-        $elements['overridefieldset'] = array(
-            'type' => 'fieldset',
-            'legend' => get_string('institutionoverride', 'artefact.file'),
-            'elements' => array(
-                'institutionaloverridedescription' => array(
-                    'value' => '<tr><td colspan="2">' . get_string('institutionoverridedescription', 'artefact.file') . '</td></tr>',
-                ),
-                'institutionaloverride' => array(
-                    'title'        => get_string('institutionoverride', 'artefact.file'),
-                    'type'         => 'checkbox',
-                    'defaultvalue' => $override,
-                ),
-            ),
             'collapsible' => true,
+            'collapsed' => true
         );
 
         $maxquota = get_config_plugin('artefact', 'file', 'maxquota');
@@ -1339,25 +1479,42 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
         if (empty($maxquota)) {
             $maxquota = 1024 * 1024 * 1024;
         }
-        $elements['maxquota'] = array(
-            'type' => 'fieldset',
-            'legend' => get_string('maxquota', 'artefact.file'),
-            'elements' => array(
-                'maxquotadescription' => array(
-                    'value' => '<tr><td colspan="2">' . get_string('maxquotadescription', 'artefact.file') . '</td></tr>'
-                ),
-                'maxquotaenabled' => array(
-                    'title'        => get_string('maxquotaenabled', 'artefact.file'),
-                    'type'         => 'checkbox',
-                    'defaultvalue' => $maxquotaenabled,
-                ),
-                'maxquota' => array(
-                    'title'        => get_string('maxquota', 'artefact.file'),
-                    'type'         => 'bytes',
-                    'defaultvalue' => $maxquota,
-                ),
-            ),
-            'collapsible' => true
+        $elements['userquotafieldset']['elements']['maxquotaenabled'] = array(
+            'type'         => 'checkbox',
+            'title'        => get_string('maxquotaenabled', 'artefact.file'),
+            'description'  => get_string('maxquotadescription', 'artefact.file'),
+            'defaultvalue' => $maxquotaenabled,
+        );
+        $elements['userquotafieldset']['elements']['maxquota'] = array(
+            'title'        => get_string('maxquota', 'artefact.file'),
+            'type'         => 'bytes',
+            'defaultvalue' => $maxquota,
+        );
+
+        $elements['userquotafieldset']['elements']['quotanotifylimit'] = array(
+            'type'          => 'text',
+            'size'          => 4,
+            'title'         => get_string('quotanotifylimittitle1', 'artefact.file'),
+            'description'   => get_string('quotanotifylimitdescr1', 'artefact.file'),
+            'defaultvalue'  => get_config_plugin('artefact', 'file', 'quotanotifylimit'),
+            'rules' => array(
+                'required' => true,
+                'integer'  => true,
+            )
+        );
+        $elements['userquotafieldset']['elements']['quotanotifyadmin'] = array(
+            'type'          => 'checkbox',
+            'title'         => get_string('quotanotifyadmin1', 'artefact.file'),
+            'description'   => get_string('quotanotifyadmindescr1', 'artefact.file'),
+            'defaultvalue'  => get_config_plugin('artefact', 'file', 'quotanotifyadmin'),
+        );
+
+        $override = get_config_plugin('artefact', 'file', 'institutionaloverride');
+        $elements['userquotafieldset']['elements']['institutionaloverride'] = array(
+            'type'         => 'checkbox',
+            'title'        => get_string('institutionoverride1', 'artefact.file'),
+            'defaultvalue' => $override,
+            'description'  => get_string('institutionoverridedescription', 'artefact.file')
         );
 
         $defaultgroupquota = get_config_plugin('artefact', 'file', 'defaultgroupquota');
@@ -1382,7 +1539,8 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
                     'type'         => 'checkbox',
                 )
             ),
-            'collapsible' => true
+            'collapsible' => true,
+            'collapsed' => true
         );
 
         // Require user agreement before uploading files
@@ -1397,23 +1555,23 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
                     'value' => '<tr><td colspan="2">' . get_string('uploadagreementdescription', 'artefact.file') . '</td></tr>'
                 ),
                 'uploadagreement' => array(
-                    'title'        => get_string('requireagreement', 'artefact.file'), 
+                    'title'        => get_string('requireagreement', 'artefact.file'),
                     'type'         => 'checkbox',
                     'defaultvalue' => $uploadagreement,
                 ),
                 'defaultagreement' => array(
                     'type'         => 'html',
-                    'title'        => get_string('defaultagreement', 'artefact.file'), 
+                    'title'        => get_string('defaultagreement', 'artefact.file'),
                     'value'        => get_string('uploadcopyrightdefaultcontent', 'install'),
                 ),
                 'usecustomagreement' => array(
-                    'title'        => get_string('usecustomagreement', 'artefact.file'), 
+                    'title'        => get_string('usecustomagreement', 'artefact.file'),
                     'type'         => 'checkbox',
                     'defaultvalue' => $usecustomagreement,
                 ),
                 'customagreement' => array(
                     'name'         => 'customagreement',
-                    'title'        => get_string('customagreement', 'artefact.file'), 
+                    'title'        => get_string('customagreement', 'artefact.file'),
                     'type'         => 'wysiwyg',
                     'rows'         => 10,
                     'cols'         => 80,
@@ -1421,7 +1579,8 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
                     'rules'        => array('maxlength' => 65536),
                 ),
             ),
-            'collapsible' => true
+            'collapsible' => true,
+            'collapsed' => true
         );
 
         // Option to resize images on upload
@@ -1437,49 +1596,51 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
         }
 
         $elements['resizeonuploadfieldset'] = array(
-                    'type' => 'fieldset',
-                    'legend' => get_string('resizeonupload', 'artefact.file'),
-                        'elements' => array(
-                            'resizeonuploaddescription' => array(
-                                'value' => get_string('resizeonuploaddescription', 'artefact.file'),
-                        ),
-                        'resizeonuploadenable' => array(
-                            'type'         => 'checkbox',
-                            'title'        => get_string('resizeonuploadenable1', 'artefact.file'),
-                            'defaultvalue' => $resizeonuploadenable,
-                            'description'  => get_string('resizeonuploadenabledescription1', 'artefact.file'),
-                        ),
-                        'resizeonuploaduseroption' => array(
-                            'title'        => get_string('resizeonuploaduseroption1', 'artefact.file'),
-                            'type'         => 'checkbox',
-                            'defaultvalue' => $resizeonuploaduseroption,
-                            'description'  => get_string('resizeonuploaduseroptiondescription1', 'artefact.file'),
-                        ),
-                        'resizeonuploadmaxwidth' => array(
-                            'type' => 'text',
-                            'size' => 4,
-                            'suffix' => get_string('widthshort'),
-                            'title' => get_string('resizeonuploadmaxwidth', 'artefact.file'),
-                            'defaultvalue' => $currentmaxwidth,
-                            'rules' => array(
-                                'required' => true,
-                                'integer'  => true,
-                            )
-                        ),
-                        'resizeonuploadmaxheight' => array(
-                            'type' => 'text',
-                            'suffix' => get_string('heightshort'),
-                            'size' => 4,
-                            'title' => get_string('resizeonuploadmaxheight', 'artefact.file'),
-                            'defaultvalue' => $currentmaxheight,
-                            'rules' => array(
-                                'required' => true,
-                                'integer'  => true,
-                                ),
-                            'help' => true,
-                        ),
+            'type' => 'fieldset',
+            'legend' => get_string('resizeonupload', 'artefact.file'),
+            'elements' => array(
+                'resizeonuploaddescription' => array(
+                    'type' => 'html',
+                    'value' => get_string('resizeonuploaddescription', 'artefact.file'),
+                ),
+                'resizeonuploadenable' => array(
+                    'type'         => 'checkbox',
+                    'title'        => get_string('resizeonuploadenable1', 'artefact.file'),
+                    'defaultvalue' => $resizeonuploadenable,
+                    'description'  => get_string('resizeonuploadenabledescription1', 'artefact.file'),
+                ),
+                'resizeonuploaduseroption' => array(
+                    'title'        => get_string('resizeonuploaduseroption1', 'artefact.file'),
+                    'type'         => 'checkbox',
+                    'defaultvalue' => $resizeonuploaduseroption,
+                    'description'  => get_string('resizeonuploaduseroptiondescription1', 'artefact.file'),
+                ),
+                'resizeonuploadmaxwidth' => array(
+                     'type' => 'text',
+                     'size' => 4,
+                     'suffix' => get_string('widthshort'),
+                     'title' => get_string('resizeonuploadmaxwidth', 'artefact.file'),
+                     'defaultvalue' => $currentmaxwidth,
+                     'rules' => array(
+                         'required' => true,
+                         'integer'  => true,
+                     )
+                ),
+                'resizeonuploadmaxheight' => array(
+                    'type' => 'text',
+                    'suffix' => get_string('heightshort'),
+                    'size' => 4,
+                    'title' => get_string('resizeonuploadmaxheight', 'artefact.file'),
+                    'defaultvalue' => $currentmaxheight,
+                    'rules' => array(
+                        'required' => true,
+                        'integer'  => true,
                     ),
-                    'collapsible' => true
+                    'help' => true,
+                ),
+            ),
+            'collapsible' => true,
+            'collapsed' => true
         );
 
         // Profile icon size
@@ -1513,7 +1674,8 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
                     'help' => true,
                 ),
             ),
-            'collapsible' => true
+            'collapsible' => true,
+            'collapsed' => true
         );
 
         $commentdefaults = array();
@@ -1537,6 +1699,7 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
                 ),
             ),
             'collapsible' => true,
+            'collapsed' => true
         );
 
         $keepfor = get_config_plugin('artefact', 'file', 'folderdownloadkeepzipfor');
@@ -1558,6 +1721,7 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
                 ),
             ),
             'collapsible' => true,
+            'collapsed' => true
         );
 
         return array(
@@ -1571,15 +1735,31 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
         if ($values['maxquotaenabled'] && $values['maxquota'] < $values['defaultquota']) {
             $form->set_error('maxquota', get_string('maxquotatoolow', 'artefact.file'));
         }
+        if (!is_numeric($values['quotanotifylimit']) || 0 > $values['quotanotifylimit'] || $values['quotanotifylimit'] > 100) {
+            $form->set_error('quotanotifylimit', get_string('quotanotifylimitoutofbounds', 'artefact.file'));
+        }
     }
 
-    public static function save_config_options($values) {
+    public static function save_config_options($form, $values) {
         global $USER;
+        $updatingquota = false;
+
+        $oldquotalimit = get_config_plugin('artefact', 'file', 'quotanotifylimit');
+
         if ($values['updateuserquotas'] && $values['defaultquota']) {
             set_field('usr', 'quota', $values['defaultquota'], 'deleted', 0);
+            $updatingquota = true;
         }
         if ($values['updategroupquotas'] && $values['defaultgroupquota']) {
             set_field('group', 'quota', $values['defaultgroupquota'], 'deleted', 0);
+            // We need to alert group admins that the group may now be over the threshold that wasn't before
+            $sqlwhere = " ((g.quotaused / g.quota) * 100) ";
+            if (is_postgres()) {
+                $sqlwhere = " ((CAST(g.quotaused AS float) / CAST(g.quota AS float)) * 100) ";
+            }
+            if ($groups = get_records_sql_assoc("SELECT g.id, g.name, g.quota, " . $sqlwhere . " AS quotausedpercent FROM {group} g WHERE " . $sqlwhere . " >= ?", array($values['quotanotifylimit']))) {
+                ArtefactTypeFile::notify_groups_threshold_exceeded($groups);
+            }
         }
         set_config_plugin('artefact', 'file', 'defaultquota', $values['defaultquota']);
         set_config_plugin('artefact', 'file', 'defaultgroupquota', $values['defaultgroupquota']);
@@ -1595,6 +1775,25 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
         set_config_plugin('artefact', 'file', 'resizeonuploadmaxwidth', $values['resizeonuploadmaxwidth']);
         set_config_plugin('artefact', 'file', 'resizeonuploadmaxheight', $values['resizeonuploadmaxheight']);
         set_config_plugin('artefact', 'file', 'folderdownloadkeepzipfor', $values['folderdownloadkeepzipfor']);
+        set_config_plugin('artefact', 'file', 'quotanotifylimit', $values['quotanotifylimit']);
+        set_config_plugin('artefact', 'file', 'quotanotifyadmin', $values['quotanotifyadmin']);
+
+        if (($oldquotalimit != $values['quotanotifylimit']) || $updatingquota) {
+            // We need to alert anyone that may now be over the threshold that wasn't before
+            $sqlwhere = " ((u.quotaused / u.quota) * 100) ";
+            if (is_postgres()) {
+                $sqlwhere = " ((CAST(u.quotaused AS float) / CAST(u.quota AS float)) * 100) ";
+            }
+            if ($users = get_records_sql_assoc("SELECT u.id, u.quota, " . $sqlwhere . " AS quotausedpercent FROM {usr} u WHERE " . $sqlwhere . " >= ?", array($values['quotanotifylimit']))) {
+                $notifyadmin = get_config_plugin('artefact', 'file', 'quotanotifyadmin');
+                ArtefactTypeFile::notify_users_threshold_exceeded($users, $notifyadmin);
+            }
+            else if ($users = get_records_sql_assoc("SELECT * FROM {usr} u, {usr_account_preference} uap WHERE " . $sqlwhere . " < ? AND uap.usr = u.id AND uap.field = ? AND uap.value = ?", array($values['quotanotifylimit'], 'quota_exceeded_notified', '1'))) {
+                foreach ($users as $user) {
+                    set_account_preference($user->id, 'quota_exceeded_notified', false);
+                }
+            }
+        }
         $data = new StdClass;
         $data->name    = 'uploadcopyright';
         $data->content = $values['customagreement'];
@@ -1610,6 +1809,81 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
         }
         foreach(PluginArtefactFile::get_artefact_types() as $at) {
             set_config_plugin('artefact', 'file', 'commentsallowed' . $at, (int) in_array($at, $values['commentdefault']));
+        }
+    }
+
+    /**
+     * Notify users if their quota is above the quota threshold.
+     * And notify admins if required as well
+     *
+     * @param $users         array of user objects - the $user object needs to include a quotausedpercent
+     *                       that is set by: (quotaused / quota) * 100
+     * @param $notifyadmins  bool
+     */
+    function notify_users_threshold_exceeded($users, $notifyadmins = false) {
+        // if we have just been given a $user object
+        if (is_object($users)) {
+            $users[] = $users;
+        }
+        require_once(get_config('docroot') . 'lib/activity.php');
+        safe_require('notification', 'internal');
+        foreach ($users as $user) {
+            // check that they have not already been notified about being over the limit
+            if (!get_record('usr_account_preference','usr', $user->id, 'field', 'quota_exceeded_notified', 'value', '1')) {
+                $data = array(
+                    'subject' => get_string('usernotificationsubject', 'artefact.file'),
+                    'message' => get_string('usernotificationmessage', 'artefact.file', ceil((int)$user->quotausedpercent), display_size($user->quota)),
+                    'users' => array($user->id),
+                    'type' => 1,
+                );
+                $activity = new ActivityTypeMaharamessage($data);
+                $activity->notify_users();
+
+                // notify admins
+                if ($notifyadmins) {
+                    $data = array(
+                        'subject'   => get_string('adm_notificationsubject', 'artefact.file'),
+                        'message'   => get_string('adm_notificationmessage', 'artefact.file', display_name($user) , ceil((int)$user->quotausedpercent), display_size($user->quota)),
+                        'users'     => get_column('usr', 'id', 'admin', 1),
+                        'url'       => 'admin/users/edit.php?id=' . $user->id,
+                        'urltext'   => get_string('textlinktouser', 'artefact.file', display_name($user)),
+                        'type'      => 1,
+                    );
+                    $activity = new ActivityTypeMaharamessage($data);
+                    $activity->notify_users();
+                }
+                set_account_preference($user->id, 'quota_exceeded_notified', true);
+            }
+        }
+    }
+
+    /**
+     * Notify group admins if the group quota is above the quota threshold.
+     *
+     * @param $groups        array of group objects - the $group object needs to include a quotausedpercent
+     *                       that is set by: (quotaused / quota) * 100
+     */
+    function notify_groups_threshold_exceeded($groups) {
+        // if we have just been given a $group object
+        if (is_object($groups)) {
+            $groups[] = $groups;
+        }
+        require_once(get_config('docroot') . 'lib/activity.php');
+        safe_require('notification', 'internal');
+        foreach ($groups as $group) {
+            // find the group admins and notify them - there should be at least 1 admin for a group
+            if ($admins = group_get_admin_ids(array($group->id))) {
+                $data = array(
+                    'subject'   => get_string('adm_group_notificationsubject', 'artefact.file'),
+                    'message'   => get_string('adm_group_notificationmessage', 'artefact.file', $group->name, ceil((int)$group->quotausedpercent), display_size($group->quota)),
+                    'users'     => $admins,
+                    'url'       => 'artefact/file/groupfiles.php?group=' . $group->id,
+                    'urltext'   => get_string('textlinktouser', 'artefact.file', $group->name),
+                    'type'      => 1,
+                );
+                $activity = new ActivityTypeMaharamessage($data);
+                $activity->notify_users();
+            }
         }
     }
 
@@ -1747,7 +2021,6 @@ class ArtefactTypeFolder extends ArtefactTypeFileBase {
         $smarty->assign('downloadfolderzip', get_config_plugin('blocktype', 'folder', 'folderdownloadzip') ? !empty($options['folderdownloadzip']) : false);
 
         if ($childrecords = $this->folder_contents()) {
-            $this->add_to_render_path($options);
             $sortorder = (isset($options['sortorder']) && $options['sortorder'] == 'desc') ? 'my_files_cmp_desc' : 'my_files_cmp';
             usort($childrecords, array('ArtefactTypeFileBase', $sortorder));
             $children = array();
@@ -1775,7 +2048,7 @@ class ArtefactTypeFolder extends ArtefactTypeFileBase {
     public static function collapse_config() {
         return 'file';
     }
-    
+
     public static function admin_public_folder_id() {
         // There is one public files directory and many admins, so the
         // name of the directory uses the site language rather than
@@ -1823,8 +2096,8 @@ class ArtefactTypeFolder extends ArtefactTypeFileBase {
     }
 
     /**
-     * Retrieves info from the artefact table about the folder with the given 
-     * name, in the specified directory, owned by the specified 
+     * Retrieves info from the artefact table about the folder with the given
+     * name, in the specified directory, owned by the specified
      * user/group/institution.
      *
      * @param string $name        The name of the folder to search for
@@ -1883,11 +2156,11 @@ class ArtefactTypeFolder extends ArtefactTypeFileBase {
         $postcontent = preg_replace('#(<a[^>]+href="[^>]+artefact/file/download\.php\?file=\d+)#', '\1&amp;view=' . $view_id , $postcontent);
         $postcontent = preg_replace('#(<img[^>]+src="[^>]+artefact/file/download\.php\?file=\d+)#', '\1&amp;view=' . $view_id, $postcontent);
 
-        // Find images inside <a> tags and temporarily draft them out of the 
-        // content. This is so we can link up unlinked images to open to 
+        // Find images inside <a> tags and temporarily draft them out of the
+        // content. This is so we can link up unlinked images to open to
         // download.php.
         //
-        // This is a hack really - will probably need refinement/replacement 
+        // This is a hack really - will probably need refinement/replacement
         // later (if only we could do this with HTMLPurifier!)
         $marker = '<aPONY>';
         $matches = array();
@@ -1966,7 +2239,7 @@ class ArtefactTypeImage extends ArtefactTypeFile {
         if (empty($this->dirty)) {
             return;
         }
-      
+
         // We need to keep track of newness before and after.
         $new = empty($this->id);
 
@@ -1994,7 +2267,7 @@ class ArtefactTypeImage extends ArtefactTypeFile {
 
     public static function collapse_config() {
         return 'file';
-   } 
+   }
 
     public static function get_icon($options=null) {
         $url = get_config('wwwroot') . 'artefact/file/download.php?';
@@ -2021,7 +2294,7 @@ class ArtefactTypeImage extends ArtefactTypeFile {
 
     public function delete() {
         if (empty($this->id)) {
-            return; 
+            return;
         }
         delete_records('artefact_file_image', 'artefact', $this->id);
         parent::delete();
@@ -2039,7 +2312,7 @@ class ArtefactTypeImage extends ArtefactTypeFile {
 
     public function render_self($options) {
         $downloadpath = get_config('wwwroot') . 'artefact/file/download.php?file=' . $this->id;
-        $url = get_config('wwwroot') . 'view/artefact.php?artefact=' . $this->id;
+        $url = get_config('wwwroot') . 'artefact/artefact.php?artefact=' . $this->id;
         if (isset($options['viewid'])) {
             $downloadpath .= '&view=' . $options['viewid'];
             $url .= '&view=' . $options['viewid'];
@@ -2395,6 +2668,7 @@ class ArtefactTypeArchive extends ArtefactTypeFile {
 
                 // set the file extension for later use (eg by flowplayer)
                 $this->data['template']->extension = pathinfo($this->data['template']->title, PATHINFO_EXTENSION);
+                $this->data['template']->oldextension = $this->data['template']->extension;
 
                 if (substr($name, -1) == '/') {
                     $this->create_folder($folder);
@@ -2441,6 +2715,7 @@ class ArtefactTypeArchive extends ArtefactTypeFile {
 
                 // set the file extension for later use (eg by flowplayer)
                 $this->data['template']->extension = pathinfo($this->data['template']->title, PATHINFO_EXTENSION);
+                $this->data['template']->oldextension = $this->data['template']->extension;
 
                 if (substr($name, -1) != '/') {
                     $h = fopen($tempfile, 'w');

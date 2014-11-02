@@ -125,7 +125,7 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
         return $artefact;
     }
 
-    public static function save_config_options($values) {
+    public static function save_config_options($form, $values) {
         $enabledtypes = array();
         foreach ($values as $type => $enabled) {
             if (!in_array($type, self::get_all_filetypes())) {
@@ -244,7 +244,7 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
         $url = self::get_download_link($artefact, $block);
         $params = array('play' => 'true');
         $html =  '<a href="' . $url . '">' . hsc($artefact->get('title')) . '</a><br>
-               <span class="blocktype_internalmedia_mp3" id="' . $id . '">(' 
+               <span class="blocktype_internalmedia_mp3" id="' . $id . '">('
                . get_string('flashanimation', 'blocktype.file/internalmedia') . ')</span>
                 <script type="text/javascript">
                     var so = new SWFObject("' . $url . '","player","' . $width . '","' . ($height + 20). '","7");
@@ -253,6 +253,7 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
                     so.addVariable("type", "swf");
                     so.addVariable("height", "' . $height . '");
                     so.addVariable("width", "' . $width . '");
+                    so.addVariable("wmode", "transparent");
                 ';
         foreach ($params as $key => $value) {
             $html .= '      so.addParam("' . $key . '", "' . $value . '"); '. "\n";
@@ -290,7 +291,7 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
             $type = 'type: "audio",'; // force the player to use the audio plugin
             $buffering = 'false'; // without this autoPlay will also be set to true
             $audio = ', audio: {
-		                  url: "' . $baseurl . 'flowplayer.audio/flowplayer.audio-3.2.2.swf"
+		                  url: "' . $baseurl . 'flowplayer.audio/flowplayer.audio-3.2.11.swf"
 		             }';
         }
 
@@ -430,13 +431,14 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
        <param name="autoplay" value="' . $autostart . '">
        <param name="autostart" value="' . $autostart . '">
        <param name="scale" value="aspect">
+       <param name="wmode" value="transparent">
       </object>
     <!--<![endif]-->
     </object></span>';
     }
 
     private static function get_download_link(ArtefactTypeFile $artefact, BlockInstance $instance, $wmp=false) {
-        return get_config('wwwroot') . 'artefact/file/download.php?file=' 
+        return get_config('wwwroot') . 'artefact/file/download.php?file='
             . $artefact->get('id') . '&view=' . $instance->get('view')
             . ($wmp ? '&download=1' : '');
     }
@@ -447,11 +449,11 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
         }
         define('BLOCKTYPE_INTERNALMEDIA_JS_INCLUDED', true);
         if ($asarray) {
-            return array(get_config('wwwroot').'artefact/file/blocktype/internalmedia/mahara-flashplayer/mahara-flashplayer-3.2.6.js',
+            return array(get_config('wwwroot').'artefact/file/blocktype/internalmedia/mahara-flashplayer/mahara-flashplayer.js',
                          get_config('wwwroot') . 'artefact/file/blocktype/internalmedia/swfobject.js',
                          );
         }
-        return '<script src="'.get_config('wwwroot').'artefact/file/blocktype/internalmedia/mahara-flashplayer/mahara-flashplayer-3.2.6.js"></script>
+        return '<script src="'.get_config('wwwroot').'artefact/file/blocktype/internalmedia/mahara-flashplayer/mahara-flashplayer.js"></script>
              <script src="' . get_config('wwwroot') . 'artefact/file/blocktype/internalmedia/swfobject.js" type="text/javascript"></script>';
     }
 

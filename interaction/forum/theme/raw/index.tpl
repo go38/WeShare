@@ -26,7 +26,7 @@
             <div class="inlinelist">
                 <span>{str tag="Moderators" section="interaction.forum"}:</span>
                 {foreach from=$forum->moderators item=mod}
-                    <a href="{profile_url($mod)}"><img src="{$WWWROOT}thumb.php?type=profileicon&amp;maxsize=20&amp;id={$mod}" alt=""></a>
+                    <a href="{profile_url($mod)}"><img src="{profile_icon_url user=$mod maxwidth=20 maxheight=20}" alt="{str tag=profileimagetext arg1=$mod|display_default_name}"></a>
                     <a href="{profile_url($mod)}" class="moderator">{$mod|display_name:null:true}</a>
                 {/foreach}
             </div>
@@ -51,7 +51,7 @@
 <div class="message">{str tag=noforums section=interaction.forum}</div>
 {/if}
 <div class="forummods">
-	<label>{str tag="groupadminlist" section="interaction.forum"}</label>
+	<strong>{str tag="groupadminlist" section="interaction.forum"}</strong>
 	{foreach from=$groupadmins item=groupadmin}
     <span class="inlinelist">
         <a href="{profile_url($groupadmin)}" class="groupadmin"><img src="{profile_icon_url user=$groupadmin maxheight=20 maxwidth=20}" alt="{str tag=profileimagetext arg1=$groupadmin|display_default_name}"> {$groupadmin|display_name}</a>

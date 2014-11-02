@@ -37,6 +37,7 @@
 
 {if $config.upload}
 <div id="{$prefix}_upload_container" class="fileupload{if ($tabs && !$tabs.upload) || $uploaddisabled} hidden{/if}">
+  <p class="intro">{str tag='fileuploadinstructions1' section='artefact.file'}</p>
   {* config.uploadagreement: disable the file chooser unless the agreement is checked *}
   {* config.simpleupload: the form only contains a file chooser *}
   {* config.submitbutton: add submit button even if js is enabled & don't start uploading as soon as a file is chosen *}
@@ -45,7 +46,7 @@
   <div id="{$prefix}_upload_messages"></div>
   {if $config.uploadagreement}
   <div id="{$prefix}_agreement" class="uploadform">
-    <label>{str tag='uploadfile' section='artefact.file'}</label>
+    <label for="{$prefix}_notice">{str tag='uploadfile' section='artefact.file'}</label>
       <input type="checkbox" name="{$prefix}_notice" id="{$prefix}_notice" />
       {$agreementtext|clean_html|safe}
   </div>

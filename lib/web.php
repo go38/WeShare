@@ -58,7 +58,7 @@ function smarty($javascript = array(), $headers = array(), $pagestrings = array(
         $extraconfig = array();
     }
 
-    $SIDEBLOCKS = array();
+    $sideblocks = array();
     // Some things like die_info() will try and create a smarty() call when we are already in one, which causes
     // language_select_form() to throw headdata error as it is called twice.
     if (!isset($langselectform)) {
@@ -95,11 +95,19 @@ function smarty($javascript = array(), $headers = array(), $pagestrings = array(
         }
     }
 
+    // Define the stylesheets array early so that javascript modules can add extras
+    $stylesheets = array();
+
     // Insert the appropriate javascript tags
     $javascript_array = array();
     $jsroot = $wwwroot . 'js/';
 
     $langdirection = get_string('thisdirection', 'langconfig');
+
+    // Make jQuery accessible with $j (Mochikit has $)
+    $javascript_array[] = $jsroot . 'jquery/jquery.js';
+    $javascript_array[] = $jsroot . 'jquery/deprecated_jquery.js';
+    $headers[] = '<script type="text/javascript">$j=jQuery;</script>';
 
     // TinyMCE must be included first for some reason we're not sure about
     //
@@ -113,19 +121,24 @@ function smarty($javascript = array(), $headers = array(), $pagestrings = array(
             if (($key = array_search('tinymce', $check)) !== false || ($key = array_search('tinytinymce', $check)) !== false) {
                 if (!$found_tinymce) {
                     $found_tinymce = $check[$key];
-                    $javascript_array[] = $jsroot . 'tinymce/tiny_mce.js';
+                    $javascript_array[] = $jsroot . 'tinymce/tinymce.js';
+                    $stylesheets = array_merge($stylesheets, array_reverse(array_values($THEME->get_url('style/tinymceskin.css', true))));
                     $content_css = json_encode($THEME->get_url('style/tinymce.css'));
                     $language = current_language();
                     $language = substr($language, 0, ((substr_count($language, '_') > 0) ? 5 : 2));
-                    $language = strtolower(str_replace('_', '-', $language));
                     if ($language != 'en' && !file_exists(get_config('docroot') . 'js/tinymce/langs/' . $language . '.js')) {
-                        // In case we fail to find a language of 5 chars, eg pt_BR (Portugese, Brazil) we try the 'parent' pt (Portugese)
-                        $language = substr($language, 0, 2);
-                        if ($language != 'en' && !file_exists(get_config('docroot') . 'js/tinymce/langs/' . $language . '.js')) {
-                            $language = 'en';
+                        // In case the language file exists as a string with both lower and upper case, eg fr_FR we test for this
+                        $language = substr($language, 0, 2) . '_' . strtoupper(substr($language, 0, 2));
+                        if (!file_exists(get_config('docroot') . 'js/tinymce/langs/' . $language . '.js')) {
+                            // In case we fail to find a language of 5 chars, eg pt_BR (Portugese, Brazil) we try the 'parent' pt (Portugese)
+                            $language = substr($language, 0, 2);
+                            if ($language != 'en' && !file_exists(get_config('docroot') . 'js/tinymce/langs/' . $language . '.js')) {
+                                $language = 'en';
+                            }
                         }
                     }
                     $extrasetup = isset($extraconfig['tinymcesetup']) ? $extraconfig['tinymcesetup'] : '';
+                    $extramceconfig = isset($extraconfig['tinymceconfig']) ? $extraconfig['tinymceconfig'] : '';
 
                     // Check whether to make the spellchecker available
                     $aspellpath = get_config('pathtoaspell');
@@ -138,95 +151,88 @@ function smarty($javascript = array(), $headers = array(), $pagestrings = array(
                         $spellchecker_config = 'gecko_spellcheck : true,';
                     }
 
-                    $adv_buttons = array(
-                        "undo,redo,separator,bold,italic,underline,separator,justifyleft,justifycenter,justifyright,justifyfull,separator,bullist,numlist,separator,link,unlink,separator,code,fullscreen",
-                        "bold,italic,underline,strikethrough,separator,forecolor,backcolor,separator,justifyleft,justifycenter,justifyright,justifyfull,separator,hr,emotions,image{$spellchecker},cleanup,separator,link,unlink,separator,code,fullscreen",
-                        "undo,redo,separator,bullist,numlist,separator,tablecontrols,separator,cut,copy,paste,pasteword",
-                        "fontselect,separator,fontsizeselect,separator,formatselect",
+                    $toolbar = array(
+                        null,
+                        '"toolbar_toggle | formatselect | bold italic | bullist numlist | link unlink | image | undo redo"',
+                        '"underline strikethrough subscript superscript | alignleft aligncenter alignright alignjustify | outdent indent | forecolor backcolor | ltr rtl | fullscreen"',
+                        '"fontselect | fontsizeselect | emoticons nonbreaking charmap | spellchecker | table | removeformat pastetext | code"',
                     );
 
                     // For right-to-left langs, reverse button order & align controls right.
                     $tinymce_langdir = $langdirection == 'rtl' ? 'rtl' : 'ltr';
                     $toolbar_align = 'left';
 
+                    // Language strings required for TinyMCE
+                    $pagestrings['mahara'] = isset($pagestrings['mahara']) ? $pagestrings['mahara'] : array();
+                    $pagestrings['mahara'][] = 'attachedimage';
+
                     if ($check[$key] == 'tinymce') {
-                        $tinymce_config = <<<EOF
-    mode: "none",
-    theme: "advanced",
-    plugins: "table,emotions,inlinepopups,paste,fullscreen{$spellchecker}",
-    theme_advanced_buttons1 : "{$adv_buttons[1]}",
-    theme_advanced_buttons2 : "{$adv_buttons[2]}",
-    theme_advanced_buttons3 : "{$adv_buttons[3]}",
-    theme_advanced_toolbar_location : "top",
-    theme_advanced_toolbar_align : "{$toolbar_align}",
+                        $tinymceconfig = <<<EOF
+    theme: "modern",
+    plugins: "tooltoggle,textcolor,link,image,table,emoticons,spellchecker,paste,code,fullscreen,directionality,searchreplace,nonbreaking,charmap",
+    toolbar1: {$toolbar[1]},
+    toolbar2: {$toolbar[2]},
+    toolbar3: {$toolbar[3]},
+    menubar: false,
     fix_list_elements: true,
+    image_advtab: true,
     {$spellchecker_config}
-    //width: '512',
 EOF;
                     }
                     else {
-                        $tinymce_config = <<<EOF
-    mode: "textareas",
-    editor_selector: 'tinywysiwyg',
-    theme: "advanced",
-    plugins: "fullscreen,inlinepopups,autoresize",
-    theme_advanced_buttons1 : "{$adv_buttons[0]}",
-    theme_advanced_buttons2 : "",
-    theme_advanced_buttons3 : "",
-    theme_advanced_toolbar_location : "top",
-    theme_advanced_toolbar_align : "{$toolbar_align}",
-    fullscreen_new_window: true,
-    fullscreen_settings: {
-        theme: "advanced",
-        plugins: "table,emotions,iespell,inlinepopups,paste,fullscreen",
-        theme_advanced_buttons1 : "{$adv_buttons[1]}",
-        theme_advanced_buttons2 : "{$adv_buttons[2]}",
-        theme_advanced_buttons3 : "{$adv_buttons[3]}"
-    },
+                        $tinymceconfig = <<<EOF
+    selector: "textarea.tinywysiwyg",
+    theme: "modern",
+    plugins: "fullscreen,autoresize",
+    toolbar: {$toolbar[0]},
 EOF;
                     }
 
                     $headers[] = <<<EOF
 <script type="text/javascript">
 tinyMCE.init({
-    button_tile_map: true,
-    {$tinymce_config}
+    {$tinymceconfig}
+    schema: 'html4',
     extended_valid_elements : "object[width|height|classid|codebase],param[name|value],embed[src|type|width|height|flashvars|wmode],script[src,type,language],+ul[id|type|compact],iframe[src|width|height|align|title|class|type|frameborder|allowfullscreen]",
     urlconverter_callback : "custom_urlconvert",
     language: '{$language}',
     directionality: "{$tinymce_langdir}",
     content_css : {$content_css},
-    //document_base_url: {$jswwwroot},
     remove_script_host: false,
     relative_urls: false,
+    {$extramceconfig}
     setup: function(ed) {
-        ed.onInit.add(function(ed) {
+        ed.on('init', function(ed) {
             if (typeof(editor_to_focus) == 'string' && ed.editorId == editor_to_focus) {
                 ed.focus();
             }
+        });
+        ed.on('LoadContent', function(e) {
+            // Hide all the 2nd/3rd row menu buttons
+            jQuery('.mce-toolbar.mce-first').siblings().toggleClass('hidden');
         });
         {$extrasetup}
     }
 });
 function custom_urlconvert (u, n, e) {
-  // Don't convert the url on the skype status buttons.
-  if (u.indexOf('skype:') == 0) {
+    // Don't convert the url on the skype status buttons.
+    if (u.indexOf('skype:') == 0) {
       return u;
-  }
-  var t = tinyMCE.activeEditor, s = t.settings;
+    }
+    var t = tinyMCE.activeEditor, s = t.settings;
 
-  // Don't convert link href since thats the CSS files that gets loaded into the editor also skip local file URLs
-  if (!s.convert_urls || (e && e.nodeName == 'LINK') || u.indexOf('file:') === 0)
+    // Don't convert link href since thats the CSS files that gets loaded into the editor also skip local file URLs
+    if (!s.convert_urls || (e && e.nodeName == 'LINK') || u.indexOf('file:') === 0)
       return u;
 
-  // Convert to relative
-  if (s.relative_urls)
+    // Convert to relative
+    if (s.relative_urls)
       return t.documentBaseURI.toRelative(u);
 
-  // Convert to absolute
-  u = t.documentBaseURI.toAbsolute(u, s.remove_script_host);
+    // Convert to absolute
+    u = t.documentBaseURI.toAbsolute(u, s.remove_script_host);
 
-  return u;
+    return u;
 }
 </script>
 
@@ -255,10 +261,6 @@ EOF;
             unset($headers[$key]);
         }
     }
-
-    // Make jQuery accessible with $j (Mochikit has $)
-    $javascript_array[] = $jsroot . 'jquery/jquery.js';
-    $headers[] = '<script type="text/javascript">$j=jQuery;</script>';
 
     if (get_config('developermode') & DEVMODE_UNPACKEDJS) {
         $javascript_array[] = $jsroot . 'MochiKit/MochiKit.js';
@@ -308,7 +310,7 @@ EOF;
                 }
             }
         }
-        else if (strpos($jsfile, 'http://') === false) {
+        else if (stripos($jsfile, 'http://') === false && stripos($jsfile, 'https://') === false) {
             // A local .js file with a fully specified path
             $javascript_array[] = $wwwroot . $jsfile;
             // If $jsfile is from a plugin (i.e. plugintype/pluginname/js/foo.js)
@@ -372,7 +374,7 @@ EOF;
     $stringjs .= '</script>';
 
     // stylesheet set up - if we're in a plugin also get its stylesheet
-    $stylesheets = array_reverse(array_values($THEME->get_url('style/style.css', true)));
+    $stylesheets = array_merge($stylesheets, array_reverse(array_values($THEME->get_url('style/style.css', true))));
     if (defined('SECTION_PLUGINTYPE') && defined('SECTION_PLUGINNAME') && SECTION_PLUGINTYPE != 'core') {
         if ($pluginsheets = $THEME->get_url('style/style.css', true, SECTION_PLUGINTYPE . '/' . SECTION_PLUGINNAME)) {
             $stylesheets = array_merge($stylesheets, array_reverse($pluginsheets));
@@ -464,7 +466,9 @@ EOF;
        $sitename = 'Mahara';
     }
     $smarty->assign('sitename', $sitename);
-    $smarty->assign('sitelogo', $THEME->header_logo());
+    $sitelogo = $THEME->header_logo();
+    $sitelogo = $sitelogo . ((strpos($sitelogo, '?') === false) ? '?' : '&') . 'v=' . get_config('release');
+    $smarty->assign('sitelogo', $sitelogo);
     $smarty->assign('sitelogo4facebook', $THEME->facebook_logo());
     $smarty->assign('sitedescription4facebook', get_string('facebookdescription', 'mahara'));
 
@@ -564,7 +568,7 @@ EOF;
             $data = site_menu();
             if (!empty($data)) {
                 $smarty->assign('SITEMENU', site_menu());
-                $SIDEBLOCKS[] = array(
+                $sideblocks[] = array(
                     'name'   => 'linksandresources',
                     'weight' => 10,
                     'data'   => $data,
@@ -575,14 +579,14 @@ EOF;
         if ($USER->is_logged_in() && defined('MENUITEM') &&
             (substr(MENUITEM, 0, 11) == 'myportfolio' || substr(MENUITEM, 0, 7) == 'content')) {
             if (get_config('showselfsearchsideblock')) {
-                $SIDEBLOCKS[] = array(
+                $sideblocks[] = array(
                     'name'   => 'selfsearch',
                     'weight' => 0,
                     'data'   => array(),
                 );
             }
             if (get_config('showtagssideblock')) {
-                $SIDEBLOCKS[] = array(
+                $sideblocks[] = array(
                     'name'   => 'tags',
                     'id'     => 'sb-tags',
                     'weight' => 0,
@@ -592,7 +596,7 @@ EOF;
         }
 
         if ($USER->is_logged_in() && !$adminsection) {
-            $SIDEBLOCKS[] = array(
+            $sideblocks[] = array(
                 'name'   => 'profile',
                 'id'     => 'sb-profile',
                 'weight' => -20,
@@ -613,7 +617,7 @@ EOF;
                 }
             }
             if (get_config('showonlineuserssideblock') && $showusers > 0) {
-                $SIDEBLOCKS[] = array(
+                $sideblocks[] = array(
                     'name'   => 'onlineusers',
                     'id'     => 'sb-onlineusers',
                     'weight' => -10,
@@ -621,25 +625,26 @@ EOF;
                 );
             }
             if (get_config('showprogressbar') && $USER->get_account_preference('showprogressbar')) {
-                $SIDEBLOCKS[] = array(
+                $sideblocks[] = array(
                     'name'   => 'progressbar',
                     'id'     => 'sb-progressbar',
-                    'weight' => -10,
+                    'weight' => -8,
                     'data'   => progressbar_sideblock(),
                 );
             }
         }
 
         if ($USER->is_logged_in() && $adminsection && defined('SECTION_PAGE') && SECTION_PAGE == 'progressbar') {
-            $SIDEBLOCKS[] = array(
+            $sideblocks[] = array(
                 'name'   => 'progressbar',
                 'id'     => 'sb-progressbar',
+                'weight' => -8,
                 'data'   => progressbar_sideblock(true),
             );
         }
 
         if (!$USER->is_logged_in() && !(get_config('siteclosed') && get_config('disablelogin'))) {
-            $SIDEBLOCKS[] = array(
+            $sideblocks[] = array(
                 'name'   => 'login',
                 'weight' => -10,
                 'id'     => 'sb-loginbox',
@@ -652,7 +657,7 @@ EOF;
         if (get_config('enablenetworking')) {
             require_once(get_config('docroot') .'api/xmlrpc/lib.php');
             if ($USER->is_logged_in() && $ssopeers = get_service_providers($USER->authinstance)) {
-                $SIDEBLOCKS[] = array(
+                $sideblocks[] = array(
                     'name'   => 'ssopeers',
                     'weight' => 1,
                     'data'   => $ssopeers,
@@ -662,21 +667,26 @@ EOF;
 
         if (isset($extraconfig['sideblocks']) && is_array($extraconfig['sideblocks'])) {
             foreach ($extraconfig['sideblocks'] as $sideblock) {
-                $SIDEBLOCKS[] = $sideblock;
+                $sideblocks[] = $sideblock;
             }
         }
 
-        usort($SIDEBLOCKS, create_function('$a,$b', 'if ($a["weight"] == $b["weight"]) return 0; return ($a["weight"] < $b["weight"]) ? -1 : 1;'));
+        // local_sideblocks_update allows sites to customise the sideblocks by munging the $sideblocks array.
+        if (function_exists('local_sideblocks_update')) {
+            local_sideblocks_update($sideblocks);
+        }
+
+        usort($sideblocks, create_function('$a,$b', 'if ($a["weight"] == $b["weight"]) return 0; return ($a["weight"] < $b["weight"]) ? -1 : 1;'));
 
         // Place all sideblocks on the right. If this structure is munged
         // appropriately, you can put blocks on the left. In future versions of
         // Mahara, we'll make it easy to do this.
-        $sidebars = $sidebars && !empty($SIDEBLOCKS);
-        $SIDEBLOCKS = array('left' => array(), 'right' => $SIDEBLOCKS);
+        $sidebars = $sidebars && !empty($sideblocks);
+        $sideblocks = array('left' => array(), 'right' => $sideblocks);
 
         $smarty->assign('userauthinstance', $SESSION->get('authinstance'));
         $smarty->assign('MNETUSER', $SESSION->get('mnetuser'));
-        $smarty->assign('SIDEBLOCKS', $SIDEBLOCKS);
+        $smarty->assign('SIDEBLOCKS', $sideblocks);
         $smarty->assign('SIDEBARS', $sidebars);
 
     }
@@ -876,10 +886,13 @@ class Theme {
             $theme->parent = 'raw';
         }
 
+        // Local theme overrides come first
+        $this->templatedirs[] = get_config('docroot') . 'local/theme/templates/';
+
+        // Then the current theme
         $this->templatedirs[] = get_config('docroot') . 'theme/' . $this->basename . '/templates/';
         $this->inheritance[]  = $this->basename;
 
-        $this->templatedirs[] = get_config('docroot') . 'local/theme/templates/';
 
         // Now go through the theme hierarchy assigning variables from the
         // parent themes
@@ -906,27 +919,76 @@ class Theme {
     }
 
     /**
-     * stuff
+     * Get the URL of a particular theme asset (i.e. an image or CSS file). Checks first for a copy
+     * in /local/theme/static, then in the current theme, then this theme's parent, grandparent, etc.
+     *
+     * @param string $filename Relative path of the asset, e.g. 'images/newmail.png'
+     * @param boolean $all Whether to return the first found copy of the asset, or all copies of it from all themes
+     * in the hierarchy.
+     * @param string $plugindirectory For if it's a plugin theme asset, e.g. 'artefact/file'
+     * @return string|array The URL of the first match, or all matching ones, depending on $all
      */
     public function get_url($filename, $all=false, $plugindirectory='') {
         return $this->_get_path($filename, $all, $plugindirectory, get_config('wwwroot'));
     }
 
+    /**
+     * Get the full filesystem path of a particular theme asset (i.e. an image or CSS file). Checks first for a copy
+     * in /local/theme/static, then in the current theme, then this theme's parent, grandparent, etc.
+     *
+     * @param string $filename Relative path of the asset, e.g. 'images/newmail.png'
+     * @param boolean $all Whether to return the first found copy of the asset, or all copies it from all
+     * themes in the hierarchy
+     * @param string $plugindirectory For if it's a plugin theme asset, e.g. 'artefact/file'
+     * @return string|array The full filesystem path of the first match, or of all matches, depending on $all
+     */
     public function get_path($filename, $all=false, $plugindirectory='') {
         return $this->_get_path($filename, $all, $plugindirectory, get_config('docroot'));
     }
 
+    /**
+     * Internal function to return the path or URL of a particular theme asset. Relies on the fact that the URL
+     * and the filesystem path are the same, except that one is prefaced by docroot and the other by wwwroot.
+     *
+     * @param string $filename Relative path of the asset, e.g. 'images/newmail.png'
+     * @param boolean $all Whether to return the first found copy of the asset, or all copies it from all
+     * themes in the hierarchy
+     * @param string $plugindirectory For if it's a plugin theme asset, e.g. 'artefact/file'
+     * @param string $returnprefix The part to put before the Mahara-relative path of the file. (i.e. docroot or wwwroot)
+     * @return string|array The first match, or of all matches, depending on $all
+     */
     private function _get_path($filename, $all, $plugindirectory, $returnprefix) {
         $list = array();
         $plugindirectory = ($plugindirectory && substr($plugindirectory, -1) != '/') ? $plugindirectory . '/' : $plugindirectory;
 
+        // Local theme overrides come first
+        $localloc = "local/theme/{$plugindirectory}static/{$filename}";
+        if (is_readable(get_config('docroot') . $localloc)) {
+            if ($all) {
+                $list['local'] = $returnprefix . $localloc;
+            }
+            else {
+                return $returnprefix . $localloc;
+            }
+        }
+
+        // Then check each theme
         foreach ($this->inheritance as $themedir) {
-            if (is_readable(get_config('docroot') . $plugindirectory . 'theme/' . $themedir . '/static/' . $filename)) {
-                if ($all) {
-                    $list[$themedir] = $returnprefix . $plugindirectory . 'theme/' . $themedir . '/static/' . $filename;
-                }
-                else {
-                    return $returnprefix . $plugindirectory . 'theme/' . $themedir . '/static/' . $filename;
+            $searchloc = array();
+            // Check in the /theme directory
+            $searchloc[] = "theme/{$themedir}/{$plugindirectory}static/{$filename}";
+            if ($plugindirectory) {
+                // Then check in the plugin's own directory
+                $searchloc[] = "{$plugindirectory}theme/{$themedir}/static/{$filename}";
+            }
+            foreach($searchloc as $loc) {
+                if (is_readable(get_config('docroot') . $loc)) {
+                    if ($all) {
+                        $list[$themedir] = $returnprefix . $loc;
+                    }
+                    else {
+                        return $returnprefix . $loc;
+                    }
                 }
             }
         }
@@ -995,6 +1057,9 @@ function jsstrings() {
                 'Help',
                 'closehelp',
                 'tabs',
+                'toggletoolbarson',
+                'toggletoolbarsoff',
+                'imagexofy',
             ),
             'pieforms' => array(
                 'element.calendar.opendatepicker'
@@ -1850,15 +1915,20 @@ function getoptions_country() {
 }
 
 /**
+ * Returns HTML string with help icon image that can be used on a page.
  *
+ * @param string $plugintype
+ * @param string $pluginname
+ * @param string $form
+ * @param string $element
+ * @param string $page
+ * @param string $section
+ *
+ * @return string HTML with help icon element
  */
-
 function get_help_icon($plugintype, $pluginname, $form, $element, $page='', $section='') {
     global $THEME;
-    // TODO: remove the hax for ie, I'm sure we can do this with a PNG file
-    // I see no reason why IE has to drag the quality of the interwebs down with it
 
-    $imageext = (isset($_SERVER['HTTP_USER_AGENT']) && false !== stripos($_SERVER['HTTP_USER_AGENT'], 'msie 6.0')) ? 'gif' : 'png';
     return ' <span class="help"><a href="" onclick="'.
         hsc(
             'contextualHelp(' . json_encode($form) . ',' .
@@ -1866,13 +1936,14 @@ function get_help_icon($plugintype, $pluginname, $form, $element, $page='', $sec
             json_encode($pluginname) . ',' . json_encode($page) . ',' .
             json_encode($section)
             . ',this); return false;'
-        ) . '"><img src="' . $THEME->get_url('images/help.' . $imageext) . '" alt="' . get_string('Help') . '" title="' . get_string('Help') . '"></a></span>';
+        ) . '"><img src="' . $THEME->get_url('images/help.png') . '" alt="' . get_string('Help') . '" title="' . get_string('Help') . '"></a></span>';
 }
 
 function pieform_get_help(Pieform $form, $element) {
-    return get_help_icon($form->get_property('plugintype'),
-        $form->get_property('pluginname'),
-        $form->get_name(), $element['name']);
+    $plugintype = isset($element['helpplugintype']) ? $element['helpplugintype'] : $form->get_property('plugintype');
+    $pluginname = isset($element['helppluginname']) ? $element['helppluginname'] : $form->get_property('pluginname');
+    $formname = isset($element['helpformname']) ? $element['helpformname'] : $form->get_name();
+    return get_help_icon($plugintype, $pluginname, $formname, $element['name']);
 }
 
 /**
@@ -1886,6 +1957,9 @@ function in_admin_section() {
 
 /**
  * Returns the entries in the standard admin menu
+ *
+ * See the function find_menu_children() in lib/web.php
+ * for a description of the expected array structure.
  *
  * @return $adminnav a data structure containing the admin navigation
  */
@@ -2014,6 +2088,12 @@ function admin_nav() {
             'title'  => get_string('siteadmins', 'admin'),
             'weight' => 30,
         ),
+        'configusers/exportqueue' => array(
+            'path'   => 'configusers/exportqueue',
+            'url'    => 'admin/users/exportqueue.php',
+            'title'  => get_string('exportqueue', 'admin'),
+            'weight' => 35,
+        ),
         'configusers/adduser' => array(
             'path'   => 'configusers/adduser',
             'url'    => 'admin/users/add.php',
@@ -2030,6 +2110,7 @@ function admin_nav() {
             'path'   => 'managegroups',
             'url'    => 'admin/groups/groups.php',
             'title'  => get_string('groups', 'admin'),
+            'accessibletitle' => get_string('administergroups', 'admin'),
             'weight' => 40,
             'accesskey' => 'g',
         ),
@@ -2044,6 +2125,12 @@ function admin_nav() {
             'url'    => 'admin/groups/groupcategories.php',
             'title'  => get_string('groupcategories', 'admin'),
             'weight' => 20,
+        ),
+        'managegroups/archives' => array(
+            'path'   => 'managegroups/archives',
+            'url'    => 'admin/groups/archives.php',
+            'title'  => get_string('archivedsubmissions', 'admin'),
+            'weight' => 25,
         ),
         'managegroups/uploadcsv' => array(
             'path'   => 'managegroups/uploadcsv',
@@ -2220,6 +2307,9 @@ function admin_nav() {
 /**
  * Returns the entries in the standard institutional admin menu
  *
+ * See the function find_menu_children() in lib/web.php
+ * for a description of the expected array structure.
+ *
  * @return $adminnav a data structure containing the admin navigation
  */
 function institutional_admin_nav() {
@@ -2245,6 +2335,12 @@ function institutional_admin_nav() {
             'title'  => get_string('suspendeduserstitle', 'admin'),
             'weight' => 20,
         ),
+        'configusers/exportqueue' => array(
+            'path'   => 'configusers/exportqueue',
+            'url'    => 'admin/users/exportqueue.php',
+            'title'  => get_string('exportqueue', 'admin'),
+            'weight' => 25,
+        ),
         'configusers/adduser' => array(
             'path'   => 'configusers/adduser',
             'url'    => 'admin/users/add.php',
@@ -2261,8 +2357,15 @@ function institutional_admin_nav() {
             'path'   => 'managegroups',
             'url'    => 'admin/groups/uploadcsv.php',
             'title'  => get_string('groups', 'admin'),
+            'accessibletitle' => get_string('administergroups', 'admin'),
             'weight' => 20,
             'accesskey' => 'g',
+        ),
+        'managegroups/archives' => array(
+            'path'   => 'managegroups/archives',
+            'url'    => 'admin/groups/archives.php',
+            'title'  => get_string('archivedsubmissions', 'admin'),
+            'weight' => 5,
         ),
         'managegroups/uploadcsv' => array(
             'path'   => 'managegroups/uploadcsv',
@@ -2379,6 +2482,9 @@ function institutional_admin_nav() {
 /**
  * Returns the entries in the staff menu
  *
+ * See the function find_menu_children() in lib/web.php
+ * for a description of the expected array structure.
+ *
  * @return a data structure containing the staff navigation
  */
 function staff_nav() {
@@ -2410,6 +2516,9 @@ function staff_nav() {
 /**
  * Returns the entries in the institutional staff menu
  *
+ * See the function find_menu_children() in lib/web.php
+ * for a description of the expected array structure.
+ *
  * @return a data structure containing the institutional staff navigation
  */
 function institutional_staff_nav() {
@@ -2433,6 +2542,9 @@ function institutional_staff_nav() {
 
 /**
  * Returns the entries in the standard user menu
+ *
+ * See the function find_menu_children() in lib/web.php
+ * for a description of the expected array structure.
  *
  * @return $standardnav a data structure containing the standard navigation
  */
@@ -2552,6 +2664,8 @@ function mahara_standard_nav() {
 
 /**
  * Builds a data structure representing the menu for Mahara.
+ *
+ * @return array
  */
 function main_nav() {
     if (in_admin_section()) {
@@ -2571,31 +2685,19 @@ function main_nav() {
     }
     else {
         // Build the menu structure for the site
-
-        // The keys of each entry are as follows:
-        //   path: Where the link sits in the menu. E.g. 'myporfolio/myplugin'
-        //   url:  The URL to the page, relative to wwwroot. E.g. 'artefact/myplugin/'
-        //   title: Translated text to use for the text of the link. E.g. get_string('myplugin', 'artefact.myplugin')
-        //   weight: Where in the menu the item should be inserted. Larger number are to the right.
         $menu = mahara_standard_nav();
     }
 
     $menu = array_filter($menu, create_function('$a', 'return empty($a["ignore"]);'));
 
-    if ($plugins = plugins_installed('artefact')) {
-        foreach ($plugins as &$plugin) {
-            if (safe_require_plugin('artefact', $plugin->name)) {
-                $plugin_menu = call_static_method(generate_class_name('artefact',$plugin->name), 'menu_items');
-                $menu = array_merge($menu, $plugin_menu);
-            }
-        }
-    }
-
-    if ($plugins = plugins_installed('interaction')) {
-        foreach ($plugins as &$plugin) {
-            if (safe_require_plugin('interaction', $plugin->name)) {
-                $plugin_menu = call_static_method(generate_class_name('interaction',$plugin->name), 'menu_items');
-                $menu = array_merge($menu, $plugin_menu);
+    // enable plugins to augment the menu structure
+    foreach (array('artefact', 'interaction', 'module') as $plugintype) {
+        if ($plugins = plugins_installed($plugintype)) {
+            foreach ($plugins as &$plugin) {
+                if (safe_require_plugin($plugintype, $plugin->name)) {
+                    $plugin_menu = call_static_method(generate_class_name($plugintype,$plugin->name), 'menu_items');
+                    $menu = array_merge($menu, $plugin_menu);
+                }
             }
         }
     }
@@ -2647,22 +2749,16 @@ function right_nav() {
     );
 
     // enable plugins to augment the menu structure
-    if ($plugins = plugins_installed('artefact')) {
-        foreach ($plugins as &$plugin) {
-            safe_require('artefact', $plugin->name);
-            $plugin_menu = call_static_method(generate_class_name('artefact',$plugin->name), 'menu_items');
-            $menu = array_merge($menu, $plugin_menu);
+    foreach (array('artefact', 'interaction', 'module') as $plugintype) {
+        if ($plugins = plugins_installed($plugintype)) {
+            foreach ($plugins as &$plugin) {
+                safe_require($plugintype, $plugin->name);
+                $plugin_nav_menu = call_static_method(generate_class_name($plugintype, $plugin->name),
+                    'right_nav_menu_items');
+                $menu = array_merge($menu, $plugin_nav_menu);
+            }
         }
     }
-
-    if ($plugins = plugins_installed('interaction')) {
-        foreach ($plugins as &$plugin) {
-            safe_require('interaction', $plugin->name);
-            $plugin_menu = call_static_method(generate_class_name('interaction',$plugin->name), 'menu_items');
-            $menu = array_merge($menu, $plugin_menu);
-        }
-    }
-
     // local_right_nav_update allows sites to customise the menu by munging the $menu array.
     if (function_exists('local_right_nav_update')) {
         local_right_nav_update($menu);
@@ -2720,6 +2816,15 @@ function footer_menu($all=false) {
  * Given a menu structure and a path, returns a data structure representing all
  * of the child menu items of the path, and removes those items from the menu
  * structure
+ *
+ * The menu structure should be an array. Each item in the array should be
+ * a sub-array representing one of the nodes in the menu.
+ *
+ * The keys of each menu node are as follows:
+ *   path: Where the link sits in the menu. E.g. 'myporfolio/myplugin'
+ *   url:  The URL to the page, relative to wwwroot. E.g. 'artefact/myplugin/'
+ *   title: Translated text to use for the text of the link. E.g. get_string('myplugin', 'artefact.myplugin')
+ *   weight: Where in the menu the item should be inserted. Larger number are to the right.
  *
  * Used by main_nav()
  */
@@ -3175,6 +3280,7 @@ function get_htmlpurifier_custom_filters() {
 function clean_html($text, $xhtml=false) {
     require_once('htmlpurifier/HTMLPurifier.auto.php');
     $config = HTMLPurifier_Config::createDefault();
+    $config->set('Cache.SerializerPermissions', get_config('directorypermissions'));
     $config->set('Cache.SerializerPath', get_config('dataroot') . 'htmlpurifier');
     if (empty($xhtml)) {
         $config->set('HTML.Doctype', 'HTML 4.01 Transitional');
@@ -3216,7 +3322,42 @@ function clean_html($text, $xhtml=false) {
 
     if ($def = $config->maybeGetRawHTMLDefinition()) {
         $def->addAttribute('a', 'target', 'Enum#_blank,_self,_target,_top');
+        // allow the tags used with image map to be rendered
+        // see http://htmlpurifier.org/phorum/read.php?3,5046
+        $def->addAttribute('img', 'usemap', 'CDATA');
+        // Add map tag
+        $map = $def->addElement(
+            'map',
+            'Block',
+            'Flow',
+            'Common',
+            array(
+                'name' => 'CDATA',
+            )
+        );
+        $map->excludes = array('map' => true);
+
+        // Add area tag
+        $area = $def->addElement(
+            'area',
+            'Block',
+            'Empty',
+            'Common',
+            array(
+                'name' => 'CDATA',
+                'alt' => 'Text',
+                'coords' => 'CDATA',
+                'accesskey' => 'Character',
+                'nohref' => new HTMLPurifier_AttrDef_Enum(array('nohref')),
+                'href' => 'URI',
+                'shape' => new HTMLPurifier_AttrDef_Enum(array('rect','circle','poly','default')),
+                'tabindex' => 'Number',
+                'target' => new HTMLPurifier_AttrDef_Enum(array('_blank','_self','_target','_top'))
+            )
+        );
+        $area->excludes = array('area' => true);
     }
+
     $purifier = new HTMLPurifier($config);
     return $purifier->purify($text);
 }
@@ -3228,17 +3369,20 @@ function clean_html($text, $xhtml=false) {
  * http://stackoverflow.com/questions/3241616/sanitize-user-defined-css-in-php#5209050
  *
  * @param string $input_css
+ * @param string $preserve_css, if turns on the CSS comments will be preserved
  * @return string The cleaned CSS
  */
-function clean_css($input_css) {
+function clean_css($input_css, $preserve_css=false) {
     require_once('htmlpurifier/HTMLPurifier.auto.php');
     require_once('csstidy/class.csstidy.php');
 
     // Create a new configuration object
     $config = HTMLPurifier_Config::createDefault();
+    $config->set('Cache.SerializerPermissions', get_config('directorypermissions'));
     $config->set('Cache.SerializerPath', get_config('dataroot') . 'htmlpurifier');
 
     $config->set('Filter.ExtractStyleBlocks', true);
+    $config->set('Filter.ExtractStyleBlocks.PreserveCSS', $preserve_css);
 
     if (get_config('disableexternalresources')) {
         $config->set('URI.DisableExternalResources', true);
@@ -3563,7 +3707,7 @@ function str_shorten_text($str, $maxlen=100, $truncate=false) {
  * @param array $params Options for the pagination
  */
 function build_pagination($params) {
-    $limitoptions = array(10, 20, 50, 100, 500);
+    $limitoptions = array(1, 10, 20, 50, 100, 500);
     // Bail if the required attributes are not present
     $required = array('url', 'count', 'limit', 'offset');
     foreach ($required as $option) {
@@ -3873,6 +4017,58 @@ function mahara_http_request($config, $quiet=false) {
     }
 
     curl_close($ch);
+
+    return $result;
+}
+
+/**
+ * Fetch the true full url from a shorthand url by getting
+ * the location from the redirected header information.
+ *
+ * @param   string $url    The shorthand url eg https://goo.gl/maps/pZTiA
+ * @param   bool   $quiet  To record errors in the logs
+ *
+ * @return  object  $result Contains the short url, full url, the headers, and any errors
+ */
+function mahara_shorturl_request($url, $quiet=false) {
+    $ch = curl_init($url);
+
+    // standard curl_setopt stuff; configs passed to the function can override these
+    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
+    curl_setopt($ch, CURLOPT_HEADER, true);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+    curl_setopt($ch, CURLOPT_MAXREDIRS, 1);
+
+    $result = new StdClass();
+    $result->shorturl = $url;
+    $result->data = curl_exec($ch);
+    $result->error = curl_error($ch);
+    $result->errno = curl_errno($ch);
+
+    if ($result->errno) {
+        if ($quiet) {
+            // When doing something unimportant like fetching rss feeds, some errors should not pollute the logs.
+            $dontcare = array(
+                CURLE_COULDNT_RESOLVE_HOST, CURLE_COULDNT_CONNECT, CURLE_PARTIAL_FILE, CURLE_OPERATION_TIMEOUTED,
+                CURLE_GOT_NOTHING,
+            );
+            $quiet = in_array($result->errno, $dontcare);
+        }
+        if (!$quiet) {
+            log_warn('Curl error: ' . $result->errno . ': ' . $result->error);
+        }
+    }
+
+    curl_close($ch);
+
+    $fields = explode("\r\n", preg_replace('/\x0D\x0A[\x09\x20]+/', ' ', $result->data)); // Parse information
+    $result->fullurl = false;
+    foreach ($fields as $field) {
+        if (strpos($field, 'Location') !== false) {
+            $result->fullurl = str_replace('Location: ', '', $field);
+        }
+    }
 
     return $result;
 }

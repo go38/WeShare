@@ -57,7 +57,8 @@ $personalinformationform = pieform(array(
                     'type'       => 'calendar',
                     'caloptions' => array(
                         'showsTime'      => false,
-                        'ifFormat'       => get_string('strfdateofbirth', 'langconfig')
+                        'ifFormat'       => '%Y/%m/%d',
+                        'dateFormat'     => 'yy/mm/dd',
                         ),
                     'defaultvalue' => (
                             (!empty($personalinformation) && null !== $personalinformation->get_composite('dateofbirth'))
@@ -69,11 +70,11 @@ $personalinformationform = pieform(array(
                 ),
                 'placeofbirth' => array(
                     'type' => 'text',
-                    'defaultvalue' => ((!empty($personalinformation)) 
+                    'defaultvalue' => ((!empty($personalinformation))
                         ? $personalinformation->get_composite('placeofbirth') : null),
                     'title' => get_string('placeofbirth', 'artefact.resume'),
                     'size' => 30,
-                ),  
+                ),
                 'citizenship' => array(
                     'type' => 'text',
                     'defaultvalue' => ((!empty($personalinformation))
@@ -82,7 +83,7 @@ $personalinformationform = pieform(array(
                     'size' => 30,
                 ),
                 'visastatus' => array(
-                    'type' => 'text', 
+                    'type' => 'text',
                     'defaultvalue' => ((!empty($personalinformation))
                         ? $personalinformation->get_composite('visastatus') : null),
                     'title' => get_string('visastatus', 'artefact.resume'),
@@ -90,7 +91,7 @@ $personalinformationform = pieform(array(
                     'size' => 30,
                 ),
                 'gender' => array(
-                    'type' => 'radio', 
+                    'type' => 'radio',
                     'defaultvalue' => ((!empty($personalinformation))
                         ? $personalinformation->get_composite('gender') : null),
                     'options' => array(
@@ -123,6 +124,14 @@ $smarty->assign('INLINEJAVASCRIPT', '$j(simple_resumefield_init);');
 $smarty->assign('PAGEHEADING', TITLE);
 $smarty->assign('SUBPAGENAV', PluginArtefactResume::submenu_items());
 $smarty->display('artefact:resume:index.tpl');
+
+function personalinformation_validate(Pieform $form, $values) {
+    if (!empty($values['dateofbirth'])) {
+        if ($values['dateofbirth'] > time()) {
+            $form->json_reply(PIEFORM_ERR, get_string('dateofbirthinvalid1','artefact.resume'));
+        }
+    }
+}
 
 function personalinformation_submit(Pieform $form, $values) {
     global $personalinformation, $USER;

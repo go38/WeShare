@@ -33,11 +33,14 @@ $string['nothingtoupgrade'] = 'Nothing to upgrade';
 $string['performinginstallation'] = 'Performing installation...';
 $string['performingupgrades'] = 'Performing upgrades...';
 $string['runupgrade'] = 'Run upgrade';
+$string['gotoinstallpage'] = 'Install via extensions page';
 $string['successfullyinstalled'] = 'Successfully installed Mahara.';
 $string['thefollowingupgradesareready'] = 'The following upgrades are ready:';
+$string['thefollowingpluginsareready'] = 'The following new plugins are available:';
 $string['registerthismaharasite'] = 'Register this Mahara site';
 $string['upgradeloading'] = 'Loading...';
 $string['upgrades'] = 'Upgrades';
+$string['newplugins'] = 'New plugins';
 $string['upgradingplugin'] = 'Upgrading %s';
 $string['upgradesuccess'] = 'Successfully upgraded';
 $string['upgradesuccesstoversion'] = 'Successfully upgraded to version ';
@@ -76,7 +79,7 @@ $string['institutionstaticpages']     = 'Institution static pages';
 $string['staticpageinstitutionbad'] = "You can't access and/or edit static pages for institution '%s'";
 $string['usedefault'] = 'Use site default';
 $string['usedefaultdescription1'] = 'Use the site\'s default text for this particular page type instead.';
-$string['staticpagesdescription'] = 'Edit the content of static pages in Mahara (Home, Terms and Conditions, etc)';
+$string['staticpagesdescription'] = 'Edit the content of static pages in Mahara (Home, Terms and Conditions, etc.)';
 $string['menus'] = 'Menus';
 $string['menusdescription'] = 'Manage the links and files within the "Links and resources" and footer menus';
 $string['sitefiles']          = 'Site files';
@@ -132,6 +135,7 @@ $string['institutionviews']          = 'Institution pages';
 $string['institutionviewsdescription'] = 'Create and administer pages and page templates for an institution';
 $string['institutionfiles']          = 'Institution files';
 $string['institutionfilesdescription'] = 'Upload and manage files for use in institution pages';
+$string['pluginsfields'] = 'Plugins settings';
 
 $string['pluginadmin'] = 'Plugin administration';
 $string['pluginadmindescription'] = 'Install and configure plugins';
@@ -207,6 +211,13 @@ $string['currentadmins'] = 'Current administrators';
 $string['groupadminsupdated'] = 'Group administrators have been updated';
 $string['groupquotaupdated'] = 'Group quota has been updated';
 $string['addnewgroupcategory'] = 'Enter new group category';
+$string['archivedsubmissions'] = 'Archived submissions';
+$string['submittedto'] = 'Submitted to';
+$string['ID'] = 'ID';
+$string['filenameleap'] = 'Leap2A file';
+$string['archivedon'] = 'Archived on';
+$string['filemissing'] = '%s (file missing)';
+$string['filemissingdesc'] = 'File %s%s is missing from server';
 
 // Register your Mahara
 $string['Field'] = 'Field';
@@ -271,6 +282,7 @@ $string['userstatstabletitle'] = 'Daily user statistics';
 $string['groupstatstabletitle'] = 'Biggest groups';
 $string['viewstatstabletitle'] = 'Most popular pages';
 $string['exportstatsascsv'] = 'Export statistics in CSV format';
+$string['downloadstatsascsv'] = 'statistics in CSV format';
 $string['nostats'] = 'No statistics available';
 $string['site'] = 'Site';
 
@@ -295,6 +307,8 @@ $string['allowinstitutionpublicviews'] = 'Allow institution public pages';
 $string['allowinstitutionpublicviewsdescription'] = 'If set to yes, users belonging to this institution will be able to create portfolio pages that are accessible to the public rather than only to logged-in users.';
 $string['allowpublicprofiles'] = 'Allow public profiles';
 $string['allowpublicprofilesdescription'] = 'If checked, users will be able to set their profile pages to be accessible to the public rather than only to logged-in users.';
+$string['allowanonymouspages'] = 'Allow anonymous pages';
+$string['allowanonymouspagesdescription'] = 'If checked, users will be able to choose to hide their name as the author of a page from other users. Administrators will still be able to see the author\'s name if they so desire.';
 $string['anonymouscomments'] = 'Anonymous comments';
 $string['anonymouscommentsdescription'] = 'If checked, anyone can leave comments on public pages or pages they can access by secret URL.';
 $string['loggedinprofileviewaccess'] = 'Logged-in profile access';
@@ -322,8 +336,8 @@ $string['embeddedcontentdescription'] = 'If you would like users to be able to e
 $string['Everyone'] = 'Everyone';
 $string['generatesitemap'] = 'Generate sitemap';
 $string['generatesitemapdescription'] = 'Generate sitemap files from publicly accessible pages, groups and forum topics';
-$string['homepageinfo'] = 'Show homepage information';
-$string['homepageinfodescription'] = 'If checked, information about Mahara and how it is used will be displayed on the Mahara homepage. Logged-in users will have the option to disable it.';
+$string['homepageinfo1'] = 'Show homepage / dashboard information';
+$string['homepageinfodescription1'] = 'If checked, information about Mahara and how it is used will be displayed on the Mahara homepage. Logged-in users will have the option to disable it for their dashboard.';
 $string['institutionautosuspend'] = 'Auto-suspend expired institutions';
 $string['institutionautosuspenddescription'] = 'If checked, expired institutions will be automatically suspended.';
 $string['institutionexpirynotification'] = 'Warning time for institution expiry';
@@ -477,7 +491,7 @@ $string['footerupdated']       = 'Footer updated';
 $string['footercustomlink'] = 'You can override the default page, <em>%s</em>, by entering a URL here or leave it empty to use the default value.';
 
 // Admin Files
-$string['adminfilespagedescription'] = 'Here you can upload files that can be included in the %s"Links and resources"%s menu. Files in the home directory will be able to be added to the logged-in menu, while files in the public directory will be able to be added to the public menu.';
+$string['adminfilespagedescription2'] = 'Here are files that you can include in the %s"Links and resources"%s menu. You can add files from the home directory to the logged-in menu and files from the "public" folder to the public menu.';
 
 // License settings
 $string['extralicensesdescription'] = 'Note: The following licenses are used by some content but have not been configured.';
@@ -536,11 +550,9 @@ $string['emailsmtpsecuressl'] = 'SSL';
 $string['emailsmtpsecuretls'] = 'TLS';
 $string['emailnoreplyaddress'] = 'System mail address';
 $string['emailnoreplyaddressdescription'] = 'Emails come out as from this address';
-$string['defaultnotificationmethod'] = 'Default notification method';
-$string['defaultnotificationmethoddescription'] = 'Notification method for new users';
-
-
-
+$string['notificationsettings'] = 'Notification settings';
+$string['notificationsettingsdescription'] = 'Here you can set the default options for new users to get notifications. Users can override these settings on their own "Settings → Notifications" page.<br>
+         If you select either of the email options, notifications will still arrive in the user\'s inbox, but they will be marked as read automatically.';
 
 // Upload CSV and CSV errors
 $string['csvfile'] = 'CSV file';
@@ -573,24 +585,13 @@ $string['uploadcsverrorduplicateremoteuser'] = 'Line %s of the file specifies a 
 $string['uploadcsverrorremoteusertaken'] = 'Line %s of the file specifies a remote username "%s" that is already taken by the user "%s".';
 $string['uploadcsverrorusernotininstitution'] = 'Error on line %s: The user "%s" is not a member of the institution %s.';
 $string['uploadcsverroruserinaninstitution'] = 'Error on line %s: The user "%s" is a member of the following institutions: %s. You cannot update this user\'s authentication method to "No Institution".';
-$string['uploadcsvpagedescription2'] = '<p>You may use this facility to upload new users via a <acronym title="Comma Separated Values">CSV</acronym> file.</p>
+$string['uploadcsvpagedescription4'] = '<p>Here you can upload new users via a <acronym title="Comma Separated Values">CSV</acronym> file.</p>
 
 <p>The first row of your CSV file should specify the format of your CSV data. For example, it should look like this:</p>
 
 <pre>username,password,email,firstname,lastname,studentid</pre>
 
-<p>This row must include the <tt>username</tt>, <tt>password</tt>, <tt>email</tt>, <tt>firstname</tt> and <tt>lastname</tt> fields. It must also include fields that you have made mandatory for all users to fill out and any fields locked for the institution you are uploading the users for. You can <a href="%s">configure the mandatory fields</a> for all institutions or <a href="%s">configure the locked fields for each institution</a>.</p>
-
-<p>Your CSV file may include any other profile fields as you require. The full list of fields is:</p>
-
-%s';
-$string['uploadcsvpagedescription2institutionaladmin'] = '<p>You may use this facility to upload new users via a <acronym title="Comma Separated Values">CSV</acronym> file.</p>
-
-<p>The first row of your CSV file should specify the format of your CSV data. For example, it should look like this:</p>
-
-<pre>username,password,email,firstname,lastname,studentid</pre>
-
-<p>This row must include the <tt>username</tt>, <tt>password</tt>, <tt>email</tt>, <tt>firstname</tt> and <tt>lastname</tt> fields. It must also include any fields that the site administrator has made mandatory and any fields that are locked for your institution. You can <a href="%s">configure the locked fields</a> for the institution(s) you manage.</p>
+<p>This row must include the <tt>username</tt>, <tt>password</tt>, <tt>email</tt>, <tt>firstname</tt> and <tt>lastname</tt> fields.</p>
 
 <p>Your CSV file may include any other profile fields as you require. The full list of fields is:</p>
 
@@ -686,7 +687,7 @@ $string['invalidlistingfile'] = 'Invalid username listing. Did you use the Mahar
 
 // Admin Users
 $string['adminuserspagedescription1'] = '<p>Here you can choose which users are administrators for the site. The current administrators are listed in the "Current administrators" field, and potential administrators are in the "Potential administrators" field.</p><p>The system must have at least one administrator.</p>';
-$string['institutionadminuserspagedescription1'] = 'Here you can choose which users are administrators for the institution. The current administrators are listed in the "Current administrators" field, and potential administrators are in the "Institution memebers" field.';
+$string['institutionadminuserspagedescription1'] = 'Here you can choose which users are administrators for the institution. The current administrators are listed in the "Current administrators" field, and potential administrators are shown in the "Institution members" field.';
 $string['potentialadmins'] = 'Potential administrators';
 $string['currentadmins'] = 'Current administrators';
 $string['adminusersupdated'] = 'Administrators updated';
@@ -751,7 +752,7 @@ $string['filequota1'] = 'File quota';
 $string['quotaused'] = 'Quota used';
 $string['filequotadescription'] = 'Total storage available in the user\'s files area.';
 $string['probationbulkconfirm'] = 'Are you sure you want to change these users\' spam probation status?';
-$string['probationbulksetspamprobation'] = 'Set spam probation: ';
+$string['probationbulksetspamprobation'] = 'Set spam probation';
 $string['probationbulkset'] = 'Set';
 $string['probationtitle'] = 'Spammer probation status';
 $string['probationzeropoints'] = 'Not on probation';
@@ -768,10 +769,36 @@ $string['usereditwarning'] = 'NOTE: Saving the account changes will cause the us
 $string['suspenduserdescription'] = 'A suspended user is unable to log in until the account is unsuspended.';
 $string['deleteusernote'] = 'Please note that this operation <strong>cannot be undone</strong>.';
 $string['youcannotadministerthisuser'] = 'You cannot administer this user.';
+$string['userinstitutionjoined'] = 'User added to institution "%s".';
+$string['userinstitutionremoved'] = 'User removed from institution "%s".';
+$string['userinstitutionupdated'] = 'User settings for institution "%s" updated.';
 $string['usernamechangenotallowed'] = 'The chosen authentication method does not allow changes to the username.';
+$string['usersitesettingschanged'] = 'Site account settings updated.';
 $string['passwordchangenotallowed'] = 'The chosen authentication method does not allow changes to the password.';
 $string['thisuserdeleted'] = 'This user has been deleted.';
 $string['disableemail'] = 'Disable email';
+
+// Export queue
+$string['exportqueue'] = 'Export queue';
+$string['exportcontentname'] = 'Export content';
+$string['selectuserexport'] = 'Select content "%s" to export';
+$string['selectuserexportdelete'] = 'Select content "%s" to delete from export queue';
+$string['exportpending'] = 'pending as of %s';
+$string['exportfailed'] = 'failed on %s';
+$string['Archive'] = 'Archive';
+$string['exportqueuedeleted'] = array(
+    'Deleted %s row successfully',
+    'Deleted %s rows successfully',
+);
+$string['exportqueuearchived'] = array(
+    'Updated %s row successfully',
+    'Updated %s rows successfully',
+);
+$string['exportdataascsv'] = 'Export all data in CSV format';
+$string['nocsvresults'] = 'No results found for CSV file';
+$string['exportdownloademailsubject'] = 'Your Leap2A export for "%s" is ready for download';
+$string['exportdownloademailmessage'] = '%s, your Leap2A export for "%s" is ready for download. This file will only be available for up to 24 hours after it was generated. Please follow the link below to download the file:';
+$string['exportdownloadurl'] = 'Download exported file';
 
 // Add User
 $string['adduser'] = 'Add user';
@@ -1023,6 +1050,8 @@ $string['uneditableusers'] = array(
     1 => 'You selected %s users that are not editable by you. They have been removed from the list.',
 );
 $string['exportusersascsv'] = 'Export users in CSV format';
+$string['downloadusersascsv'] = 'users in CSV format';
+$string['downloaddataascsv'] = '%s statistics in CSV format';
 $string['Download'] = 'Download';
 $string['suspendusers'] = 'Suspend users';
 $string['Suspend'] = 'Suspend';
@@ -1125,3 +1154,5 @@ $string['progressbardisablednote'] = '<b>Note</b>: Profile completion is current
 $string['profilecompletenessdesc'] = 'Select artefacts that will count towards the user profile completion for your institution. Please tick the checkboxes next to the artefact that users should provide or select how many items of certain artefact types your users should have to make their profile complete.';
 $string['profilecompletenesspreview'] = 'You can preview what the profile completion looks like in the "Profile completion preview" side block.';
 
+$string['exporttoqueue'] = 'Export to queue';
+$string['exporttoqueuedescription1'] = 'If checked, the export queue will handle the exporting of user portfolios via Leap2A for better server load management.';

@@ -48,7 +48,7 @@ $group = $view->get('group');
 $institution = $view->get('institution');
 View::set_nav($group, $institution, true);
 
-if (!$USER->can_edit_view($view)) {
+if (!$USER->can_edit_view($view) || $view->get('owner') == "0") {
     throw new AccessDeniedException();
 }
 if ($group && !group_within_edit_window($group)) {
@@ -179,7 +179,7 @@ if ($institution) {
         );
         $form['elements']['more']['elements']['copyfornewgroups'] = array(
             'type'         => 'html',
-            'value'        => '<label>' . get_string('copyfornewgroups', 'view') . '</label>',
+            'value'        => '<strong>' . get_string('copyfornewgroups', 'view') . '</strong>',
         );
         $form['elements']['more']['elements']['copyfornewgroupsdescription1'] = array(
             'type'         => 'html',

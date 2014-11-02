@@ -4,7 +4,7 @@
 <p>{str tag=youhaventcreatedanyviewsyet section=view}</p>
 {else}
 
-<table class="fullwidth sharedviewsreport">
+<table class="fullwidth groupreport" id="sharedviewsreport">
   <thead>
     <tr>
       <th class="sv {if $sort == title && $direction == asc}asc{elseif $sort == title}sorted{/if}">
@@ -25,8 +25,8 @@
 {if $sharedviews}
 {foreach from=$sharedviews item=view}
     <tr class="{cycle values='r0,r1'}">
-      <td><h3 class="title"><a href="{$view.baseurl}">{$view.title}</a></h3></td>
-      <td class="s">
+      <td class="sv"><h3 class="title"><a href="{$view.baseurl}">{$view.title}</a></h3></td>
+      <td class="sb"><label class="hidden">{str tag=sharedby section=view}: </label>
 {if $view.owner}
         <a href="{$WWWROOT}user/view.php?id={$view.owner}">{$view.user->id|display_name:null:true|escape}</a>
 {elseif $view.group}
@@ -35,7 +35,7 @@
         <a href="{$WWWROOT}institution/view.php?id={$view.institution}">{$view.institution|escape}</a>
 {/if}
       </td>
-      <td>
+      <td class="mc"><label class="hidden">{str tag=membercommenters section=group}: </label>
         <ul>
 {foreach from=$view.comments key=commenter item=info}
         {if $info.member}<li><a href="{$WWWROOT}user/view.php?id={$info.commenter}">{$info.commenter|display_name:null:true|escape}</a><span> ({$info.count})</span></li>{/if}
@@ -43,7 +43,7 @@
         </ul>
 {if $view.mcomments > 0}<div class="detail">{$view.mcomments} {str tag=comments section=artefact.comment}</div>{/if}
       </td>
-      <td>
+      <td class="ec"><label class="hidden">{str tag=extcommenters section=group}: </label>
         <ul>
 {foreach from=$view.comments key=commenter item=info}
         {if $info.commenter|is_string}
@@ -58,15 +58,14 @@
     </tr>
 {/foreach}
 {elseif $svcount > 0}
-    <tr class="{cycle values='r0,r1'}"><td colspan="4" class="message">{str tag=groupsharedviewsscrolled section=group}<td></tr>
+    <tr class="{cycle values='r0,r1'}"><td colspan="4" class="message">{str tag=groupsharedviewsscrolled section=group}</td></tr>
 {else}
-    <tr class="{cycle values='r0,r1'}"><td colspan="4" class="message">{str tag=noviewssharedwithgroupyet section=group}<td></tr>
+    <tr class="{cycle values='r0,r1'}"><td colspan="4" class="message">{str tag=noviewssharedwithgroupyet section=group}</td></tr>
 {/if}
   </tbody>
 </table>
 
-<table class="fullwidth groupviewsreport">
-  <thead>
+<table class="fullwidth groupreport" id="groupviewsreport">
   <thead>
     <tr>
       <th class="sv {if $sort == title && $direction == asc}asc{elseif $sort == title}sorted{/if}">
@@ -84,8 +83,8 @@
 {if $groupviews}
 {foreach from=$groupviews item=view}
     <tr class="{cycle values='r0,r1'}">
-      <td><h3 class="title"><a href="{$view.fullurl}">{$view.title}</a></h3></td>
-      <td>
+      <td class="sv"><h3 class="title"><a href="{$view.fullurl}">{$view.title}</a></h3></td>
+      <td class="mc"><label class="hidden">{str tag=membercommenters section=group}: </label>
         <ul>
 {foreach from=$view.comments key=commenter item=info}
         {if $info.member}<li><a href="{$WWWROOT}user/view.php?id={$info.commenter}">{$info.commenter|display_name:null:true|escape}</a><span> ({$info.count})</span></li>{/if}
@@ -93,7 +92,7 @@
         </ul>
 {if $view.mcomments > 0}<div class="detail">{$view.mcomments} {str tag=comments section=artefact.comment}</div>{/if}
       </td>
-      <td>
+      <td class="ec"><label class="hidden">{str tag=extcommenters section=group}: </label>
         <ul>
 {foreach from=$view.comments key=commenter item=info}
         {if $info.commenter|is_string}
@@ -108,9 +107,9 @@
     </tr>
 {/foreach}
 {elseif $gvcount > 0}
-    <tr class="{cycle values='r0,r1'}"><td colspan="3" class="message">{str tag=groupcreatedviewsscrolled section=group}<td></tr>
+    <tr class="{cycle values='r0,r1'}"><td colspan="3" class="message">{str tag=groupcreatedviewsscrolled section=group}</td></tr>
 {else}
-    <tr class="{cycle values='r0,r1'}"><td colspan="3" class="message">{str tag=grouphasntcreatedanyviewsyet section=group}<td></tr>
+    <tr class="{cycle values='r0,r1'}"><td colspan="3" class="message">{str tag=grouphasntcreatedanyviewsyet section=group}</td></tr>
 {/if}
   </tbody>
 </table>

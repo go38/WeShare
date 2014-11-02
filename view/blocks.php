@@ -87,7 +87,9 @@ else if ($view->get('type') == 'dashboard') {
 }
 else if ($view->get('type') == 'grouphomepage') {
     $title = get_string('grouphomepage', 'view');
-    $groupurl = group_homepage_url(get_record('group', 'id', $view->get('group')), false);
+    if ($view->get('owner') != "0") {
+        $groupurl = group_homepage_url(get_record('group', 'id', $view->get('group')), false);
+    }
     define('TITLE', $title . ': ' . get_string('editcontent', 'view'));
 }
 else if ($new) {
@@ -121,7 +123,7 @@ $stylesheets = array('<link rel="stylesheet" type="text/css" href="' . get_confi
 foreach (array_reverse($THEME->get_url('style/style.css', true, 'artefact/file')) as $sheet) {
     $stylesheets[] = '<link rel="stylesheet" type="text/css" href="' . $sheet . '?v=' . get_config('release'). '">';
 }
-$stylesheets[] = '<link rel="stylesheet" type="text/css" href="' . get_config('wwwroot') . 'js/jquery/jquery-ui/css/ui-lightness/jquery-ui-1.8.19.custom.css?v=' . get_config('release'). '">';
+$stylesheets[] = '<link rel="stylesheet" type="text/css" href="' . get_config('wwwroot') . 'js/jquery/jquery-ui/css/ui-lightness/jquery-ui-1.10.2.min.css?v=' . get_config('release'). '">';
 $stylesheets = array_merge($stylesheets, $view->get_all_blocktype_css());
 // Tell the user to change the view theme if the current one is no
 // longer available to them.
@@ -137,7 +139,7 @@ if ($viewtheme && !isset($allowedthemes[$viewtheme])) {
     exit;
 }
 
-$javascript = array('views', 'tinymce', 'paginator', 'expandable', 'js/jquery/jquery-ui/js/jquery-ui-1.8.19.custom.min.js', 'tablerenderer', 'artefact/file/js/filebrowser.js', 'lib/pieforms/static/core/pieforms.js','js/jquery/modernizr.custom.js');
+$javascript = array('views', 'tinymce', 'paginator', 'expandable', 'js/jquery/jquery-ui/js/jquery-ui-1.10.2.min.js', 'tablerenderer', 'artefact/file/js/filebrowser.js', 'lib/pieforms/static/core/pieforms.js','js/jquery/modernizr.custom.js');
 $blocktype_js = $view->get_all_blocktype_javascript();
 $javascript = array_merge($javascript, $blocktype_js['jsfiles']);
 $inlinejs = "addLoadEvent( function() {\n" . join("\n", $blocktype_js['initjs']) . "\n});";
@@ -201,13 +203,13 @@ $smarty->assign('blocktype_list', $view->build_blocktype_list($category));
 // Tell smarty we're editing rather than just rendering
 $smarty->assign('editing', true);
 
-// Work out what action is being performed. This is used to put a hidden submit 
-// button right at the very start of the form, so that hitting enter in any 
+// Work out what action is being performed. This is used to put a hidden submit
+// button right at the very start of the form, so that hitting enter in any
 // form fields will cause the correct action to be performed
 foreach (array_keys($_POST + $_GET) as $key) {
     if (substr($key, 0, 7) == 'action_') {
         if (param_boolean('s')) {
-            // When configuring a blockinstance and the search tab is open, 
+            // When configuring a blockinstance and the search tab is open,
             // pressing enter should search
             $key = str_replace('configureblockinstance', 'acsearch', $key);
             if (substr($key, -2) == '_x') {
@@ -256,8 +258,7 @@ if (isset($groupurl)) {
 }
 $smarty->assign('institution', $institution);
 
-if (get_config('userscanchooseviewthemes')
-    && $view->is_themeable()) {
+if (get_config('userscanchooseviewthemes') && $view->is_themeable() && $view->get('owner') != "0") {
     $smarty->assign('viewtheme', $viewtheme);
     $smarty->assign('viewthemes', $allowedthemes);
 }
@@ -276,5 +277,9 @@ else {
     $smarty->assign('columns', $columns);
 }
 $smarty->assign('issiteview', isset($institution) && ($institution == 'mahara'));
+
+if ($view->get('owner') == "0") {
+    $smarty->assign('issitetemplate', true);
+}
 
 $smarty->display('view/blocks.tpl');

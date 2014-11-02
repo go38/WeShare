@@ -95,7 +95,7 @@ function pluginconfig_submit(Pieform $form, $values) {
     global $plugintype, $pluginname, $classname;
 
     try {
-        call_static_method($classname, 'save_config_options', $values);
+        call_static_method($classname, 'save_config_options', $form, $values);
         $success = true;
     }
     catch (Exception $e) {
@@ -112,8 +112,7 @@ function pluginconfig_submit(Pieform $form, $values) {
 
 function pluginconfig_validate(PieForm $form, $values) {
     global $plugintype, $pluginname, $classname;
-
-    if (method_exists($classname, 'validate_config_options')) {
+    if (is_callable($classname . '::validate_config_options')) {
         call_static_method($classname, 'validate_config_options', $form, $values);
     }
 }

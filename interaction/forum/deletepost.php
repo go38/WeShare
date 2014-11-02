@@ -92,7 +92,26 @@ $form = pieform(array(
 ));
 
 function deletepost_submit(Pieform $form, $values) {
-    global $SESSION;
+    global $SESSION, $USER;
+    $objectionable = get_record_sql("SELECT fp.id
+            FROM {interaction_forum_post} fp
+            JOIN {objectionable} o
+            ON (o.objecttype = 'forum' AND o.objectid = fp.id)
+            WHERE fp.id = ?
+            AND o.resolvedby IS NULL
+            AND o.resolvedtime IS NULL", $values['post']);
+
+    if ($objectionable !== false) {
+        // Trigger activity.
+        $data = new StdClass;
+        $data->postid     = $values['post'];
+        $data->message    = '';
+        $data->reporter   = $USER->get('id');
+        $data->ctime      = time();
+        $data->event      = DELETE_OBJECTIONABLE_POST;
+        activity_occurred('reportpost', $data, 'interaction', 'forum');
+    }
+
     update_record(
         'interaction_forum_post',
         array('deleted' => 1),

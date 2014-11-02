@@ -25,12 +25,17 @@ class PluginBlocktypeProfileinfo extends PluginBlocktype {
         return array('internal');
     }
 
+    public static function get_instance_config_javascript() {
+        return array('js/configform.js');
+    }
+
     public static function render_instance(BlockInstance $instance, $editing=false) {
         require_once(get_config('docroot') . 'artefact/lib.php');
         $smarty = smarty_core();
         $configdata = $instance->get('configdata');
 
         $data = array();
+        $data['socialprofiles'] = array();
 
         // add in the selected email address
         if (!empty($configdata['email'])) {
@@ -46,7 +51,22 @@ class PluginBlocktypeProfileinfo extends PluginBlocktype {
                     $artefact = artefact_instance_from_id($id);
                     if (is_a($artefact, 'ArtefactTypeProfile') && $artefact->get('owner') == $viewowner) {
                         $rendered = $artefact->render_self(array('link' => true));
-                        $data[$artefact->get('artefacttype')] = $rendered['html'];
+                        $artefacttype = $artefact->get('artefacttype');
+                        if ($artefacttype == 'socialprofile') {
+                            if (get_record('blocktype_installed', 'active', 1, 'name', 'socialprofile', 'artefactplugin', 'internal')) {
+                                $data['socialprofiles'][] = array(
+                                    'link' => ArtefactTypeSocialprofile::get_profile_link(
+                                        $artefact->get('title'),
+                                        $artefact->get('note')),
+                                    'title' => $artefact->get('title'),
+                                    'description' => $artefact->get('description'),
+                                    'note' => $artefact->get('note'),
+                                );
+                            }
+                        }
+                        else {
+                            $data[$artefacttype] = $rendered['html'];
+                        }
                     }
                 }
                 catch (ArtefactNotFoundException $e) {
@@ -56,6 +76,12 @@ class PluginBlocktypeProfileinfo extends PluginBlocktype {
                     log_debug($e->getMessage());
                 }
             }
+            // Sort social profiles alphabetically (in ASC order)
+            $description = array();
+            foreach ($data['socialprofiles'] as $key => $row) {
+                $description[$key]  = $row['description'];
+            }
+            array_multisort($description, SORT_ASC, $data['socialprofiles']);
         }
 
         // Work out the path to the thumbnail for the profile image
@@ -66,7 +92,7 @@ class PluginBlocktypeProfileinfo extends PluginBlocktype {
             $smarty->assign('profileiconalt', get_string('profileimagetext', 'mahara', display_default_name(get_user($viewowner))));
         }
 
-        // Override the introduction text if the user has any for this 
+        // Override the introduction text if the user has any for this
         // particular blockinstance
         if (!empty($configdata['introtext'])) {
             $data['introduction'] = $configdata['introtext'];
@@ -78,11 +104,11 @@ class PluginBlocktypeProfileinfo extends PluginBlocktype {
     }
 
     /**
-     * Overrides the standard get_artefacts method to make sure the profileicon 
+     * Overrides the standard get_artefacts method to make sure the profileicon
      * is added also.
      *
      * @param BlockInstance $instance The blockinstance to get artefacts for
-     * @return array A list of artefact IDs in the blockinstance, or false if 
+     * @return array A list of artefact IDs in the blockinstance, or false if
      *               there are none
      */
     public static function get_artefacts(BlockInstance $instance) {
@@ -132,7 +158,7 @@ class PluginBlocktypeProfileinfo extends PluginBlocktype {
         foreach ($result as $profilefield) {
             if ($profilefield->artefacttype == 'profileicon') {
                 $iconoptions[$profilefield->id] = ($profilefield->title) ? $profilefield->title : $profilefield->note;
-            } 
+            }
             else {
                 $emailoptions[$profilefield->id] = $profilefield->title;
             }
@@ -160,7 +186,6 @@ class PluginBlocktypeProfileinfo extends PluginBlocktype {
             );
         }
 
-
         $form['email'] = array(
             'type'    => 'radio',
             'title'   => get_string('email', 'artefact.internal'),
@@ -185,6 +210,11 @@ class PluginBlocktypeProfileinfo extends PluginBlocktype {
 
     public static function artefactchooser_element($default=null) {
         safe_require('artefact', 'internal');
+        $artefacttypes = array_diff(PluginArtefactInternal::get_profile_artefact_types(), array('email'));
+        if (!get_record('blocktype_installed', 'active', 1, 'name', 'socialprofile')) {
+            $artefacttypes = array_diff($artefacttypes, array('socialprofile'));
+        }
+
         return array(
             'name'  => 'artefactids',
             'type'  => 'artefactchooser',
@@ -194,14 +224,14 @@ class PluginBlocktypeProfileinfo extends PluginBlocktype {
             'limit'     => 655360, // 640K profile fields is enough for anyone!
             'selectone' => false,
             'search'    => false,
-            'artefacttypes' => array_diff(PluginArtefactInternal::get_profile_artefact_types(), array('email')),
+            'artefacttypes' => $artefacttypes,
             'template'  => 'artefact:internal:artefactchooser-element.tpl',
         );
     }
 
     /**
-     * Deliberately enforce _no_ sort order. The database will return them in 
-     * the order they were inserted, which means roughly the order that they 
+     * Deliberately enforce _no_ sort order. The database will return them in
+     * the order they were inserted, which means roughly the order that they
      * are listed in the profile screen
      */
     public static function artefactchooser_get_sort_order() {
@@ -209,8 +239,12 @@ class PluginBlocktypeProfileinfo extends PluginBlocktype {
     }
 
     public static function rewrite_blockinstance_config(View $view, $configdata) {
+        safe_require('artefact', 'internal');
         if ($view->get('owner') !== null) {
             $artefacttypes = array_diff(PluginArtefactInternal::get_profile_artefact_types(), array('email'));
+            if (!get_record('blocktype_installed', 'active', 1, 'name', 'socialprofile')) {
+                $artefacttypes = array_diff($artefacttypes, array('socialprofile'));
+            }
             $artefactids = get_column_sql('
                 SELECT a.id FROM {artefact} a
                 WHERE a.owner = ? AND a.artefacttype IN (' . join(',', array_map('db_quote', $artefacttypes)) . ')', array($view->get('owner')));
@@ -243,7 +277,7 @@ class PluginBlocktypeProfileinfo extends PluginBlocktype {
     }
 
     /**
-     * Profileinfo blocktype is only allowed in personal views, because 
+     * Profileinfo blocktype is only allowed in personal views, because
      * there's no such thing as group/site profiles
      */
     public static function allowed_in_view(View $view) {

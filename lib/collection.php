@@ -25,8 +25,13 @@ class Collection {
     private $submittedgroup;
     private $submittedhost;
     private $submittedtime;
+    private $submittedstatus;
     private $views;
     private $tags;
+
+    const UNSUBMITTED = 0;
+    const SUBMITTED = 1;
+    const PENDING_RELEASE = 2;
 
     public function __construct($id=0, $data=null) {
 
@@ -85,13 +90,19 @@ class Collection {
     }
 
     /**
-     * Creates a new Collection for the given user.
+     * Helper function to create or update a Collection from the supplied data.
      *
      * @param array $data
-     * @return collection           The newly created Collection
+     * @return collection           The newly created/updated collection
      */
     public static function save($data) {
-        $collection = new Collection(0, $data);
+        if (array_key_exists('id', $data)) {
+            $id = $data['id'];
+        }
+        else {
+            $id = 0;
+        }
+        $collection = new Collection($id, $data);
         $collection->commit();
 
         return $collection; // return newly created Collections id
@@ -345,7 +356,14 @@ class Collection {
         $data = array();
         if ($count > 0) {
             $data = get_records_sql_assoc("
-                SELECT c.id, c.description, c.name
+                SELECT
+                    c.id,
+                    c.description,
+                    c.name,
+                    c.submittedgroup,
+                    c.submittedhost,
+                    c.submittedtime,
+                    (SELECT COUNT(*) FROM {collection_view} cv WHERE cv.collection = c.id) AS numviews
                 FROM {collection} c
                 WHERE " . $wherestm .
                 " ORDER BY c.name, c.ctime, c.id ASC
@@ -364,6 +382,9 @@ class Collection {
     }
 
     private static function add_submission_info(&$data) {
+        global $CFG;
+        require_once($CFG->docroot . 'lib/group.php');
+
         if (empty($data)) {
             return;
         }
@@ -485,7 +506,7 @@ class Collection {
     /**
      * Returns array of views in the current collection
      *
-     * @return array views 
+     * @return array views
      */
     public function views() {
 
@@ -525,9 +546,11 @@ class Collection {
     }
 
     /**
-     * Get the available views the current user can choose from
+     * Get the available views the current user can choose to add to their collections.
+     * Restrictions on this list include:
      * - currently dashboard, group and profile views are ignored to solve access issues
      * - each view can only belong to one collection
+     * - locked/submitted views can't be added to collections
      *
      * @return array $views
      */
@@ -553,6 +576,8 @@ class Collection {
             WHERE " . $wherestm .
             "   AND cv.view IS NULL
                 AND v.type NOT IN ('dashboard','grouphomepage','profile')
+                AND v.submittedgroup IS NULL
+                AND v.submittedhost IS NULL
             GROUP BY v.id, v.title
             ORDER BY v.title ASC
             ", $values))
@@ -633,35 +658,40 @@ class Collection {
     /**
      * Sets the displayorder for a view
      *
-     * @param integer view
-     * @param string direction
-     *
+     * @param integer   $id   view id
+     * @param mixed  direction - either string consisting 'up' or 'down' to
+     *               indicate which way to move $id item, or an array containing
+     *               the ids in order you want them saved
      */
     public function set_viewdisplayorder($id, $direction) {
+        if (is_array($direction)) {
+            // we already have new sort order
+            $neworder = $direction;
+        }
+        else {
+            $ids = get_column_sql('
+                SELECT view FROM {collection_view}
+                WHERE collection = ?
+                ORDER BY displayorder', array($this->get('id')));
 
-        $ids = get_column_sql('
-            SELECT view FROM {collection_view}
-            WHERE collection = ?
-            ORDER BY displayorder', array($this->get('id')));
+            foreach ($ids as $k => $v) {
+                if ($v == $id) {
+                    $oldorder = $k;
+                    break;
+                }
+            }
 
-        foreach ($ids as $k => $v) {
-            if ($v == $id) {
-                $oldorder = $k;
-                break;
+            if ($direction == 'up' && $oldorder > 0) {
+                $neworder = array_merge(array_slice($ids, 0, $oldorder - 1),
+                                        array($id, $ids[$oldorder-1]),
+                                        array_slice($ids, $oldorder+1));
+            }
+            else if ($direction == 'down' && ($oldorder + 1 < count($ids))) {
+                $neworder = array_merge(array_slice($ids, 0, $oldorder),
+                                        array($ids[$oldorder+1], $id),
+                                        array_slice($ids, $oldorder+2));
             }
         }
-
-        if ($direction == 'up' && $oldorder > 0) {
-            $neworder = array_merge(array_slice($ids, 0, $oldorder - 1),
-                                    array($id, $ids[$oldorder-1]),
-                                    array_slice($ids, $oldorder+1));
-        }
-        else if ($direction == 'down' && ($oldorder + 1 < count($ids))) {
-            $neworder = array_merge(array_slice($ids, 0, $oldorder),
-                                    array($ids[$oldorder+1], $id),
-                                    array_slice($ids, $oldorder+2));
-        }
-
         if (isset($neworder)) {
             foreach ($neworder as $k => $v) {
                 set_field('collection_view', 'displayorder', $k, 'view', $v, 'collection',$this->get('id'));
@@ -757,6 +787,31 @@ class Collection {
     }
 
     /**
+     * Sets released submissions to pending release status and adds
+     * the submission item to the export queue ready for archiving.
+     *
+     * @param object $releaseuser The user releasing the collection
+     */
+    public function pendingrelease($releaseuser=null) {
+        $submitinfo = $this->submitted_to();
+        if (!$this->is_submitted()) {
+            throw new ParameterException("Collection with id " . $this->id . " has not been submitted");
+        }
+        $viewids = $this->get_viewids();
+        db_begin();
+        execute_sql("UPDATE {collection}
+                     SET submittedstatus = " . self::PENDING_RELEASE . "
+                     WHERE id = ?",
+                     array($this->id)
+        );
+        View::_db_pendingrelease($viewids);
+        db_commit();
+
+        require_once(get_config('docroot') . 'export/lib.php');
+        add_submission_to_export_queue($this, $releaseuser);
+    }
+
+    /**
      * Release a submitted collection
      *
      * @param object $releaseuser The user releasing the collection
@@ -777,38 +832,45 @@ class Collection {
         db_begin();
         execute_sql('
             UPDATE {collection}
-            SET submittedgroup = NULL, submittedhost = NULL, submittedtime = NULL
+            SET submittedgroup = NULL,
+                submittedhost = NULL,
+                submittedtime = NULL,
+                submittedstatus = ' . self::UNSUBMITTED . '
             WHERE id = ?',
             array($this->id)
         );
         View::_db_release($viewids, $this->owner, $this->submittedgroup);
         db_commit();
 
-        $releaseuser = optional_userobj($releaseuser);
-        $releaseuserdisplay = display_name($releaseuser, $this->owner);
-        $submitinfo = $this->submitted_to();
+        // We don't send out notifications about the release of remote-submitted Views & Collections
+        // (though I'm not sure why)
+        if ($this->submittedgroup) {
+            $releaseuser = optional_userobj($releaseuser);
+            $releaseuserdisplay = display_name($releaseuser, $this->owner);
+            $submitinfo = $this->submitted_to();
 
-        require_once('activity.php');
-        activity_occurred(
-            'maharamessage',
-            array(
-                'users' => array($this->get('owner')),
-                'strings' => (object) array(
-                    'subject' => (object) array(
-                        'key'     => 'collectionreleasedsubject',
-                        'section' => 'group',
-                        'args'    => array($this->name, $submitinfo->name, $releaseuserdisplay),
+            require_once('activity.php');
+            activity_occurred(
+                'maharamessage',
+                array(
+                    'users' => array($this->get('owner')),
+                    'strings' => (object) array(
+                        'subject' => (object) array(
+                            'key'     => 'collectionreleasedsubject',
+                            'section' => 'group',
+                            'args'    => array($this->name, $submitinfo->name, $releaseuserdisplay),
+                        ),
+                        'message' => (object) array(
+                            'key'     => 'collectionreleasedmessage',
+                            'section' => 'group',
+                            'args'    => array($this->name, $submitinfo->name, $releaseuserdisplay),
+                        ),
                     ),
-                    'message' => (object) array(
-                        'key'     => 'collectionreleasedmessage',
-                        'section' => 'group',
-                        'args'    => array($this->name, $submitinfo->name, $releaseuserdisplay),
-                    ),
-                ),
-                'url' => $this->get_url(false),
-                'urltext' => $this->name,
-            )
-        );
+                    'url' => $this->get_url(false),
+                    'urltext' => $this->name,
+                )
+            );
+        }
     }
 
     public function get_viewids() {
@@ -844,67 +906,98 @@ class Collection {
         return $record;
     }
 
-    public function submit($group) {
+    /**
+     * Submit this collection to a group or a remote host (but only one or the other!)
+     * @param object $group
+     * @param string $submittedhost
+     * @param int $owner The owner of the collection (if not just $USER)
+     * @throws SystemException
+     */
+    public function submit($group = null, $submittedhost = null, $owner = null) {
         global $USER;
 
         if ($this->is_submitted()) {
-            throw new SystemException('Attempting to submit a submitted collection');
+            throw new CollectionSubmissionException(get_string('collectionalreadysubmitted', 'view'));
+        }
+        // Gotta provide one or the other
+        if (!$group && !$submittedhost) {
+            return false;
         }
 
         $viewids = $this->get_viewids();
+        if (!$viewids) {
+            throw new CollectionSubmissionException(get_string('cantsubmitemptycollection', 'view'));
+        }
         $idstr = join(',', array_map('intval', $viewids));
+        $owner = ($owner == null) ? $USER->get('id') : $owner;
 
         // Check that none of the views is submitted to some other group.  This is bound to happen to someone,
         // because collection submission is being introduced at a time when it is still possible to submit
         // individual views in a collection.
-        $submittedtitles = get_column_sql("
-            SELECT title FROM {view}
-            WHERE id IN ($idstr) AND (submittedhost IS NOT NULL OR (submittedgroup IS NOT NULL AND submittedgroup != ?))",
-            array($group->id)
-        );
+        $sql = "SELECT title FROM {view} WHERE id IN ({$idstr}) AND (submittedhost IS NOT NULL OR (submittedgroup IS NOT NULL";
+        $params = array();
+        // To ease the transition, if you've submitted one page of the collection to this group already, you
+        // can submit the rest as well
+        if ($group) {
+            $sql .= ' AND submittedgroup != ?';
+            $params[] = $group->id;
+        }
+        $sql .= '))';
+        $submittedtitles = get_column_sql($sql, $params );
 
         if (!empty($submittedtitles)) {
-            die_info(get_string('viewsalreadysubmitted', 'view', implode('<br>', $submittedtitles)));
+            throw new CollectionSubmissionException(get_string('collectionviewsalreadysubmitted', 'view', implode('", "', $submittedtitles)));
         }
 
-        $group->roles = get_column('grouptype_roles', 'role', 'grouptype', $group->grouptype, 'see_submitted_views', 1);
+        if ($group) {
+            $group->roles = get_column('grouptype_roles', 'role', 'grouptype', $group->grouptype, 'see_submitted_views', 1);
+        }
 
         db_begin();
-        View::_db_submit($viewids, $group);
-        $this->set('submittedgroup', $group->id);
-        $this->set('submittedhost', null);
+        View::_db_submit($viewids, $group, $submittedhost, $owner);
+        if ($group) {
+            $this->set('submittedgroup', $group->id);
+            $this->set('submittedhost', null);
+        }
+        else {
+            $this->set('submittedgroup', null);
+            $this->set('submittedhost', $submittedhost);
+        }
         $this->set('submittedtime', time());
+        $this->set('submittedstatus', self::SUBMITTED);
         $this->commit();
         db_commit();
 
-        activity_occurred(
-            'groupmessage',
-            array(
-                'group'         => $group->id,
-                'roles'         => $group->roles,
-                'url'           => $this->get_url(false),
-                'strings'       => (object) array(
-                    'urltext' => (object) array(
-                        'key'     => 'Collection',
-                        'section' => 'collection',
-                    ),
-                    'subject' => (object) array(
-                        'key'     => 'viewsubmittedsubject1',
-                        'section' => 'activity',
-                        'args'    => array($group->name),
-                    ),
-                    'message' => (object) array(
-                        'key'     => 'viewsubmittedmessage1',
-                        'section' => 'activity',
-                        'args'    => array(
-                            display_name($USER, null, false, true),
-                            $this->name,
-                            $group->name,
+        if ($group) {
+            activity_occurred(
+                'groupmessage',
+                array(
+                    'group'         => $group->id,
+                    'roles'         => $group->roles,
+                    'url'           => $this->get_url(false),
+                    'strings'       => (object) array(
+                        'urltext' => (object) array(
+                            'key'     => 'Collection',
+                            'section' => 'collection',
+                        ),
+                        'subject' => (object) array(
+                            'key'     => 'viewsubmittedsubject1',
+                            'section' => 'activity',
+                            'args'    => array($group->name),
+                        ),
+                        'message' => (object) array(
+                            'key'     => 'viewsubmittedmessage1',
+                            'section' => 'activity',
+                            'args'    => array(
+                                display_name($USER, null, false, true),
+                                $this->name,
+                                $group->name,
+                            ),
                         ),
                     ),
-                ),
-            )
-        );
+                )
+            );
+        }
     }
 
     /**
@@ -919,4 +1012,65 @@ class Collection {
         return $this->tags;
     }
 
+    /**
+     * Creates a new secret url for this collection
+     * @param int $collectionid
+     * @param false $visible
+     * @return object The view_access record for the first view's secret URL
+     */
+    public function new_token($visible=1) {
+        $viewids = $this->get_viewids();
+        // It's not possible to add a secret key to a collection with no pages
+        if (!$viewids) {
+            return false;
+        }
+
+        reset($viewids);
+        $access = View::new_token(current($viewids), $visible);
+        while (next($viewids)) {
+            $todb = new stdClass();
+            $todb->view = current($viewids);
+            $todb->visible = $access->visible;
+            $todb->token = $access->token;
+            $todb->ctime = $access->ctime;
+            insert_record('view_access', $todb);
+        }
+
+        return $access;
+    }
+
+    /**
+     * Retrieves the collection's invisible access token, if it has one. (Each
+     * collection can only have one, because invisible access tokens are used
+     * for submission access, and each collection can only be submitted to
+     * one place at a time.)
+     *
+     * @return mixed boolean FALSE if there is no token, a data object if there is
+     */
+    public function get_invisible_token() {
+        $viewids = $this->get_viewids();
+        if (!$viewids) {
+            return false;
+        }
+        reset($viewids);
+        return View::get_invisible_token(current($viewids));
+    }
+}
+
+class CollectionSubmissionException extends UserException {
+
+    // For a CollectionSubmissionException, the error message is mandatory
+    public function __construct($message) {
+        parent::__construct($message);
+    }
+
+    public function strings() {
+        return array_merge(
+            parent::strings(),
+            array(
+                'title' => get_string('collectionsubmissionexceptiontitle', 'view'),
+                'message' => get_string('collectionsubmissionexceptionmessage', 'view'),
+            )
+        );
+    }
 }

@@ -348,6 +348,26 @@ function edituser_site_submit(Pieform $form, $values) {
 
     if ($USER->get('admin') || get_config_plugin('artefact', 'file', 'institutionaloverride')) {
         $user->quota = $values['quota'];
+        // check if the user has gone over the quota notify limit
+        $quotanotifylimit = get_config_plugin('artefact', 'file', 'quotanotifylimit');
+        if ($quotanotifylimit <= 0 || $quotanotifylimit >= 100) {
+            $quotanotifylimit = 100;
+        }
+        $user->quotausedpercent = $user->quotaused / $user->quota * 100;
+        $overlimit = false;
+        if ($quotanotifylimit <= $user->quotausedpercent) {
+            $overlimit = true;
+        }
+        $notified = get_field('usr_account_preference', 'value', 'field', 'quota_exceeded_notified', 'usr', $user->id);
+        if ($overlimit && '1' !== $notified) {
+            require_once(get_config('docroot') . 'artefact/file/lib.php');
+            ArtefactTypeFile::notify_users_threshold_exceeded(array($user), false);
+            // no need to email admin as we can alert them right now
+            $SESSION->add_error_msg(get_string('useroverquotathreshold', 'artefact.file', display_name($user)));
+        }
+        else if ($notified && !$overlimit) {
+            set_account_preference($user->id, 'quota_exceeded_notified', false);
+        }
     }
 
     $unexpire = $user->expiry && strtotime($user->expiry) < time() && (empty($values['expiry']) || $values['expiry'] > time());
@@ -519,7 +539,7 @@ function edituser_site_submit(Pieform $form, $values) {
         }
     }
     db_commit();
-
+    $SESSION->add_ok_msg(get_string('usersitesettingschanged', 'admin'));
     redirect('/admin/users/edit.php?id='.$user->id);
 }
 
@@ -623,6 +643,12 @@ function edituser_delete_validate(Pieform $form, $values) {
         $form->set_error('submit', get_string('deletefailed', 'admin'));
         $SESSION->add_error_msg(get_string('deletefailed', 'admin'));
     }
+    // Check to see if there are any pending archives in the export_queue for this user.
+    // We can't delete them if there are.
+    if ($results = count_records('export_queue', 'usr', $values['id'])) {
+        $form->set_error('submit', get_string('deletefailed', 'admin'));
+        $SESSION->add_error_msg(get_string('exportqueuenotempty', 'export'));
+    }
 }
 
 function edituser_delete_submit(Pieform $form, $values) {
@@ -654,11 +680,11 @@ if ( !$USER->get('admin') ) { // for institution admins
     $institutions = array_intersect_key($institutions, $admin_institutions);
 }
 
-$allinstitutions = get_records_assoc('institution', '', '', 'displayname');
+$allinstitutions = get_records_assoc('institution', '', '', 'displayname', 'name, displayname');
 foreach ($institutions as $i) {
     $elements[$i->institution.'_settings'] = array(
         'type' => 'fieldset',
-        'legend' => $allinstitutions[$i->institution]->displayname,
+        'legend' => $i->displayname,
         'elements' => array(
             $i->institution.'_expiry' => array(
                 'type'         => 'date',
@@ -732,6 +758,26 @@ $institutionform = pieform(array(
     'elements'   => $elements,
 ));
 
+function edituser_institution_validate(Pieform $form, $values) {
+    $user = new User;
+    if (!$user->find_by_id($values['id'])) {
+        return false;
+    }
+    global $USER;
+
+    $userinstitutions = $user->get('institutions');
+    if (isset($values['add']) && $USER->get('admin')
+        && (empty($userinstitutions) || get_config('usersallowedmultipleinstitutions'))) {
+        // check if the institution is full
+        require_once(get_config('docroot') . 'lib/institution.php');
+        $institution = new Institution($values['addinstitution']);
+        if ($institution->isFull()) {
+            $institution->send_admin_institution_is_full_message();
+            $form->set_error(null,get_string('institutionmaxusersexceeded', 'admin'));
+        }
+    }
+}
+
 function edituser_institution_submit(Pieform $form, $values) {
     $user = new User;
     if (!$user->find_by_id($values['id'])) {
@@ -739,7 +785,7 @@ function edituser_institution_submit(Pieform $form, $values) {
     }
     $userinstitutions = $user->get('institutions');
 
-    global $USER;
+    global $USER, $SESSION;
     foreach ($userinstitutions as $i) {
         if ($USER->can_edit_institution($i->institution)) {
             if (isset($values[$i->institution.'_submit'])) {
@@ -762,13 +808,17 @@ function edituser_institution_submit(Pieform $form, $values) {
                 }
                 handle_event('updateuser', $user->id);
                 db_commit();
+                $SESSION->add_ok_msg(get_string('userinstitutionupdated', 'admin', $i->displayname));
                 break;
-            } else if (isset($values[$i->institution.'_remove'])) {
+            }
+            else if (isset($values[$i->institution.'_remove'])) {
                 if ($user->id == $USER->id) {
                     $USER->leave_institution($i->institution);
-                } else {
+                }
+                else {
                     $user->leave_institution($i->institution);
                 }
+                $SESSION->add_ok_msg(get_string('userinstitutionremoved', 'admin', $i->displayname));
                 // Institutional admins can no longer access this page
                 // if they remove the user from the institution, so
                 // send them back to user search.
@@ -788,10 +838,13 @@ function edituser_institution_submit(Pieform $form, $values) {
         if ($user->id == $USER->id) {
             $USER->join_institution($values['addinstitution']);
             $USER->commit();
+            $userinstitutions = $USER->get('institutions');
         }
         else {
             $user->join_institution($values['addinstitution']);
+            $userinstitutions = $user->get('institutions');
         }
+        $SESSION->add_ok_msg(get_string('userinstitutionjoined', 'admin', $userinstitutions[$values['addinstitution']]->displayname));
     }
 
     redirect('/admin/users/edit.php?id='.$user->id);

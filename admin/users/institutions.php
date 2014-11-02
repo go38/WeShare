@@ -541,6 +541,29 @@ if ($institution || $add) {
         . '</th></tr>'
     );
 
+    // Check for active plugins institution settings.
+    $elements['pluginsfields'] = array(
+        'type' => 'fieldset',
+        'legend' => get_string('pluginsfields', 'admin'),
+        'collapsible' => true,
+        'collapsed' => true,
+        'elements' => array(),
+    );
+
+    // Get plugins institution settings.
+    $instobj = null;
+    if (!$add && $institution != '') {
+        $instobj = new Institution();
+        $instobj->findByName($institution);
+    }
+    $elements['pluginsfields']['elements'] = array_merge($elements['pluginsfields']['elements'],
+            plugin_institution_prefs_form_elements($instobj));
+
+    // Remove plugin fieldset if no fields.
+    if (empty($elements['pluginsfields']['elements'])) {
+        unset($elements['pluginsfields']);
+    }
+
     $elements['submit'] = array(
         'type' => 'submitcancel',
         'value' => array(get_string('submit'), get_string('cancel'))
@@ -654,6 +677,9 @@ function institution_validate(Pieform $form, $values) {
     if (!empty($values['lang']) && $values['lang'] != 'sitedefault' && !array_key_exists($values['lang'], get_languages())) {
         $form->set_error('lang', get_string('institutionlanginvalid', 'admin'));
     }
+
+    // Validate plugins settings.
+    plugin_institution_prefs_validate($form, $values);
 }
 
 function institution_submit(Pieform $form, $values) {
@@ -674,8 +700,8 @@ function institution_submit(Pieform $form, $values) {
 
     $newinstitution->showonlineusers              = !isset($values['showonlineusers']) ? 2 : $values['showonlineusers'];
     if (get_config('usersuniquebyusername')) {
-        // Registering absolutely not allowed when this setting is on, it's a 
-        // security risk. See the documentation for the usersuniquebyusername 
+        // Registering absolutely not allowed when this setting is on, it's a
+        // security risk. See the documentation for the usersuniquebyusername
         // setting for more information
         $newinstitution->registerallowed = 0;
     }
@@ -742,6 +768,33 @@ function institution_submit(Pieform $form, $values) {
                 "UPDATE {usr} SET quota = ? WHERE id IN (SELECT usr FROM {usr_institution} WHERE institution = ?)",
                 array($values['defaultquota'], $institution)
             );
+            // get all the users from the institution and make sure that they are still below
+            // their quota threshold
+            if ($users = get_records_sql_array('SELECT * FROM {usr} u LEFT JOIN {usr_institution} ui ON u.id = ui.usr AND ui.institution = ?', array($institution))) {
+                $quotanotifylimit = get_config_plugin('artefact', 'file', 'quotanotifylimit');
+                if ($quotanotifylimit <= 0 || $quotanotifylimit >= 100) {
+                    $quotanotifylimit = 100;
+                }
+                foreach ($users as $user) {
+                    $user->quota = $values['defaultquota'];
+                    // check if the user has gone over the quota notify limit
+                    $user->quotausedpercent = $user->quotaused / $user->quota * 100;
+                    $overlimit = false;
+                    if ($quotanotifylimit <= $user->quotausedpercent) {
+                        $overlimit = true;
+                    }
+                    $notified = get_field('usr_account_preference', 'value', 'field', 'quota_exceeded_notified', 'usr', $user->id);
+                    if ($overlimit && '1' !== $notified) {
+                        require_once(get_config('docroot') . 'artefact/file/lib.php');
+                        ArtefactTypeFile::notify_users_threshold_exceeded(array($user), false);
+                        // no need to email admin as we can alert them right now
+                        $SESSION->add_error_msg(get_string('useroverquotathreshold', 'artefact.file', display_name($user)));
+                    }
+                    else if ($notified && !$overlimit) {
+                        set_account_preference($user->id, 'quota_exceeded_notified', false);
+                    }
+                }
+            }
         }
         $newinstitution->defaultquota = empty($values['defaultquota']) ? get_config_plugin('artefact', 'file', 'defaultquota') : $values['defaultquota'];
     }
@@ -801,6 +854,9 @@ function institution_submit(Pieform $form, $values) {
             delete_records('auth_instance_config', 'field', 'parent', 'value', $instanceid);
         }
     }
+
+    // Store plugin settings.
+    plugin_institution_prefs_submit($form, $values, $newinstitution);
 
     // Save the changes to the DB
     $newinstitution->commit();
@@ -899,8 +955,8 @@ function institution_submit(Pieform $form, $values) {
 
     if ($add) {
         if (!$newinstitution->registerallowed) {
-            // If registration is not allowed, then an authinstance will not 
-            // have been created, and thus cause the institution page to add 
+            // If registration is not allowed, then an authinstance will not
+            // have been created, and thus cause the institution page to add
             // its own error message on the next page load
             $SESSION->add_ok_msg(get_string('institutionaddedsuccessfully2', 'admin'));
         }

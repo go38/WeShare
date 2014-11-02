@@ -43,11 +43,11 @@ $forum = get_record_sql(
     array(0, $userid, $forumid)
 );
 
-define('GROUP', $forum->groupid);
-
 if (!$forum) {
     throw new InteractionInstanceNotFoundException(get_string('cantfindforum', 'interaction.forum', $forumid));
 }
+
+define('GROUP', $forum->groupid);
 
 $membership = user_can_access_forum((int)$forumid);
 $admin = (bool)($membership & INTERACTION_FORUM_ADMIN);
@@ -56,6 +56,35 @@ $group = get_record('group', 'id', $forum->groupid);
 $publicgroup = $group->public;
 if (!$membership && !$publicgroup) {
     throw new GroupAccessDeniedException(get_string('cantviewforums', 'interaction.forum'));
+}
+
+// Get other forums to which the current user can move topics
+$otherforums = array();
+if ($admin) {
+    $otherforums = get_records_sql_array(
+        'SELECT id, title
+        FROM {interaction_instance} f
+        WHERE f.id <> ?
+            AND f.group = ?
+            AND f.deleted = 0
+            AND f.plugin = ?
+        ORDER BY f.title',
+        array($forumid, $forum->groupid, 'forum')
+    );
+}
+else if ($moderator) {
+    $otherforums = get_records_sql_array(
+        'SELECT id, title
+        FROM {interaction_instance} f
+            INNER JOIN {interaction_forum_moderator} fm ON (fm.forum = f.id)
+        WHERE f.id <> ?
+            AND f.group = ?
+            AND f.deleted = 0
+            AND f.plugin = ?
+            AND fm.user = ?
+        ORDER BY f.title',
+        array($forumid, $forum->groupid, 'forum', $userid)
+    );
 }
 
 $ineditwindow = group_within_edit_window($group);
@@ -100,6 +129,16 @@ if ($membership && isset($_POST['checked'])) {
         else if ($moderator && $type == 'open') {
             set_field_select('interaction_forum_topic', 'closed', 0, 'id IN (' . implode(',', $checked) . ')', array());
             $SESSION->add_ok_msg(get_string('topicopenedsuccess', 'interaction.forum'));
+        }
+        else if ($moderator && $type == 'moveto') {
+            $newforumid = param_integer('newforum');
+            // Check if the new forum is in the current group
+            $newforum = interaction_instance_from_id($newforumid);
+            if ($newforum && $newforum->get('group') == $forum->groupid) {
+                set_field_select('interaction_forum_topic', 'forum', $newforumid, 'id IN (' . implode(',', $checked) . ')', array());
+                PluginInteractionForum::interaction_forum_new_post($checked);
+                $SESSION->add_ok_msg(get_string('topicmovedsuccess', 'interaction.forum', count($checked)));
+            }
         }
         else if ($type == 'subscribe' && !$forum->subscribed) {
             db_begin();
@@ -234,6 +273,16 @@ addLoadEvent(function() {
             }
         });
     });
+    if (action = document.getElementById('action')) {
+        connect(action, 'onchange', function(e) {
+            if (this.options[this.selectedIndex].value == 'moveto') {
+                \$j('#otherforums').removeClass('hidden');
+            }
+            else {
+                \$j('#otherforums').addClass('hidden');
+            }
+        });
+    }
 });
 EOF;
 
@@ -246,6 +295,7 @@ $smarty = smarty(array(), $headers, array(), array());
 $smarty->assign('heading', $forum->groupname);
 $smarty->assign('subheading', $forum->title);
 $smarty->assign('forum', $forum);
+$smarty->assign('otherforums', $otherforums);
 $smarty->assign('publicgroup', $publicgroup);
 $smarty->assign('ineditwindow', $ineditwindow);
 $smarty->assign('feedlink', $feedlink);
@@ -267,10 +317,18 @@ $smarty->display('interaction:forum:view.tpl');
  * format lastposttime
  */
 function setup_topics(&$topics) {
+    global $moderator;
     if ($topics) {
         foreach ($topics as $topic) {
             $topic->lastposttime = relative_date(get_string('strftimerecentrelative', 'interaction.forum'), get_string('strftimerecent'), $topic->lastposttime);
             $topic->feedlink = get_config('wwwroot') . 'interaction/forum/atom.php?type=t&id=' . $topic->id;
+            $topic->containsobjectionable = false;
+            if ($moderator) {
+                $topic->containsobjectionable = (bool) count_records_sql(
+                    "SELECT count(fp.id) FROM {interaction_forum_post} fp
+                     JOIN {objectionable} o ON (o.objecttype = 'forum' AND o.objectid = fp.id)
+                     WHERE fp.deleted = 0 AND o.resolvedby IS NULL AND o.resolvedtime IS NULL AND fp.topic = ?", array($topic->id));
+            }
         }
     }
 }

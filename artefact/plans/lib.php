@@ -269,8 +269,6 @@ class ArtefactTypePlan extends ArtefactType {
     }
 
     public function render_self($options) {
-        $this->add_to_render_path($options);
-
         $limit = !isset($options['limit']) ? 10 : (int) $options['limit'];
         $offset = isset($options['offset']) ? intval($options['offset']) : 0;
 
@@ -278,7 +276,7 @@ class ArtefactTypePlan extends ArtefactType {
 
         $template = 'artefact:plans:taskrows.tpl';
 
-        $baseurl = get_config('wwwroot') . 'view/artefact.php?artefact=' . $this->id;
+        $baseurl = get_config('wwwroot') . 'artefact/artefact.php?artefact=' . $this->id;
         if (!empty($options['viewid'])) {
             $baseurl .= '&view=' . $options['viewid'];
         }
@@ -482,8 +480,9 @@ class ArtefactTypeTask extends ArtefactType {
                 'type'       => 'calendar',
                 'caloptions' => array(
                     'showsTime'      => false,
-                    'ifFormat'       => '%Y/%m/%d'
-                    ),
+                    'ifFormat'       => '%Y/%m/%d',
+                    'dateFormat'     => 'yy/mm/dd',
+                ),
                 'defaultvalue' => null,
                 'title' => get_string('completiondate', 'artefact.plans'),
                 'description' => get_string('dateformatguide'),

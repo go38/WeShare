@@ -51,19 +51,17 @@ class PluginBlocktypeGallery extends PluginBlocktype {
         $configdata['viewid'] = $instance->get('view');
         $style = isset($configdata['style']) ? intval($configdata['style']) : 2;
         $copyright = null; // Needed to set Panoramio copyright later...
-
+        $width = !empty($configdata['width']) ? $configdata['width'] : 75;
         switch ($style) {
             case 0: // thumbnails
                 $template = 'thumbnails';
-                $width = isset($configdata['width']) ? $configdata['width'] : 75;
                 break;
             case 1: // slideshow
                 $template = 'slideshow';
-                $width = isset($configdata['width']) ? $configdata['width'] : 400;
+                $width = !empty($configdata['width']) ? $configdata['width'] : 400;
                 break;
             case 2: // square thumbnails
                 $template = 'squarethumbs';
-                $width = isset($configdata['width']) ? $configdata['width'] : 75;
                 break;
         }
 
@@ -364,20 +362,25 @@ class PluginBlocktypeGallery extends PluginBlocktype {
                     $link = $src . '&maxwidth=' . get_config_plugin('blocktype', 'gallery', 'previewwidth');
                 }
                 else {
-                    $link = get_config('wwwroot') . 'view/artefact.php?artefact=' . $artefactid . '&view=' . $instance->get('view');
+                    $link = get_config('wwwroot') . 'artefact/artefact.php?artefact=' . $artefactid . '&view=' . $instance->get('view');
                 }
 
                 // If the Thumbnails are Square or not...
                 if ($style == 2) {
                     $src .= '&size=' . $width . 'x' . $width;
+                    $height = $width;
                 }
                 else {
                     $src .= '&maxwidth=' . $width;
+                    $imgwidth = $image->get('width');
+                    $imgheight = $image->get('height');
+                    $height = ($imgwidth > $width) ? intval(($width / $imgwidth) * $imgheight) : $imgheight;
                 }
 
                 $images[] = array(
                     'link' => $link,
                     'source' => $src,
+                    'height' => $height,
                     'title' => $image->get('description'),
                     'slimbox2' => $slimbox2attr
                 );
@@ -478,7 +481,7 @@ class PluginBlocktypeGallery extends PluginBlocktype {
 
     }
 
-    public static function save_config_options($values) {
+    public static function save_config_options($form, $values) {
         set_config_plugin('blocktype', 'gallery', 'useslimbox2', (int)$values['useslimbox2']);
         set_config_plugin('blocktype', 'gallery', 'photoframe', (int)$values['photoframe']);
         set_config_plugin('blocktype', 'gallery', 'previewwidth', (int)$values['previewwidth']);
@@ -615,6 +618,15 @@ class PluginBlocktypeGallery extends PluginBlocktype {
         }
         unset($values['folder']);
         unset($values['images']);
+        switch ($values['style']) {
+            case 0: // thumbnails
+            case 2: // square thumbnails
+                $values['width'] = !empty($values['width']) ? $values['width'] : 75;
+                break;
+            case 1: // slideshow
+                $values['width'] = !empty($values['width']) ? $values['width'] : 400;
+                break;
+        }
         return $values;
     }
 

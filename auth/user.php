@@ -88,7 +88,7 @@ class User {
     }
 
     /**
-     * 
+     *
      */
     public function find_by_id($id) {
 
@@ -97,9 +97,9 @@ class User {
         }
 
         $sql = 'SELECT
-                    *, 
-                    ' . db_format_tsfield('expiry') . ', 
-                    ' . db_format_tsfield('lastlogin') . ', 
+                    *,
+                    ' . db_format_tsfield('expiry') . ',
+                    ' . db_format_tsfield('lastlogin') . ',
                     ' . db_format_tsfield('lastlastlogin') . ',
                     ' . db_format_tsfield('lastaccess') . ',
                     ' . db_format_tsfield('suspendedctime') . ',
@@ -122,10 +122,10 @@ class User {
     }
 
     /**
-     * Populates this object with the user record identified by the given 
+     * Populates this object with the user record identified by the given
      * username
      *
-     * @throws AuthUnknownUserException If the user cannot be found. Note that 
+     * @throws AuthUnknownUserException If the user cannot be found. Note that
      *                                  deleted users _can_ be found
      */
     public function find_by_username($username) {
@@ -159,10 +159,10 @@ class User {
     }
 
     /**
-     * Finds details for a user given a username and their authentication 
+     * Finds details for a user given a username and their authentication
      * instance.
      *
-     * If the authentication instance is a child or a parent, its relation is 
+     * If the authentication instance is a child or a parent, its relation is
      * checked too, because the user can enter the system by either method.
      */
     public function find_by_instanceid_username($instanceid, $username, $remoteuser=false) {
@@ -173,11 +173,11 @@ class User {
 
         $username = strtolower($username);
         if ($remoteuser) {
-            // See if the user has either the child or the parent authinstance. 
-            // Most of the time, it's the parent auth instance that is 
-            // stored with the user, but if they were created by (for 
-            // example) SSO with no parent, then it will be the child that 
-            // is stored. Nevertheless, a parent could be added later, and 
+            // See if the user has either the child or the parent authinstance.
+            // Most of the time, it's the parent auth instance that is
+            // stored with the user, but if they were created by (for
+            // example) SSO with no parent, then it will be the child that
+            // is stored. Nevertheless, a parent could be added later, and
             // that should not matter in finding the user
             $parentwhere = '';
             if ($parentid = get_field('auth_instance_config', 'value', 'field', 'parent', 'instance', $instanceid)) {
@@ -202,7 +202,7 @@ class User {
             }
 
             $sql = 'SELECT
-                        u.*, 
+                        u.*,
                         ' . db_format_tsfield('u.expiry', 'expiry') . ',
                         ' . db_format_tsfield('u.lastlogin', 'lastlogin') . ',
                         ' . db_format_tsfield('u.lastlastlogin', 'lastlastlogin') . ',
@@ -224,7 +224,7 @@ class User {
         }
         else {
             $sql = 'SELECT
-                        *, 
+                        *,
                         ' . db_format_tsfield('expiry') . ',
                         ' . db_format_tsfield('lastlogin') . ',
                         ' . db_format_tsfield('lastlastlogin') . ',
@@ -250,7 +250,7 @@ class User {
     /**
      * Populates this object with the user record identified by a mobile 'token'
      *
-     * @throws AuthUnknownUserException If the user cannot be found. 
+     * @throws AuthUnknownUserException If the user cannot be found.
      */
     public function find_by_mobileuploadtoken($token, $username) {
 
@@ -428,15 +428,15 @@ class User {
         $this->changed = false;
     }
 
-    /** 
+    /**
      * This function returns a method for a particular
      * activity type, or null if it's not set.
-     * 
+     *
      * @param int $key the activity type id
      */
     public function get_activity_preference($key) {
         $activityprefs = $this->get('activityprefs');
-        return isset($activityprefs[$key]) ? $activityprefs[$key] : null;
+        return array_key_exists($key, $activityprefs) ? $activityprefs[$key] : false;
     }
 
     /** @todo document this method */
@@ -447,10 +447,10 @@ class User {
         $this->set('activityprefs', $activityprefs);
     }
 
-    /** 
+    /**
      * This function returns a value for a particular
      * account preference, or null if it's not set.
-     * 
+     *
      * @param string $key the field name
      */
     public function get_account_preference($key) {
@@ -518,28 +518,6 @@ class User {
             'description' => get_string('profiledescription'),
             'type'  => 'profile',
         ), $systemprofileviewid, $this->get('id'), false);
-
-        // Add about me block
-        $aboutme = new BlockInstance(0, array(
-            'blocktype'  => 'profileinfo',
-            'title'      => get_string('aboutme', 'blocktype.internal/profileinfo'),
-            'view'       => $view->get('id'),
-            'row'        => 1,
-            'column'     => 1,
-            'order'      => 1,
-        ));
-        $configdata = array('artefactids' => array());
-        if ($intro = get_field('artefact', 'id', 'owner', $this->get('id'), 'artefacttype', 'introduction')) {
-            $configdata['artefactids'][] = $intro;
-        }
-        else {
-            $configdata['introtext'] = '';
-        }
-        if ($this->get('profileicon')) {
-            $configdata['profileicon'] = $this->get('profileicon');
-        }
-        $aboutme->set('configdata', $configdata);
-        $view->addblockinstance($aboutme);
 
         // Set view access
         $access = array(
@@ -756,7 +734,7 @@ class User {
 
     public function in_institution($institution, $role = null) {
         $institutions = $this->get('institutions');
-        return isset($institutions[$institution]) 
+        return isset($institutions[$institution])
             && (is_null($role) || $institutions[$institution]->{$role});
     }
 
@@ -990,7 +968,7 @@ class User {
         if ($a instanceof ArtefactTypeFileBase) {
             $publicfolderid = ArtefactTypeFolder::admin_public_folder_id();
             $fileispublic = ($a->get('id') == $publicfolderid)
-                         || (($a->get('institution') == 'mahara') && (bool)get_field('artefact_parent_cache', 'artefact', 'artefact', $a->get('id'), 'parent', $publicfolderid));
+                         || (($a->get('institution') == 'mahara') && (bool)get_field('artefact', 'id', 'id', $a->get('id'), 'parent', $publicfolderid));
             if ($fileispublic) {
                 return true;
             }
@@ -1023,6 +1001,69 @@ class User {
                 WHERE ar.artefact = ? AND g.member = ? AND ar.can_view = 1 AND g.group = ?", array($a->get('id'), $this->get('id'), $a->get('group')))
                 || record_exists('artefact_access_usr', 'usr', $this->get('id'), 'artefact', $a->get('id'));
         }
+        return false;
+    }
+
+    /**
+     * Check if user can download/view an export archive. Will return true:
+     * if the user is the owner of the archive, or
+     * if the user is a site admin, or
+     * if the user is a group admin of the group the collection/view was submitted to, or
+     * if the user is an admin of the institution that the group belongs to, or
+     * if the user is an institutional admin of any institutions that the submitter belongs to
+     *
+     * @param $data  Record containing information from the export_archive and archived_submission tables
+     *
+     * @return bool
+     */
+    function can_view_archive($data) {
+        global $USER;
+
+        require_once(get_config('docroot') . 'auth/lib.php');
+        $user = new User;
+        $user->find_by_id($data->usr);
+
+        // User is the owner of the archive so is allowed to see it
+        if ($USER->get('id') == $user->get('id')) {
+            return true;
+        }
+
+        // User is a site admin so is allowed to access everything
+        if ($USER->get('admin')) {
+            return true;
+        }
+
+        if (!empty($data->group)) {
+            // User is a group admin of the group the collection/view was submitted to
+            $grouproles = $USER->get('grouproles');
+            if (!empty($grouproles[$data->group]) && $grouproles[$data->group] == 'admin') {
+                return true;
+            }
+
+            // User is an institutional admin for the institution that the group belongs to
+            // Currently only groups uploaded via csv can get the institution field set.
+            $currentuserinstitutions = $USER->get('institutions');
+            $groupinstitution = get_field('group','institution', 'id', $data->group);
+            if (!empty($groupinstitution)) {
+                foreach ($currentuserinstitutions as $key => $institution) {
+                    if ($USER->is_institutional_admin($key) && $key == $groupinstitution) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // User is an institutional admin in an institution that the data->usr belongs to
+        // This is a loose connection check for groups without the institution field set.
+        // But seen as the User has power over the data->usr we will allow it
+        $ownerinstitutions = $user->get('institutions');
+        $currentuserinstitutions = $USER->get('institutions');
+        foreach ($currentuserinstitutions as $key => $institution) {
+            if ($USER->is_institutional_admin($key) && !empty($ownerinstitutions[$key])) {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -1127,6 +1168,9 @@ class User {
     public function can_edit_view($v) {
         $owner = $v->get('owner');
         if ($owner > 0 && $owner == $this->get('id')) {
+            return true;
+        }
+        if ($owner == "0" && $this->get('admin')) {
             return true;
         }
         $institution = $v->get('institution');
@@ -1238,7 +1282,8 @@ class User {
         require_once(get_config('libroot') . 'view.php');
 
         $views = array();
-        foreach (get_records_select_array('view', 'id IN (' . implode(', ', db_array_to_ph($templateids)) . ')', $templateids, '', 'id, title, description, type') as $result) {
+        $results = get_records_select_array('view', 'id IN (' . implode(', ', db_array_to_ph($templateids)) . ')', $templateids, '', 'id, title, description, type');
+        foreach ($results as $result) {
             $views[$result->id] = $result;
         }
 
@@ -1249,6 +1294,37 @@ class User {
                 'title' => $views[$tid]->title,
                 'description' => $views[$tid]->description,
                 'type' => $views[$tid]->type == 'profile' && $checkviewaccess ? 'portfolio' : $views[$tid]->type,
+            ), $tid, $this->get('id'), $checkviewaccess);
+        }
+        db_commit();
+    }
+
+    /**
+     * Makes a literal copy of a list of collections for this user.
+     *
+     * @param array $templateids A list of collectionids to copy.
+     */
+    public function copy_collections($templateids, $checkviewaccess=true) {
+        if (!$templateids) {
+            // Nothing to do
+            return;
+        }
+        if (!is_array($templateids)) {
+            throw new SystemException('User->copy_collections: templateids must be a list of templates to copy for the user');
+        }
+        require_once(get_config('libroot') . 'collection.php');
+
+        $collections = array();
+        $results = get_records_select_array('collection', 'id IN (' . implode(', ', db_array_to_ph($templateids)) . ')', $templateids, '', 'id, name');
+        foreach ($results as $result) {
+            $collections[$result->id] = $result;
+        }
+
+        db_begin();
+        foreach ($templateids as $tid) {
+            Collection::create_from_template(array(
+                'owner' => $this->get('id'),
+                'title' => $collections[$tid]->name,
             ), $tid, $this->get('id'), $checkviewaccess);
         }
         db_commit();
@@ -1278,12 +1354,7 @@ class User {
             INNER JOIN {collection} c ON cv.collection = c.id
             WHERE v.copynewuser = 1
                 AND v.institution = 'mahara'", array());
-        if ($templatecollectionids) {
-            require_once('collection.php');
-            foreach ($templatecollectionids as $templateid) {
-                Collection::create_from_template(array('owner' => $this->get('id')), $templateid, null, false, true);
-            }
-        }
+        $this->copy_collections($templatecollectionids, false);
     }
 
     /**
@@ -1291,7 +1362,7 @@ class User {
      * All institution views and collections which set to "copy to new institution member"
      * will be copied to this user's profile.
      *
-     * @param $institution: ID of the institution to join
+     * @param string $institution        ID of the institution to join
      */
     public function copy_institution_views_collections_to_new_member($institution) {
         if (empty($institution)) {
@@ -1315,12 +1386,7 @@ class User {
             INNER JOIN {collection} c ON cv.collection = c.id
             WHERE v.copynewuser = 1
                 AND v.institution = ?", array($institution));
-        if ($templatecollectionids) {
-            require_once('collection.php');
-            foreach ($templatecollectionids as $templateid) {
-                Collection::create_from_template(array('owner' => $this->get('id')), $templateid, null, false, true);
-            }
-        }
+        $this->copy_collections($templatecollectionids, false);
     }
 
 }
@@ -1353,7 +1419,7 @@ class LiveUser extends User {
      */
     public function login($username, $password) {
         $sql = 'SELECT
-                    *, 
+                    *,
                     ' . db_format_tsfield('expiry') . ',
                     ' . db_format_tsfield('lastlogin') . ',
                     ' . db_format_tsfield('lastlastlogin') . ',
@@ -1386,23 +1452,23 @@ class LiveUser extends User {
             return false;
         }
 
-        // Authentication instances that have parents do so because they cannot 
-        // use Mahara's normal login mechanism - for example, XMLRPC. If the 
-        // user is using one of these authentication instances, we look and try 
+        // Authentication instances that have parents do so because they cannot
+        // use Mahara's normal login mechanism - for example, XMLRPC. If the
+        // user is using one of these authentication instances, we look and try
         // to use the parent.
         //
-        // There's no code here that prevents the authinstance being tried if 
-        // it has no parent, mainly because that's an extra database lookup for 
-        // the general case, and the authentication will probably just fail 
-        // anyway. (XMLRPC, for example, leaves implementation of 
-        // authenticate_user_account to the parent Auth class, which says 'not 
+        // There's no code here that prevents the authinstance being tried if
+        // it has no parent, mainly because that's an extra database lookup for
+        // the general case, and the authentication will probably just fail
+        // anyway. (XMLRPC, for example, leaves implementation of
+        // authenticate_user_account to the parent Auth class, which says 'not
         // authorised' by default).
         $instanceid = $user->authinstance;
         if ($parentid = get_field('auth_instance_config', 'value', 'field', 'parent', 'instance', $instanceid)) {
             $instanceid = $parentid;
         }
         $auth = AuthFactory::create($instanceid);
-        
+
         // catch the AuthInstanceException that allows authentication plugins to
         // fail but pass onto the next possible plugin
         try {
@@ -1425,7 +1491,7 @@ class LiveUser extends User {
         catch (AuthInstanceException $e) {
             return false;
         }
-        
+
         // Display a message to users who are only allowed to login via their
         // external application.
         if ($auth->authloginmsg != '') {
@@ -1450,8 +1516,13 @@ class LiveUser extends User {
      * Logs the current user out
      */
     public function logout () {
-        // add long-term cookie to record institution user last used
-        set_cookie('lastinstitution', $this->sitepages_institutionname_by_theme('loggedouthome'), '2240561472', true);
+        // Add long-term cookie to record institution user last used.
+        // We can only do if the institution_config table exists,
+        // which it will not if we are upgrading from pre 1.9 so we check when
+        // the instituion_config table was added.
+        if (get_config('version') >= '2014010800') {
+            set_cookie('lastinstitution', $this->sitepages_institutionname_by_theme('loggedouthome'), '2240561472', true);
+        }
 
         require_once(get_config('libroot') . 'ddl.php');
 
@@ -1511,14 +1582,14 @@ class LiveUser extends User {
     }
 
     /**
-     * Updates information in a users' session once we know their session is 
+     * Updates information in a users' session once we know their session is
      * continuing
      */
     public function renew() {
         $time = time();
         $this->set('logout_time', $time + get_config('session_timeout'));
         $oldlastaccess = $this->get('lastaccess');
-        // If there is an access time update frequency, we use a cookie to 
+        // If there is an access time update frequency, we use a cookie to
         // prevent updating before this time has expired.
         // If it is set to zero, we always update the accesstime.
         $accesstimeupdatefrequency = get_config('accesstimeupdatefrequency');
@@ -1533,11 +1604,11 @@ class LiveUser extends User {
     }
 
     /**
-     * When a user creates a security context by whatever method, we do some 
+     * When a user creates a security context by whatever method, we do some
      * standard stuff
      *
      * @param  object $user          Record from the usr table
-     * @param  integer $authinstance The ID of the authinstance that the user 
+     * @param  integer $authinstance The ID of the authinstance that the user
      *                               signed in with
      * @return void
      */
@@ -1548,9 +1619,9 @@ class LiveUser extends User {
 
         $this->authenticated  = true;
 
-        // If the user has reauthenticated and they were an MNET user, we 
-        // don't set these variables, because we wish to remember that they 
-        // originally SSO-ed in from their other authinstance. See the 
+        // If the user has reauthenticated and they were an MNET user, we
+        // don't set these variables, because we wish to remember that they
+        // originally SSO-ed in from their other authinstance. See the
         // session timeout code in auth_setup() for more info.
         if ($this->SESSION->get('mnetuser') != $user->id) {
             $this->SESSION->set('mnetuser', null);
@@ -1598,7 +1669,7 @@ class LiveUser extends User {
     }
 
     /**
-     * When a user creates a security context by whatever method, we do some 
+     * When a user creates a security context by whatever method, we do some
      * standard stuff
      *
      * @param  int  $user       User ID

@@ -21,7 +21,10 @@
     {include file=collectionnav.tpl}
 {/if}
 
-<p>{$author|safe}</p>
+<p>
+{assign var='author_link_index' value=1}
+{include file=author.tpl}
+<p>
 
 <div id="view-description">{$viewdescription|clean_html|safe}</div>
 
@@ -34,7 +37,7 @@
             </div>
         </div>
   <div class="viewfooter">
-    {if $tags}<div class="tags"><label>{str tag=tags}:</label> {list_tags owner=$owner tags=$tags}</div>{/if}
+    {if $tags}<div class="tags"><strong>{str tag=tags}:</strong> {list_tags owner=$owner tags=$tags}</div>{/if}
     {if $releaseform}<div class="releaseviewform">{$releaseform|safe}</div>{/if}
     {if $view_group_submission_form}<div class="submissionform">{$view_group_submission_form|safe}</div>{/if}
     {if $feedback->position eq 'base'}

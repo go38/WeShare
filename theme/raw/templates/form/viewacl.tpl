@@ -7,7 +7,8 @@
   <fieldset id="viewacl-advanced" class="collapsible collapsed">
     <legend><a href="" id="viewacl-advanced-show">{{str tag=otherusersandgroups section=view}}</a></legend>
       <div class="viewacl-advanced-search">
-        <label>{{str tag=search}}</label>
+        <label for="search">{{str tag=search}}</label>
+        <label class="accessible-hidden" for="type">{{str tag=searchtype}}</label>
         <select name="type" id="type">
           <option value="friend" selected="selected">{{str tag=friends section=view}}</option>
           <option value="group">{{str tag=groups}}</option>
@@ -168,8 +169,8 @@ function renderAccessListItem(item) {
     var row = TR({'class': cssClass, 'id': 'accesslistitem' + count},
         TD({'class': 'icon-container'}, icon),
         TD({'class': 'accesslistname'}, name),
-        TD(null, makeCalendarInput(item, 'start', notpublicorallowed), makeCalendarLink(item, 'start', notpublicorallowed)),
-        TD(null, makeCalendarInput(item, 'stop', notpublicorallowed), makeCalendarLink(item, 'stop', notpublicorallowed)),
+        TD(null, makeCalendarInput(item, 'start', notpublicorallowed)),
+        TD(null, makeCalendarInput(item, 'stop', notpublicorallowed)),
         TD({'class': 'center comments' + (allowcomments ? ' hidden' : '')}
             , allowfdbk, allowfdbklabel, ' ', approvefdbk, approvefdbklabel),
         TD({'class': 'right removebutton'}, removeButton,
@@ -229,7 +230,7 @@ function renderAccessListItem(item) {
         // Disable date inputs
         $j(row).find("input[name*='startdate']").attr('disabled', 'disabled');
         $j(row).find("input[name*='stopdate']").attr('disabled', 'disabled');
-        $j(row).find('.pieform-calendar-toggle').hide();
+        $j(row).find('.ui-datepicker-trigger').hide();
     }
     count++;
     // Update the formchangechecker state
@@ -258,52 +259,27 @@ function makeCalendarInput(item, type, disabled) {
     return SPAN(null, label, input);
 }
 
-function makeCalendarLink(item, type) {
-    var link = A({
-        'href'   : '',
-        'id'     : type + 'date_' + count + '_btn',
-        'onclick': 'return false;', // @todo do with mochikit connect
-        'class'  : 'pieform-calendar-toggle'},
-        IMG({
-            'src': '{{theme_url filename='images/btn_calendar.png'}}',
-            'alt': get_string('element.calendar.opendatepicker', 'pieforms')})
-    );
-
-    return link;
-}
-
 function setupCalendar(item, type) {
-    //log(type);
-    var dateStatusFunc, selectedFunc;
-    //if (type == 'start') {
-    //    dateStatusFunc = function(date) {
-    //        startDateDisallowed(date, $(item.id + '_stopdate'));
-    //    };
-    //    selectedFunc = function(calendar, date) {
-    //        startSelected(calendar, date, $(item.id + '_startdate'), $(item.id + '_stopdate'));
-    //    }
-    //}
-    //else {
-    //    dateStatusFunc = function(date) {
-    //        stopDateDisallowed(date, $(item.id + '_startdate'));
-    //    };
-    //    selectedFunc = function(calendar, date) {
-    //        stopSelected(calendar, date, $(item.id + '_startdate'), $(item.id + '_stopdate'));
-    //    }
-    //}
+//    var dateStatusFunc, selectedFunc;
     if (!$(type + 'date_' + count)) {
         logWarn('Couldn\'t find element: ' + type + 'date_' + count);
         return;
     }
-    Calendar.setup({
-        "ifFormat"  :{{jstr tag=strftimedatetimeshort}},
-        "daFormat"  :{{jstr tag=strftimedatetimeshort}},
-        "inputField": type + 'date_' + count,
-        "button"    : type + 'date_' + count + '_btn',
-        //"dateStatusFunc" : dateStatusFunc,
-        //"onSelect"       : selectedFunc
-        "onUpdate"  : updateFormChangeChecker,
-        "showsTime" : true
+    var input = jQuery('#' + type + 'date_' + count).datetimepicker({
+          {{$datepickeroptions|safe}}
+          beforeShow: function(input, inst) {
+              setTimeout(function() {
+                  add_prev_next_year(inst);
+              }, 1);
+          },
+          onChangeMonthYear: function(y, m, inst) {
+              setTimeout(function() {
+                  add_prev_next_year(inst);
+              }, 1);
+          },
+          showOn: "button",
+          buttonImage: "{{theme_url filename='images/btn_calendar.png'}}",
+          buttonText: get_string('element.calendar.opendatepicker', 'pieforms'),
     });
 }
 
@@ -369,36 +345,6 @@ var faves = {{$faves|safe}};
 if (faves) {
     appendChildNodes('potentialpresetitems', H3({'class': 'title'}, {{jstr tag=sharewithusers section=view}}));
     forEach(faves, renderPotentialPresetItem);
-}
-var loggedinindex = {{$loggedinindex}};
-function ensure_loggedin_access() {
-    var oldaccess = getFirstElementByTagAndClassName(null, 'loggedin-container', 'accesslistitems');
-    if (oldaccess) {
-        forEach(getElementsByTagAndClassName(null, 'loggedin-container', 'accesslistitems'), function (elem) {
-            if (oldaccess != elem) {
-                removeElement(elem);
-            }
-        });
-    }
-    else {
-        renderAccessListItem(potentialPresets[loggedinindex]);
-    }
-    var newaccess = getFirstElementByTagAndClassName(null, 'loggedin-container', 'accesslistitems');
-    addElementClass(getFirstElementByTagAndClassName(null, 'removebutton', newaccess), 'hidden');
-    forEach(getElementsByTagAndClassName(null, 'pieform-calendar-toggle', newaccess), function (elem) { addElementClass(elem, 'hidden'); });
-    forEach(getElementsByTagAndClassName('input', null, newaccess), function (elem) {
-        if (elem.name.match(/\[st(art|op)date\]$/)) {
-            elem.value = '';
-            elem.disabled = true;
-        }
-    });
-}
-function relax_loggedin_access() {
-    forEach(getElementsByTagAndClassName(null, 'loggedin-container', $('accesslistitems')), function (elem) {
-        removeElementClass(getElementsByTagAndClassName(null, 'removebutton', elem)[0], 'hidden');
-        forEach(getElementsByTagAndClassName(null, 'pieform-calendar-toggle', elem), function (elem1) { removeElementClass(elem1, 'hidden'); });
-        forEach(getElementsByTagAndClassName('input', null, elem), function (elem1) { elem1.disabled = false; });
-    });
 }
 
 // Left hand side

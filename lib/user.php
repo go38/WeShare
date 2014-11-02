@@ -13,10 +13,10 @@ defined('INTERNAL') || die();
 
 define('MAX_USERNAME_DISPLAY', 30);
 
-/** 
+/**
  * loads up activity preferences for a given user
  *
- * @param int $userid to load preferences for 
+ * @param int $userid to load preferences for
  * @todo caching
  */
 function load_activity_preferences($userid) {
@@ -32,14 +32,14 @@ function load_activity_preferences($userid) {
     return $prefs;
 }
 
-/** 
+/**
  * loads up account preferences for a given user
  * if you want them for the current user
  * use $SESSION->accountprefs
  *
- * @param int $userid to load preferences for 
+ * @param int $userid to load preferences for
  * @todo caching
- * @todo defaults? 
+ * @todo defaults?
  */
 function load_account_preferences($userid) {
     $prefs = array();
@@ -61,10 +61,10 @@ function load_account_preferences($userid) {
 }
 
 
-/** 
+/**
  * sets a user preference in the database
  * if you want to set it in the session as well
- * use SESSION->set_account_preference 
+ * use SESSION->set_account_preference
  *
  * @param int $userid user id to set preference for
  * @param string $field preference field to set
@@ -105,7 +105,7 @@ function set_account_preference($userid, $field, $value) {
 }
 
 
-/** 
+/**
  * Change language-specific stuff in the db for a user.  Currently
  * changes the name of the 'assessmentfiles' folder in the user's
  * files area and the views and artefacts tagged for the profile
@@ -125,19 +125,16 @@ function change_language($userid, $oldlang, $newlang) {
     set_field_select('collection_tag', 'tag', get_string_from_language($newlang, 'profile'), 'WHERE tag = ? AND "collection" IN (SELECT id FROM {collection} WHERE "owner" = ?)', array(get_string_from_language($oldlang, 'profile'), $userid));
 }
 
-/** 
+/**
  * sets an activity preference in the database
  * if you want to set it in the session as well
- * use $SESSION->set_activity_preference 
+ * use $SESSION->set_activity_preference
  *
  * @param int $userid user id to set preference for
  * @param int $activity activity type to set
  * @param string $method notification method to set.
  */
 function set_activity_preference($userid, $activity, $method) {
-    if (empty($method)) {
-        return delete_records('usr_activity_preference', 'activity', $activity, 'usr', $userid);
-    }
     if (record_exists('usr_activity_preference', 'usr', $userid, 'activity', $activity)) {
         set_field('usr_activity_preference', 'method', $method, 'usr', $userid, 'activity', $activity);
     }
@@ -157,7 +154,7 @@ function set_activity_preference($userid, $activity, $method) {
 }
 
 /**
- * gets an account preference for the user, 
+ * gets an account preference for the user,
  * or the default if not set for that user,
  * as specified in {@link expected_account_preferences}
  *
@@ -192,7 +189,7 @@ function get_user_language($userid) {
 
 /**
  * default account settings
- * 
+ *
  * @returns array of fields => values
  */
 function expected_account_preferences() {
@@ -204,6 +201,8 @@ function expected_account_preferences() {
                  'addremovecolumns' => 0,
                  'maildisabled'   => 0,
                  'tagssideblockmaxtags' => get_config('tagssideblockmaxtags'),
+                 'groupsideblockmaxgroups' => '',
+                 'groupsideblocksortby' => 'alphabetical',
                  'hiderealname'   => 0,
                  'multipleblogs' => 0,
                  'showhomeinfo' => 1,
@@ -359,6 +358,24 @@ function general_account_prefs_form_elements($prefs) {
             'rules'        => array('integer' => true, 'minvalue' => 0, 'maxvalue' => 1000),
         );
     }
+    $elements['groupsideblockmaxgroups'] = array(
+        'type'         => 'text',
+        'size'         => 4,
+        'title'        => get_string('limitto1', 'blocktype.mygroups'),
+        'description'  => get_string('limittodescsideblock1', 'blocktype.mygroups'),
+        'defaultvalue' => isset($prefs->groupsideblockmaxgroups) ? $prefs->groupsideblockmaxgroups : '',
+        'rules'        => array('regex' => '/^[0-9]*$/', 'minvalue' => 0, 'maxvalue' => 1000),
+    );
+    $elements['groupsideblocksortby'] = array(
+        'type'         => 'select',
+        'defaultvalue' => isset($prefs->groupsideblocksortby) ? $prefs->groupsideblocksortby : 'alphabetical',
+        'title' => get_string('sortgroups', 'blocktype.mygroups'),
+        'options' =>  array(
+            'latest' => get_string('latest', 'blocktype.mygroups'),
+            'earliest' => get_string('earliest', 'blocktype.mygroups'),
+            'alphabetical'  => get_string('alphabetical', 'blocktype.mygroups'),
+        ),
+    );
     if (get_config('userscanhiderealnames')) {
         $elements['hiderealname'] = array(
             'type'         => 'checkbox',
@@ -371,8 +388,8 @@ function general_account_prefs_form_elements($prefs) {
         $elements['showhomeinfo'] = array(
             'type' => 'checkbox',
             'defaultvalue' => $prefs->showhomeinfo,
-            'title' => get_string('showhomeinfo1', 'account'),
-            'description' => get_string('showhomeinfodescription', 'account', hsc(get_config('sitename'))),
+            'title' => get_string('showhomeinfo2', 'account'),
+            'description' => get_string('showhomeinfodescription1', 'account', hsc(get_config('sitename'))),
             'help' => 'true'
         );
     }
@@ -417,6 +434,72 @@ function general_account_prefs_form_elements($prefs) {
     return $elements;
 }
 
+/**
+ * Get account settings elements from plugins.
+ *
+ * @param stdClass $prefs
+ * @return array
+ */
+function plugin_account_prefs_form_elements(stdClass $prefs) {
+    $elements = array();
+    $installed = plugin_all_installed();
+    foreach ($installed as $i) {
+        if (!safe_require_plugin($i->plugintype, $i->name)) {
+            continue;
+        }
+        $elements = array_merge($elements, call_static_method(generate_class_name($i->plugintype, $i->name),
+                'get_accountprefs_elements', $prefs));
+    }
+    return $elements;
+}
+
+/**
+ * Validate plugin account form values.
+ *
+ * @param Pieform $form
+ * @param array $values
+ */
+function plugin_account_prefs_validate(Pieform $form, $values) {
+    $elements = array();
+    $installed = plugin_all_installed();
+    foreach ($installed as $i) {
+        if (!safe_require_plugin($i->plugintype, $i->name)) {
+            continue;
+        }
+        call_static_method(generate_class_name($i->plugintype, $i->name), 'accountprefs_validate', $form, $values);
+    }
+}
+
+/**
+ * Submit plugin account form values.
+ *
+ * @param Pieform $form
+ * @param array $values
+ * @return bool is page need to be refreshed
+ */
+function plugin_account_prefs_submit(Pieform $form, $values) {
+    $reload = false;
+    $elements = array();
+    $installed = plugin_all_installed();
+    foreach ($installed as $i) {
+        if (!safe_require_plugin($i->plugintype, $i->name)) {
+            continue;
+        }
+        $reload = call_static_method(generate_class_name($i->plugintype, $i->name), 'accountprefs_submit', $form, $values) || $reload;
+    }
+    return $reload;
+}
+
+/**
+ * Save a profile field.
+ * Exception is 'socialprofile' field. It is made up of 3 fields:
+ * socialprofile_profileurl,
+ * socialprofile_service,
+ * socialprofile_profiletype
+ * @param int $userid
+ * @param string $field
+ * @param string (or array for socialprofile) $value
+ */
 function set_profile_field($userid, $field, $value) {
     safe_require('artefact', 'internal');
 
@@ -433,6 +516,14 @@ function set_profile_field($userid, $field, $value) {
         $email->set('title', $value);
         $email->commit();
     }
+    else if ($field == 'socialprofile') {
+        $classname = generate_artefact_class_name($field);
+        $profile = new $classname(0, array('owner' => $userid));
+        $profile->set('title',       $value['socialprofile_profileurl']);
+        $profile->set('description', $value['socialprofile_service']);
+        $profile->set('note',        $value['socialprofile_profiletype']);
+        $profile->commit();
+    }
     else {
         $classname = generate_artefact_class_name($field);
         $profile = new $classname(0, array('owner' => $userid));
@@ -446,7 +537,9 @@ function set_profile_field($userid, $field, $value) {
  *
  * @param integer user id to find the profile field for
  * @param field what profile field you want the value for
- * @returns string the value of the profile field (null if it doesn't exist)
+ * @returns string for non-socialprofile fields - the value of the profile field.
+ *          array for socialprofile fields - array of the values of the profile fields ('id-<id>'|'<description>|'<title>').
+ *          null if it doesn't exist
  *
  * @todo, this needs to be better (fix email behaviour)
  */
@@ -457,6 +550,14 @@ function get_profile_field($userid, $field) {
             FROM {usr} u
             JOIN {artefact} a ON (a.title = u.email AND a.owner = u.id)
             WHERE a.artefacttype = 'email' AND u.id = ?", array($userid));
+    }
+    else if ($field == 'socialprofile') {
+        // First check if the block is enabled.
+        if (get_record('blocktype_installed', 'active', 1, 'name', 'socialprofile')) {
+            // The user can have more than one social profiles. Will need to return an array.
+            safe_require('artefact', 'internal');
+            $value = ArtefactTypeSocialprofile::get_social_profiles();
+        }
     }
     else {
         $value = get_field('artefact', 'title', 'owner', $userid, 'artefacttype', $field);
@@ -469,9 +570,9 @@ function get_profile_field($userid, $field) {
     return null;
 }
 
-/** 
+/**
  * Always use this function for all emails to users
- * 
+ *
  * @param object $userto user object to send email to. must contain firstname,lastname,preferredname,email
  * @param object $userfrom user object to send email from. If null, email will come from mahara
  * @param string $subject email subject
@@ -480,13 +581,13 @@ function get_profile_field($userid, $field) {
  * @param array  $customheaders email headers
  * @throws EmailException
  * @throws EmailDisabledException
- */ 
+ */
 function email_user($userto, $userfrom, $subject, $messagetext, $messagehtml='', $customheaders=null) {
     global $IDPJUMPURL;
     static $mnetjumps = array();
 
     if (!get_config('sendemail')) {
-        // You can entirely disable Mahara from sending any e-mail via the 
+        // You can entirely disable Mahara from sending any e-mail via the
         // 'sendemail' configuration variable
         return true;
     }
@@ -532,14 +633,14 @@ function email_user($userto, $userfrom, $subject, $messagetext, $messagehtml='',
     // Leaving this commented out - there's no reason for people to know this
     //$mail->Version = 'Mahara ' . get_config('release');
     $mail->PluginDir = get_config('libroot')  . 'phpmailer/';
-    
+
     $mail->CharSet = 'UTF-8';
 
     $smtphosts = get_config('smtphosts');
     if ($smtphosts == 'qmail') {
         // use Qmail system
         $mail->IsQmail();
-    } 
+    }
     else if (empty($smtphosts)) {
         // use PHP mail() = sendmail
         $mail->IsMail();
@@ -644,14 +745,14 @@ function email_user($userto, $userfrom, $subject, $messagetext, $messagehtml='',
         throw new InvalidEmailException("Cannot send email to $usertoname with subject $subject. Error from phpmailer was: " . $mail->ErrorInfo);
     }
 
-    $mail->WordWrap = 79;   
+    $mail->WordWrap = 79;
 
-    if ($messagehtml) { 
+    if ($messagehtml) {
         $mail->IsHTML(true);
         $mail->Encoding = 'quoted-printable';
         $mail->Body    =  $messagehtml;
         $mail->AltBody =  $messagetext;
-    } 
+    }
     else {
         $mail->IsHTML(false);
         $mail->Body =  $messagetext;
@@ -682,7 +783,7 @@ function email_user($userto, $userfrom, $subject, $messagetext, $messagehtml='',
         }
 
         return true;
-    } 
+    }
     throw new EmailException("Couldn't send email to $usertoname with subject $subject. "
                         . "Error from phpmailer was: " . $mail->ErrorInfo );
 }
@@ -1110,7 +1211,7 @@ function optional_userid($userid) {
     if (!is_logged_in()) {
         throw new InvalidArgumentException("optional_userid no userid and no logged in user");
     }
-    
+
     global $USER;
     return $USER->get('id');
 }
@@ -1138,7 +1239,7 @@ function optional_userobj($user) {
     if (!is_logged_in()) {
         throw new InvalidArgumentException("optional_userobj no userid and no logged in user");
     }
-    
+
     global $USER;
     return $USER->to_stdclass();
 }
@@ -1161,12 +1262,12 @@ function is_logged_in() {
 /**
  * is there a friend relationship between these two users?
  *
- * @param int $userid1 
+ * @param int $userid1
  * @param int $userid2
  */
 
 function is_friend($userid1, $userid2) {
-    return record_exists_select('usr_friend', '(usr1 = ? AND usr2 = ?) OR (usr2 = ? AND usr1 = ?)', 
+    return record_exists_select('usr_friend', '(usr1 = ? AND usr2 = ?) OR (usr2 = ? AND usr1 = ?)',
                                 array($userid1, $userid2, $userid1, $userid2));
 }
 
@@ -1179,8 +1280,8 @@ function is_friend($userid1, $userid2) {
 function get_friend_request($userid1, $userid2) {
     return get_record_select('usr_friend_request', '("owner" = ? AND requester = ?) OR (requester = ? AND "owner" = ?)',
                              array($userid1, $userid2, $userid1, $userid2));
-        
-} 
+
+}
 
 /**
  * Returns an object containing information about a user, including account
@@ -1274,8 +1375,8 @@ function unsuspend_user($userid) {
 /**
  * Deletes a user
  *
- * This function ensures that a user is deleted according to how Mahara wants a 
- * deleted user to be. You can call it multiple times on the same user without 
+ * This function ensures that a user is deleted according to how Mahara wants a
+ * deleted user to be. You can call it multiple times on the same user without
  * harm.
  *
  * @param int $userid The ID of the user to delete
@@ -1283,7 +1384,7 @@ function unsuspend_user($userid) {
 function delete_user($userid) {
     db_begin();
 
-    // We want to append 'deleted.timestamp' to some unique fields in the usr 
+    // We want to append 'deleted.timestamp' to some unique fields in the usr
     // table, so they can be reused by new accounts
     $fieldstomunge = array('username', 'email');
     $datasuffix = '.deleted.' . microtime(true);
@@ -1364,8 +1465,10 @@ function delete_user($userid) {
     if ($artefactids) {
         foreach ($artefactids as $artefactid) {
             try {
-                $a = artefact_instance_from_id($artefactid);
-                $a->delete();
+                $a = artefact_instance_from_id($artefactid, true);
+                if ($a) {
+                    $a->delete();
+                }
             }
             catch (ArtefactNotFoundException $e) {
                 // Awesome, it's already gone.
@@ -1395,10 +1498,10 @@ function delete_user($userid) {
 /**
  * Undeletes a user
  *
- * NOTE: changing their email addresses to remove the .deleted.timestamp part 
- * has not been implemented yet! This function is not actually used anywhere in 
- * Mahara, so hasn't really been tested because of this. It's a simple enough 
- * job for the first person who gets there - see how delete_user works to see 
+ * NOTE: changing their email addresses to remove the .deleted.timestamp part
+ * has not been implemented yet! This function is not actually used anywhere in
+ * Mahara, so hasn't really been tested because of this. It's a simple enough
+ * job for the first person who gets there - see how delete_user works to see
  * what you must undo.
  *
  * @param int $userid The ID of the user to undelete
@@ -1506,9 +1609,9 @@ function get_message_thread($replyto) {
  *
  * @param object $to User to send the message to
  * @param string $message The message to send
- * @param object $from Who to send the message from. If not set, defaults to 
+ * @param object $from Who to send the message from. If not set, defaults to
  * the currently logged in user
- * @throws AccessDeniedException if the message is not allowed to be sent (as 
+ * @throws AccessDeniedException if the message is not allowed to be sent (as
  * configured by the 'to' user's settings)
  */
 function send_user_message($to, $message, $parent, $from=null) {
@@ -1521,10 +1624,10 @@ function send_user_message($to, $message, $parent, $from=null) {
     $messagepref = get_account_preference($to->id, 'messages');
     if ($messagepref == 'allow' || ($messagepref == 'friends' && is_friend($from->id, $to->id)) || $from->get('admin')) {
         require_once('activity.php');
-        activity_occurred('usermessage', 
+        activity_occurred('usermessage',
             array(
-                'userto'   => $to->id, 
-                'userfrom' => $from->id, 
+                'userto'   => $to->id,
+                'userfrom' => $from->id,
                 'message'  => $message,
                 'parent'   => $parent,
             )
@@ -1560,7 +1663,7 @@ function load_user_institutions($userid) {
         throw new InvalidArgumentException("couldn't load institutions, no user id specified");
     }
     if ($institutions = get_records_sql_assoc('
-        SELECT u.institution,'.db_format_tsfield('ctime').','.db_format_tsfield('u.expiry', 'membership_expiry').',u.studentid,u.staff,u.admin,i.displayname,i.theme,i.registerallowed, i.showonlineusers,i.allowinstitutionpublicviews, i.logo, i.style, i.licensemandatory, i.licensedefault, i.dropdownmenu, i.skins
+        SELECT u.institution,'.db_format_tsfield('ctime').','.db_format_tsfield('u.expiry', 'membership_expiry').',u.studentid,u.staff,u.admin,i.displayname,i.theme,i.registerallowed, i.showonlineusers,i.allowinstitutionpublicviews, i.logo, i.style, i.licensemandatory, i.licensedefault, i.dropdownmenu, i.skins, i.suspended
         FROM {usr_institution} u INNER JOIN {institution} i ON u.institution = i.name
         WHERE u.usr = ? ORDER BY i.priority DESC', array($userid))) {
         return $institutions;
@@ -1571,7 +1674,7 @@ function load_user_institutions($userid) {
 
 /**
  * Return a username which isn't taken and which is similar to a desired username
- * 
+ *
  * @param string $desired
  */
 function get_new_username($desired) {
@@ -1678,7 +1781,7 @@ function profile_url($user, $full=true, $useid=false) {
         }
         $url = get_config('cleanurluserdefault') . '/' . $urlid;
     }
-    else if (!empty($id)) {
+    else if (!is_null($id)) {
         $url = 'user/view.php?id=' . (int) $id;
     }
     else {
@@ -1903,7 +2006,7 @@ function get_institution_strings_for_users($userids) {
             $links = array();
             foreach ($value as $k => $v) {
                 $url = get_config('wwwroot').'institution/index.php?institution='.$k;
-                $links[] = get_string('institutionlink', 'mahara', $url, $v);
+                $links[] = get_string('institutionlink', 'mahara', $url, hsc($v));
             }
             switch ($key) {
                 case 'admin':
@@ -2334,7 +2437,7 @@ function update_user($user, $profile, $remotename=null, $accountprefs=array(), $
 }
 
 /**
- * Given a user, makes sure they have been added to all groups that are marked 
+ * Given a user, makes sure they have been added to all groups that are marked
  * as ones that users should be auto-added to
  *
  * @param array $eventdata Event data passed from activity_occured, the key 'id' = userid
@@ -2378,15 +2481,16 @@ function install_system_profile_view() {
     $view->set_access(array(array(
         'type' => 'loggedin'
     )));
-    $blocktypes = array('myviews' => 1, 'mygroups' => 1, 'myfriends' => 2, 'wall' => 2);  // column ids
+    $blocktypes = array('profileinfo' => 1, 'myviews' => 1, 'mygroups' => 1, 'myfriends' => 2, 'wall' => 2);  // column ids
     $installed = get_column_sql('SELECT name FROM {blocktype_installed} WHERE name IN (' . join(',', array_map('db_quote', array_keys($blocktypes))) . ')');
     $weights = array(1 => 0, 2 => 0);
     foreach (array_keys($blocktypes) as $blocktype) {
         if (in_array($blocktype, $installed)) {
             $weights[$blocktypes[$blocktype]]++;
+            $title = ($blocktype == 'profileinfo') ? get_string('aboutme', 'blocktype.internal/profileinfo') : get_string('title', 'blocktype.' . $blocktype);
             $newblock = new BlockInstance(0, array(
                 'blocktype'  => $blocktype,
-                'title'      => get_string('title', 'blocktype.' . $blocktype),
+                'title'      => $title,
                 'view'       => $view->get('id'),
                 'row'        => 1,
                 'column'     => $blocktypes[$blocktype],
@@ -2496,6 +2600,12 @@ function install_system_dashboard_view() {
  * Avoids reloading the 'no user photo' image for each user separately
  * when we know they have no profile icon, and avoids the redirect to
  * gravatar.
+ *
+ * @param int|object|array $user A user ID, user object, or user data array. If an
+ * object, should contain profileicon or email attributes, or a user ID.
+ * @param int $maxwidth
+ * @param int $maxheight
+ * @return bool|string The URL of the image or FALSE if none was found
  */
 function profile_icon_url($user, $maxwidth=40, $maxheight=40) {
 
@@ -2505,12 +2615,19 @@ function profile_icon_url($user, $maxwidth=40, $maxheight=40) {
     }
     $user = get_user_for_display($user);
 
-    if (!property_exists($user, 'profileicon') || !property_exists($user, 'email')) {
-        if (!is_numeric($user->id)) {
-            throw new SystemException('profile_icon_url requires a user with profileicon & email properties');
+    // If we were originally passed a $user that was lacking profileicon and email,
+    // get_user_for_display() usually won't have found it for us. So we should try
+    // to fill that in now, and then cache it for later calls.
+    if (!isset($user->profileicon) && !isset($user->email)) {
+        if (!isset($user->id) || !is_numeric($user->id)) {
+            // No data. We'll just show the anonymous icon, but log a warning message for the devs.
+            log_debug("profile_icon_url was passed a user object without a numeric id, a profileicon, or an email address. This is probably a coding error.");
         }
-        log_debug("profile_icon_url was passed a user without profileicon & email properties");
-        $user = get_record('usr', 'id', $user->id);
+        else {
+            $user = get_record('usr', 'id', $user->id, null, null, null, null, 'id, profileicon, email');
+            // Cache this for subsequent calls
+            $user = get_user_for_display($user);
+        }
     }
 
     // Available sizes of the 'no_userphoto' image:
@@ -2526,7 +2643,7 @@ function profile_icon_url($user, $maxwidth=40, $maxheight=40) {
         return $thumb . '?type=profileiconbyid&' . $sizeparams . '&id=' . $user->profileicon;
     }
 
-    return anonymous_icon_url($maxwidth, $maxheight, $user->email);
+    return anonymous_icon_url($maxwidth, $maxheight, (!empty($user->email) ? $user->email : null));
 }
 
 /**
@@ -2546,6 +2663,37 @@ function anonymous_icon_url($maxwidth=40, $maxheight=40, $email=null) {
 
     if (!empty($email) && get_config('remoteavatars')) {
         return remote_avatar($email, array('maxw' => $maxwidth, 'maxh' => $maxheight), $notfound);
+    }
+    return $notfound;
+}
+
+/**
+ * Return the remote avatar associated to the email.
+ * If the avatar does not exist, return anonymous avatar
+ *
+ * @param string  $email         Email address of the user
+ * @param mixed  $size           Size of the image
+ * @returns string $url          The remote avatar URL
+ */
+function remote_avatar_url($email, $size) {
+    global $THEME;
+
+    $s = 100;
+    $newsize = image_get_new_dimensions($s, $s, $size);
+    if ($newsize) {
+        $s = min($newsize['w'], $newsize['h']);
+    }
+    // Available sizes of the 'no_userphoto' image:
+    $allowedsizes = array(16, 20, 25, 40, 50, 60, 100);
+    if (!in_array($s, $allowedsizes)) {
+        log_warn('remote_avatar_url: size should be in (' . join(', ', $allowedsizes) . ')');
+    }
+    else {
+        $s = 40;
+    }
+    $notfound = $THEME->get_url('images/no_userphoto' . $s . '.png');
+    if (!empty($email) && get_config('remoteavatars')) {
+        return remote_avatar($email, $s, $notfound);
     }
     return $notfound;
 }
@@ -2580,7 +2728,12 @@ function remote_avatar($email, $size, $notfound) {
     if (get_config('remoteavatarbaseurl')) {
         $baseurl = get_config('remoteavatarbaseurl');
     }
-    return "{$baseurl}{$md5sum}.jpg?r=g&s=$s&d=" . urlencode($notfound);
+    // Check if it is a valid avatar
+    $result = get_headers("{$baseurl}{$md5sum}.jpg?d=404");
+    if ($result[0] === "HTTP/1.0 404 Not Found") {
+        return $notfound;
+    }
+    return "{$baseurl}{$md5sum}.jpg?r=g&s=$s";
 }
 
 /**

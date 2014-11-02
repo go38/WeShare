@@ -11,6 +11,11 @@
 
 defined('INTERNAL') || die();
 
+// Constants for the different group roles
+define('GROUP_ROLES_ALL', 1);
+define('GROUP_ROLES_NONMEMBER', 2);
+define('GROUP_ROLES_ADMIN', 3);
+
 // Role related functions
 
 /**
@@ -19,9 +24,9 @@ defined('INTERNAL') || die();
  * If the user is not in the group, this returns false.
  *
  * @param mixed $groupid  ID of the group to check
- * @param mixed $userid   ID of the user to check. Defaults to the logged in 
+ * @param mixed $userid   ID of the user to check. Defaults to the logged in
  *                        user.
- * @return mixed          The role the user has in the group, or false if they 
+ * @return mixed          The role the user has in the group, or false if they
  *                        have no role in the group
  */
 function group_user_access($groupid, $userid=null, $refresh=null) {
@@ -44,7 +49,7 @@ function group_user_access($groupid, $userid=null, $refresh=null) {
 /**
  * Returns whether the given user is the only administrator in the given group.
  *
- * If the user isn't in the group, or they're not an admin, or there is another admin, false 
+ * If the user isn't in the group, or they're not an admin, or there is another admin, false
  * is returned.
  *
  * @param int $groupid The ID of the group to check
@@ -66,10 +71,10 @@ function group_is_only_admin($groupid, $userid=null) {
 }
 
 /**
- * Returns whether the given user is allowed to change their role to the 
+ * Returns whether the given user is allowed to change their role to the
  * requested role in the given group.
  *
- * This function is checking whether _role changes_ are allowed, not if a user 
+ * This function is checking whether _role changes_ are allowed, not if a user
  * is allowed to be added to a group.
  *
  * @param int $groupid The ID of the group to check
@@ -99,8 +104,8 @@ function group_can_change_role($groupid, $userid, $role) {
  * @param int $groupid The ID of the group
  * @param int $userid  The ID of the user whose role needs changing
  * @param string $role The role the user wishes to switch to
- * @throws AccessDeniedException If the specified role change is not allowed. 
- *                               Check with group_can_change_role first if you 
+ * @throws AccessDeniedException If the specified role change is not allowed.
+ *                               Check with group_can_change_role first if you
  *                               need to.
  */
 function group_change_role($groupid, $userid, $role) {
@@ -235,7 +240,7 @@ function group_role_can_access_report($group, $role) {
 }
 
 /**
- * Returns whether a user is allowed to assess views that have been submitted 
+ * Returns whether a user is allowed to assess views that have been submitted
  * to the given group.
  *
  * @param int $groupid ID of group
@@ -263,10 +268,10 @@ function group_user_can_assess_submitted_views($groupid, $userid) {
 /**
  * Creates a group.
  *
- * All group creation should be done through this function, as the 
+ * All group creation should be done through this function, as the
  * implementation of group creation may change over time.
  *
- * @param array $data Data required to create the group. The following 
+ * @param array $data Data required to create the group. The following
  * key/value pairs can be specified:
  *
  * - name: The group name [required, must be unique]
@@ -275,7 +280,7 @@ function group_user_can_assess_submitted_views($groupid, $userid) {
  * - open (jointype): anyone can join the group
  * - controlled (jointype): admin adds members; members cannot leave the group
  * - request: allows membership requests
- * - ctime: The unix timestamp of the time the group will be recorded as having 
+ * - ctime: The unix timestamp of the time the group will be recorded as having
  *          been created. Defaults to the current time.
  * - members: Array of users who should be in the group, structured like this:
  *            array(
@@ -405,6 +410,9 @@ function group_create($data) {
     if (!isset($data['editwindowend'])) {
         $data['editwindowend'] = null;
     }
+    if (!isset($data['sendnow'])) {
+        $data['sendnow'] = null;
+    }
 
     db_begin();
 
@@ -426,6 +434,7 @@ function group_create($data) {
             'shortname'      => $data['shortname'],
             'request'        => isset($data['request']) ? intval($data['request']) : 0,
             'submittableto'  => intval($data['submittableto']),
+            'allowarchives'  => (!empty($data['submittableto']) && !empty($data['allowarchives'])) ? intval($data['allowarchives']) : 0,
             'editroles'      => $data['editroles'],
             'hidden'         => $data['hidden'],
             'hidemembers'    => $data['hidemembers'],
@@ -435,7 +444,9 @@ function group_create($data) {
             'suggestfriends' => $data['suggestfriends'],
             'editwindowstart' => $data['editwindowstart'],
             'editwindowend'  => $data['editwindowend'],
-            'sendnow'        => $data['sendnow'],
+            'sendnow'        => isset($data['sendnow']) ? $data['sendnow'] : null,
+            'viewnotify'     => isset($data['viewnotify']) ? $data['viewnotify'] : null,
+            'feedbacknotify' => isset($data['feedbacknotify']) ? $data['feedbacknotify'] : null,
         ),
         'id',
         true
@@ -552,12 +563,18 @@ function group_update($new, $create=false) {
             throw new AccessDeniedException("group_update: cannot update a group in this institution");
         }
     }
+    if (
+        (isset($new->submittableto) && empty($new->submittableto)) ||
+        (!isset($new->submittableto) && empty($old->submittableto))
+       ) {
+        $new->allowarchives = 0;
+    }
 
     // Institution and shortname cannot be updated (yet)
     unset($new->institution);
     unset($new->shortname);
 
-    foreach (array('id', 'grouptype', 'public', 'request', 'submittableto', 'editroles',
+    foreach (array('id', 'grouptype', 'public', 'request', 'submittableto', 'allowarchives', 'editroles',
         'hidden', 'hidemembers', 'hidemembersfrommembers', 'groupparticipationreports') as $f) {
         if (!isset($new->$f)) {
             $new->$f = $old->$f;
@@ -719,14 +736,14 @@ function group_get_groups_for_editing($ids=null) {
 /**
  * Deletes a group.
  *
- * All group deleting should be done through this function, even though it is 
+ * All group deleting should be done through this function, even though it is
  * simple. What is required to perform group deletion may change over time.
  *
  * @param int $groupid The group to delete
  * @param string $shortname   shortname of the group
  * @param string $institution institution of the group
  *
- * {{@internal Maybe later we can have a group_can_be_deleted function if 
+ * {{@internal Maybe later we can have a group_can_be_deleted function if
  * necessary}}
  */
 function group_delete($groupid, $shortname=null, $institution=null, $notifymembers=true) {
@@ -1430,7 +1447,7 @@ function group_get_admins($groupids) {
 /**
  * Sets up groups for display in mygroups.php and find.php
  *
- * @param array $groups    Initial group data, including the current user's 
+ * @param array $groups    Initial group data, including the current user's
  *                         membership type in each group. See mygroups.php for
  *                         the query to build this information.
  * @param string $returnto Where forms generated for display should be told to return to
@@ -1583,12 +1600,12 @@ function group_get_membersearch_data($results, $group, $query, $membershiptype, 
         if ($role == 'admin' && ($r['id'] != $userid || group_user_can_leave($group, $r['id']))) {
             $r['removeform'] = group_get_removeuser_form($r['id'], $group);
         }
-        // NOTE: this is a quick approximation. We should really check whether, 
-        // for each role in the group, that the user can change to it (using 
-        // group_can_change_role).  This only controls whether the 'change 
-        // role' link appears though, so it doesn't matter too much. If the 
-        // user clicks on this link, changerole.php does the full check and 
-        // sends them back here saying that the user has no roles they can 
+        // NOTE: this is a quick approximation. We should really check whether,
+        // for each role in the group, that the user can change to it (using
+        // group_can_change_role).  This only controls whether the 'change
+        // role' link appears though, so it doesn't matter too much. If the
+        // user clicks on this link, changerole.php does the full check and
+        // sends them back here saying that the user has no roles they can
         // change to anyway.
         $r['canchangerole'] = !group_is_only_admin($group, $r['id']);
     }
@@ -1598,7 +1615,7 @@ function group_get_membersearch_data($results, $group, $query, $membershiptype, 
             foreach ($results['data'] as &$r) {
                 $r['addform'] = group_get_adduser_form($r['id'], $group);
                 $r['denyform'] = group_get_denyuser_form($r['id'], $group);
-                // TODO: this will suck when there's quite a few on the page, 
+                // TODO: this will suck when there's quite a few on the page,
                 // would be better to grab all the reasons in one go
                 $r['reason']  = get_field('group_member_request', 'reason', 'group', $group, 'member', $r['id']);
             }
@@ -1681,12 +1698,20 @@ function group_get_grouptype_options($currentgrouptype=null) {
     return $groupoptions;
 }
 
-function group_get_editroles_options() {
-    return array(
+function group_get_editroles_options($intkeys = false) {
+    if ($intkeys) {
+        return array(GROUP_ROLES_ALL => get_string('allgroupmembers', 'group'),
+                     GROUP_ROLES_NONMEMBER => get_string('allexceptmember', 'group'),
+                     GROUP_ROLES_ADMIN => get_string('groupadmins', 'group'),
+                     );
+    }
+    $options = array(
         'all'       => get_string('allgroupmembers', 'group'),
         'notmember' => get_string('allexceptmember', 'group'),
         'admin'     => get_string('groupadmins', 'group'),
     );
+
+    return $options;
 }
 
 function group_can_list_members($group, $role) {
@@ -1864,7 +1889,7 @@ function group_current_group() {
 
 function group_get_associated_groups($userid, $filter='all', $limit=20, $offset=0, $category='') {
 
-    // Strangely, casting is only needed for invite, request and admin and only in 
+    // Strangely, casting is only needed for invite, request and admin and only in
     // postgres
     if (is_mysql()) {
         $invitesql  = "'invite'";
@@ -1942,9 +1967,9 @@ function group_get_associated_groups($userid, $filter='all', $limit=20, $offset=
             ) t ON t.id = g.id";
         $values = array($userid, $userid, $userid, $userid);
     }
-    
+
     $values[] = 0;
-    
+
     $catsql = '';
     if (!empty($category)) {
         if ($category == -1) { //find unassigned groups
@@ -1956,10 +1981,10 @@ function group_get_associated_groups($userid, $filter='all', $limit=20, $offset=
     }
 
     $count = count_records_sql('SELECT COUNT(*) FROM {group} g ' . $sql . ' WHERE g.deleted = ?'.$catsql, $values);
-    
+
     // almost the same as query used in find - common parts should probably be pulled out
     // gets the groups filtered by above
-    
+
     $sql = '
         SELECT g1.id, g1.name, g1.description, g1.public, g1.jointype, g1.request, g1.grouptype, g1.submittableto,
             g1.hidemembers, g1.hidemembersfrommembers, g1.groupparticipationreports, g1.urlid, g1.membershiptype, g1.reason, g1.role, g1.membercount,
@@ -1982,13 +2007,31 @@ function group_get_associated_groups($userid, $filter='all', $limit=20, $offset=
         ORDER BY g1.name';
 
     $groups = get_records_sql_array($sql, $values, $offset, $limit);
-    
+
     return array('groups' => $groups ? $groups : array(), 'count' => $count);
 
 }
 
-
-function group_get_user_groups($userid=null, $roles=null) {
+/**
+ * returns a list of groups of a user by $userid or the current logged in user, given $roles from cache or database
+ * where $roles is the list of the user's role in a group
+ * if the user id is null, the logged in user will take into account
+ * if $roles is empty, all groups of the user will be returned
+ *
+ * @param int $userid
+ * @param array $roles
+ * @param string $sort is 'earliest', 'latest', or 'alphabetical'(default),
+ *     sorts the list of groups based on the date the user joined the group or group name
+ *     if empty, the list will be sorted by group name, admin role first
+ * @param int $limit  The number of groups to display per page (page size)
+ * @param int $offset The first group index in the current page to display
+ * @param boolean $fromcache if yes, try to return the list from the cache first
+ *                             or no, force to query database and update the cache
+ * @return array $usergroups    An array of groups the user belongs to.
+ * Or if the $limit option is not empty
+ * @return array, int $usergroups, $count  You can fetch the results as list($usergroups, $count)
+ */
+function group_get_user_groups($userid=null, $roles=null, $sort=null, $limit=null, $offset=0, $fromcache=true) {
     global $USER;
 
     static $usergroups = array();
@@ -1999,10 +2042,11 @@ function group_get_user_groups($userid=null, $roles=null) {
         $userid = $loggedinid;
     }
 
-    if (!isset($usergroups[$userid])) {
+    if (!$fromcache || !isset($usergroups[$userid])) {
+
         $groups = get_records_sql_array("
             SELECT g.id, g.name, gm.role, g.jointype, g.request, g.grouptype, gtr.see_submitted_views, g.category,
-                g.hidemembers, g.invitefriends, g.urlid, gm1.role AS loggedinrole
+                g.hidemembers, g.invitefriends, g.urlid, gm.ctime, gm1.role AS loggedinrole
             FROM {group} g
                 JOIN {group_member} gm ON gm.group = g.id
                 JOIN {grouptype_roles} gtr ON g.grouptype = gtr.grouptype AND gm.role = gtr.role
@@ -2015,7 +2059,42 @@ function group_get_user_groups($userid=null, $roles=null) {
         $usergroups[$userid] = $groups ? $groups : array();
     }
 
+    if (!empty($sort)) {
+        // Sort the list of groups based on the date the user joined the group
+        if ($sort == 'earliest') {
+            usort($usergroups[$userid],
+                function ($g1, $g2) {
+                    if ($g1->ctime == $g2->ctime) {
+                        return ($g1->name < $g2->name) ? -1 : 1;
+                    }
+                    return ($g1->ctime < $g2->ctime) ? -1 : 1;
+                }
+            );
+        }
+        else if ($sort == 'latest') {
+            usort($usergroups[$userid],
+                function ($g1, $g2) {
+                    if ($g1->ctime == $g2->ctime) {
+                        return ($g1->name < $g2->name) ? -1 : 1;
+                    }
+                    return ($g1->ctime > $g2->ctime) ? -1 : 1;
+                }
+            );
+        }
+        else if ($sort == 'alphabetical') {
+            // Do nothing, the list sorted by the SQL query
+        }
+        else {
+            throw new SystemException('Unknown sort flag: "' . $sort . '"');
+        }
+    }
+
     if (empty($roles) && $userid == $loggedinid) {
+        $count = count($usergroups[$userid]);
+        if (!empty($limit)) {
+            $truncatedusergroups = array_slice($usergroups[$userid], $offset, $limit);
+            return array($truncatedusergroups, $count);
+        }
         return $usergroups[$userid];
     }
 
@@ -2028,7 +2107,11 @@ function group_get_user_groups($userid=null, $roles=null) {
             $filtered[] = $g;
         }
     }
-
+    $count = count($filtered);
+    if (!empty($limit)) {
+        $filtered = array_slice($filtered, $offset, $limit);
+        return array($filtered, $count);
+    }
     return $filtered;
 }
 
@@ -2139,6 +2222,25 @@ function group_get_groupinfo_data($group) {
 function group_get_homepage_view($groupid) {
     $v = get_record('view', 'group', $groupid, 'type', 'grouphomepage');
     return new View($v->id, (array)$v);
+}
+
+/**
+ * Return the groupview block object of this group's homepage view
+ *
+ * @param int $groupid the id of the group to fetch the view for
+ * @return object block instance
+ * @throws SQLException if there are more than one groupview block instance
+ */
+function group_get_homepage_view_groupview_block($groupid) {
+    $bi = get_record_sql('
+        SELECT bi.id
+        FROM {view} v
+            INNER JOIN {block_instance} bi ON v.id = bi.view
+        WHERE bi.blocktype = ?
+            AND v.group = ? AND v.type = ?',
+        array('groupviews', $groupid, 'grouphomepage')
+    );
+    return new BlockInstance($bi->id);
 }
 
 /**

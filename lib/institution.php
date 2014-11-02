@@ -38,6 +38,7 @@ class Institution {
      * @var unknown_type
      */
     static $dbfields = array(
+        'id' => null,
         'name' => '',
         'displayname' => '',
         'registerallowed' => 0,
@@ -80,7 +81,7 @@ class Institution {
         }
 
         if (!$this->findByName($name)) {
-            throw new ParamOutOfRangeException('No such institution');
+            throw new ParamOutOfRangeException('No such institution: ' . $name);
         }
     }
 
@@ -129,6 +130,7 @@ class Institution {
                 $value = $value ? 1 : 0;
                 break;
 
+            case 'id':
             case 'defaultmembershipperiod':
             case 'maxuseraccounts':
             case 'showonlineusers':
@@ -154,7 +156,7 @@ class Institution {
 
             // A NULL here means you should drop the config from the DB
             $existingvalue = array_key_exists($name, $this->configs) ? $this->configs[$name] : NULL;
-            if ($value != $existingvalue) {
+            if ($value !== $existingvalue) {
                 $this->configs[$name] = $value;
                 $this->dirtyconfigs[$name] = true;
             }
@@ -282,7 +284,8 @@ class Institution {
     public function addUserAsMember($user) {
         global $USER;
         if ($this->isFull()) {
-            throw new SystemException('Trying to add a user to an institution that already has a full quota of members');
+            $this->send_admin_institution_is_full_message();
+            die_info(get_string('institutionmaxusersexceeded', 'admin'));
         }
         if (is_numeric($user)) {
             $user = get_record('usr', 'id', $user);
@@ -677,7 +680,7 @@ class Institution {
     }
 
     /**
-     * Returns true if the institution already has its full quota of users 
+     * Returns true if the institution already has its full quota of users
      * assigned to it.
      *
      * @return bool
@@ -905,9 +908,10 @@ function institution_selector_for_page($institution, $page) {
     else {
         $institutionelement['defaultvalue'] = $institution;
     }
-    
+
     $institutionselector = pieform(array(
         'name' => 'institutionselect',
+        'checkdirtychange' => false,
         'elements' => array(
             'institution' => $institutionelement,
         )
@@ -935,7 +939,7 @@ addLoadEvent(function() {
     }
 });
 EOF;
-    
+
     return array(
         'institution'           => $institution,
         'institutionselector'   => $institutionselector,
@@ -982,4 +986,59 @@ function institution_display_name($name) {
  */
 function extract_institution_user_id($input) {
     return $input->id;
+}
+
+/**
+ * Get institution settings elements from artefact plugins.
+ *
+ * @param Institution $institution
+ * @return array
+ */
+function plugin_institution_prefs_form_elements(Institution $institution = null) {
+    $elements = array();
+    $installed = plugin_all_installed();
+    foreach ($installed as $i) {
+        if (!safe_require_plugin($i->plugintype, $i->name)) {
+            continue;
+        }
+        $elements = array_merge($elements, call_static_method(generate_class_name($i->plugintype, $i->name),
+                'get_institutionprefs_elements', $institution));
+    }
+    return $elements;
+}
+
+/**
+ * Validate plugin institution form values.
+ *
+ * @param Pieform $form
+ * @param array $values
+ */
+function plugin_institution_prefs_validate(Pieform $form, $values) {
+    $elements = array();
+    $installed = plugin_all_installed();
+    foreach ($installed as $i) {
+        if (!safe_require_plugin($i->plugintype, $i->name)) {
+            continue;
+        }
+        call_static_method(generate_class_name($i->plugintype, $i->name), 'institutionprefs_validate', $form, $values);
+    }
+}
+
+/**
+ * Submit plugin institution form values.
+ *
+ * @param Pieform $form
+ * @param array $values
+ * @param Institution $institution
+ * @return bool is page need to be refreshed
+ */
+function plugin_institution_prefs_submit(Pieform $form, $values, Institution $institution) {
+    $elements = array();
+    $installed = plugin_all_installed();
+    foreach ($installed as $i) {
+        if (!safe_require_plugin($i->plugintype, $i->name)) {
+            continue;
+        }
+        call_static_method(generate_class_name($i->plugintype, $i->name), 'institutionprefs_submit', $form, $values, $institution);
+    }
 }

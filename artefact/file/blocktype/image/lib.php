@@ -51,7 +51,7 @@ class PluginBlocktypeImage extends PluginBlocktype {
         }
 
         $smarty = smarty_core();
-        $smarty->assign('url', $wwwroot . 'view/artefact.php?artefact=' . $id . '&view=' . $viewid);
+        $smarty->assign('url', $wwwroot . 'artefact/artefact.php?artefact=' . $id . '&view=' . $viewid);
         $smarty->assign('src', $src);
         $smarty->assign('description', $description);
         $smarty->assign('showdescription', !empty($configdata['showdescription']) && !empty($description));
@@ -112,7 +112,7 @@ class PluginBlocktypeImage extends PluginBlocktype {
     }
 
     /**
-     * Optional method. If specified, allows the blocktype class to munge the 
+     * Optional method. If specified, allows the blocktype class to munge the
      * artefactchooser element data before it's templated
      */
     public static function artefactchooser_get_element_data($artefact) {

@@ -18,7 +18,7 @@ class PluginBlocktypeFolder extends PluginBlocktype {
     }
 
     /**
-     * Optional method. If exists, allows this class to decide the title for 
+     * Optional method. If exists, allows this class to decide the title for
      * all blockinstances of this type
      */
     public static function get_instance_title(BlockInstance $bi) {
@@ -44,7 +44,7 @@ class PluginBlocktypeFolder extends PluginBlocktype {
         $configdata['viewid'] = $instance->get('view');
         $configdata['simpledisplay'] = true;
 
-        // This can be either an image or profileicon. They both implement 
+        // This can be either an image or profileicon. They both implement
         // render_self
         $result = '';
         if (isset($configdata['artefactid'])) {
@@ -95,7 +95,7 @@ class PluginBlocktypeFolder extends PluginBlocktype {
         );
     }
 
-    public static function save_config_options($values) {
+    public static function save_config_options($form, $values) {
         set_config_plugin('blocktype', 'folder', 'sortorder', $values['sortorder']);
         set_config_plugin('blocktype', 'folder', 'folderdownloadzip', $values['folderdownloadzip']);
     }
@@ -128,7 +128,7 @@ class PluginBlocktypeFolder extends PluginBlocktype {
                 'type' => 'checkbox',
                 'labelhtml' => get_string('downloadfolderzipblock', 'artefact.file'),
                 'description' => get_string('downloadfolderzipdescriptionblock', 'artefact.file'),
-                'defaultvalue' => isset($configdata['folderdownloadzip']) ? $configdata['folderdownloadzip'] : get_config_plugin('blocktype', 'folder', 'folderdownloadzip'),
+                'defaultvalue' => (get_config_plugin('blocktype', 'folder', 'folderdownloadzip') ? (isset($configdata['folderdownloadzip']) ? $configdata['folderdownloadzip'] : 0) : 0),
             );
         }
         return $elements;
@@ -148,7 +148,7 @@ class PluginBlocktypeFolder extends PluginBlocktype {
     }
 
     /**
-     * Optional method. If specified, allows the blocktype class to munge the 
+     * Optional method. If specified, allows the blocktype class to munge the
      * artefactchooser element data before it's templated
      */
     public static function artefactchooser_get_element_data($artefact) {

@@ -1732,8 +1732,10 @@ function xmldb_core_upgrade($oldversion=0) {
     }
 
     if ($oldversion < 2011082200) {
-        if ($data = check_upgrades("artefact.internal")) {
-            upgrade_plugin($data);
+        // Doing a direct insert of the new artefact type instead of running upgrade_plugin(), in order to support the
+        // transition from old profile fields to the new socialprofile artefact in Mahara 1.10
+        if (!record_exists('artefact_installed_type', 'name', 'html', 'plugin', 'internal')) {
+            insert_record('artefact_installed_type', (object)array('name'=>'html', 'plugin'=>'internal'));
         }
         // Move the textbox blocktype into artefact/internal
         set_field('blocktype_installed', 'artefactplugin', 'internal', 'name', 'textbox');
@@ -3134,9 +3136,7 @@ function xmldb_core_upgrade($oldversion=0) {
         $table = new XMLDBTable('usr');
         $field = new XMLDBField('probation');
         $field->setAttributes(XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL, null, null, null, 0);
-        if (!field_exists($table, $field)) {
-            add_field($table, $field);
-        }
+        add_field($table, $field);
     }
 
     if ($oldversion < 2014032600) {
@@ -3153,20 +3153,262 @@ function xmldb_core_upgrade($oldversion=0) {
                      )");
     }
 
-    if ($oldversion < 2014032703) {
+    if ($oldversion < 2014040300) {
         // Figure out where the magicdb is, and stick with that.
         require_once(get_config('libroot') . 'file.php');
         update_magicdb_path();
     }
 
-    if ($oldversion < 2014032704) {
+    // Add id field and corresponding index to institution table.
+    if ($oldversion < 2014040400) {
+
+        $table = new XMLDBTable('institution');
+
+        // Add id field.
+        $field = new XMLDBField('id');
+        if (!field_exists($table, $field)) {
+            // Field.
+            $field->setAttributes(XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL, null, null, null, 1, 'name');
+            add_field($table, $field);
+
+            // Update ids.
+            $institutions = get_records_array('institution');
+            $x = 1;
+            foreach ($institutions as $institution) {
+                execute_sql('UPDATE {institution} SET id = ? WHERE name = ?', array($x, $institution->name));
+                $x++;
+            }
+
+            $key = new XMLDBKey('inst_id_uk');
+            $key->setAttributes(XMLDB_KEY_UNIQUE, array('id'));
+            add_key($table, $key);
+
+            // Add sequence.
+            $field = new XMLDBField('id');
+            $field->setAttributes(XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+            change_field_type($table, $field);
+
+            // In postgres, keys and indexes are removed when a field is changed ("Add sequence" above), so add the key back.
+            if (is_postgres()) {
+                $key = new XMLDBKey('inst_id_uk');
+                $key->setAttributes(XMLDB_KEY_UNIQUE, array('id'));
+                add_key($table, $key);
+            }
+        }
+    }
+
+    if ($oldversion < 2014041401) {
         $table = new XMLDBTable('institution');
         $field = new XMLDBField('registerallowed');
         $field->setAttributes(XMLDB_TYPE_INTEGER, 1, null, XMLDB_NOTNULL, null, null, null, '0');
         change_field_default($table, $field);
     }
 
-    if ($oldversion < 2014032709) {
+    if ($oldversion < 2014041600) {
+        // Add allownonemethod and defaultmethod fields to activity_type table.
+        $table = new XMLDBTable('activity_type');
+
+        $field = new XMLDBField('allownonemethod');
+        $field->setAttributes(XMLDB_TYPE_CHAR, 255, null, XMLDB_NOTNULL, null, null, null, 1, 'delay');
+        add_field($table, $field);
+
+        $field = new XMLDBField('defaultmethod');
+        $field->setAttributes(XMLDB_TYPE_CHAR, 255, null, null, null, null, null, 'email', 'allownonemethod');
+        add_field($table, $field);
+
+        // Allow null method in usr_activity_preference.
+        // Null indicates "none", no record indicates "not yet set" so use the default.
+        $table = new XMLDBTable('usr_activity_preference');
+        $field = new XMLDBField('method');
+        $field->setAttributes(XMLDB_TYPE_CHAR, 255, null, null, null, null, null, null);
+        change_field_notnull($table, $field);
+    }
+
+    // Add about me block to existing profile template.
+    if ($oldversion < 2014043000) {
+        $systemprofileviewid = get_field('view', 'id', 'owner', 0, 'type', 'profile');
+
+        // Find out how many blocks already exist.
+        $maxorder = get_field_sql(
+                'select max("order") from {block_instance} where "view"=? and "row"=? and "column"=?',
+                array($systemprofileviewid, 1, 1)
+        );
+
+        // Create the block at the end of the cell.
+        require_once(get_config('docroot') . 'blocktype/lib.php');
+        $aboutme = new BlockInstance(0, array(
+            'blocktype'  => 'profileinfo',
+            'title'      => get_string('aboutme', 'blocktype.internal/profileinfo'),
+            'view'       => $systemprofileviewid,
+            'row'        => 1,
+            'column'     => 1,
+            'order'      => $maxorder + 1,
+        ));
+        $aboutme->commit();
+
+        // Move the block to the start of the cell.
+        require_once(get_config('libroot') . 'view.php');
+        $view = new View($systemprofileviewid);
+        $view->moveblockinstance(array('id' => $aboutme->get('id'), 'row' => 1, 'column' => 1, 'order' => 1));
+    }
+
+    if ($oldversion < 2014050901) {
+        require_once(get_config('docroot') . 'artefact/lib.php');
+
+        // First drop artefact_parent_cache table.
+        $table = new XMLDBTable('artefact_parent_cache');
+        drop_table($table, true);
+
+        // Remove cron jobs from DB.
+        delete_records('cron', 'callfunction', 'rebuild_artefact_parent_cache_dirty');
+        delete_records('cron', 'callfunction', 'rebuild_artefact_parent_cache_complete');
+
+        // Add path field to artefact table.
+        $table = new XMLDBTable('artefact');
+        $field = new XMLDBField('path');
+        $field->setAttributes(XMLDB_TYPE_CHAR, '1024', null, null, null, null, null);
+        add_field($table, $field);
+
+        // Fill the new field with path data.
+        $artefacts = get_records_array('artefact', '', '', '', 'id, parent');
+        $artefact_relations = get_records_menu('artefact', '', '', '', 'id, parent');
+        if ($artefacts && $artefact_relations) {
+            foreach ($artefacts as $artefact) {
+                $path = '/' . implode('/', artefact_get_lineage($artefact_relations, $artefact->id));
+                $todb = new stdClass();
+                $todb->id = $artefact->id;
+                $todb->path = $path;
+                update_record('artefact', $todb);
+            }
+        }
+    }
+
+    // Make objectionable independent of view_access page.
+    if ($oldversion < 2014060300) {
+        // Create 'objectionable' table.
+        $table = new XMLDBTable('objectionable');
+        $table->addFieldInfo('id', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->addFieldInfo('objecttype', XMLDB_TYPE_CHAR, 20, null, XMLDB_NOTNULL);
+        $table->addFieldInfo('objectid', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL);
+        $table->addFieldInfo('reportedby', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL);
+        $table->addFieldInfo('report', XMLDB_TYPE_TEXT, 'small', null, XMLDB_NOTNULL);
+        $table->addFieldInfo('reportedtime', XMLDB_TYPE_DATETIME, null, null, XMLDB_NOTNULL);
+        $table->addFieldInfo('resolvedby', XMLDB_TYPE_INTEGER, 10, null, null);
+        $table->addFieldInfo('resolvedtime', XMLDB_TYPE_DATETIME, null, null);
+        $table->addKeyInfo('primary', XMLDB_KEY_PRIMARY, array('id'));
+        $table->addKeyInfo('reporterfk', XMLDB_KEY_FOREIGN, array('reportedby'), 'usr', array('id'));
+        $table->addKeyInfo('resolverfk', XMLDB_KEY_FOREIGN, array('resolvedby'), 'usr', array('id'));
+        $table->addIndexInfo('objectix', XMLDB_INDEX_NOTUNIQUE, array('objectid', 'objecttype'));
+
+        create_table($table);
+
+        // Migrate data to a new format.
+        // Since we don't have report or name of the user, use root ID.
+        // Table 'notification_internal_activity' contains data that is
+        // not possible to extract in any reasonable way.
+        $objectionable = get_records_array('view_access', 'accesstype', 'objectionable');
+
+        db_begin();
+
+        if (!empty($objectionable)) {
+            foreach ($objectionable as $record) {
+                $todb = new stdClass();
+                $todb->objecttype = 'view';
+                $todb->objectid   = $record->view;
+                $todb->reportedby = 0;
+                $todb->report = '';
+                $todb->reportedtime = $record->ctime;
+                if (!empty($record->stopdate)) {
+                    // Since we can't get an ID of a user who resolved an issue, use root ID.
+                    $todb->resolvedby = 0;
+                    $todb->resolvedtime = $record->stopdate;
+                }
+                insert_record('objectionable', $todb);
+            }
+        }
+
+        // Delete data from 'view_access' table as we don't need it any more.
+        delete_records('view_access', 'accesstype', 'objectionable');
+
+        db_commit();
+
+        // Need to run this to avoid contraints problems on Postgres.
+        if (is_postgres()) {
+            execute_sql('ALTER TABLE {view_access} DROP CONSTRAINT {viewacce_acc_ck}');
+        }
+
+        // Update accesstype in 'view_access' not to use 'objectionable'.
+        $table = new XMLDBTable('view_access');
+        $field = new XMLDBField('accesstype');
+        $field->setAttributes(XMLDB_TYPE_CHAR, 16, null, null, null, XMLDB_ENUM, array('public', 'loggedin', 'friends'));
+        change_field_enum($table, $field);
+    }
+
+    if ($oldversion < 2014060500) {
+        // Add artefact_access table.
+        $table = new XMLDBTable('artefact_access');
+        $table->addFieldInfo('artefact', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL);
+        $table->addFieldInfo('accesstype', XMLDB_TYPE_CHAR, 16, null, null, null, XMLDB_ENUM, array('public', 'loggedin', 'friends'));
+        $table->addFieldInfo('group', XMLDB_TYPE_INTEGER, 10);
+        $table->addFieldInfo('usr', XMLDB_TYPE_INTEGER, 10);
+        $table->addFieldInfo('institution', XMLDB_TYPE_CHAR, 255);
+        $table->addFieldInfo('ctime', XMLDB_TYPE_DATETIME, null, null, XMLDB_NOTNULL);
+        $table->addKeyInfo('artefactfk', XMLDB_KEY_FOREIGN, array('artefact'), 'artefact', array('id'));
+        $table->addKeyInfo('groupfk', XMLDB_KEY_FOREIGN, array('group'), 'group', array('id'));
+        $table->addKeyInfo('usrfk', XMLDB_KEY_FOREIGN, array('usr'), 'usr', array('id'));
+        $table->addKeyInfo('institutionfk', XMLDB_KEY_FOREIGN, array('institution'), 'institution', array('name'));
+        $table->addIndexInfo('accesstypeix', XMLDB_INDEX_NOTUNIQUE, array('accesstype'));
+
+        create_table($table);
+    }
+
+    if ($oldversion < 2014061100) {
+        $table = new XMLDBTable('module_installed');
+        $table->addFieldInfo('name', XMLDB_TYPE_CHAR, 255, XMLDB_UNSIGNED, XMLDB_NOTNULL);
+        $table->addFieldInfo('version', XMLDB_TYPE_INTEGER, 10, XMLDB_UNSIGNED, XMLDB_NOTNULL);
+        $table->addFieldInfo('release', XMLDB_TYPE_TEXT, 'small', XMLDB_UNSIGNED, XMLDB_NOTNULL);
+        $table->addFieldInfo('active', XMLDB_TYPE_INTEGER,  1, XMLDB_UNSIGNED, XMLDB_NOTNULL, null, null, null, 1);
+        $table->addKeyInfo('primary', XMLDB_KEY_PRIMARY, array('name'));
+
+        create_table($table);
+
+        $table = new XMLDBTable('module_cron');
+        $table->addFieldInfo('plugin', XMLDB_TYPE_CHAR, 255, XMLDB_UNSIGNED, XMLDB_NOTNULL);
+        $table->addFieldInfo('callfunction', XMLDB_TYPE_CHAR, 255, XMLDB_UNSIGNED, XMLDB_NOTNULL);
+        $table->addFieldInfo('minute', XMLDB_TYPE_CHAR, 25, XMLDB_UNSIGNED, XMLDB_NOTNULL, null, null, null, '*');
+        $table->addFieldInfo('hour', XMLDB_TYPE_CHAR, 25, XMLDB_UNSIGNED, XMLDB_NOTNULL, null, null, null, '*');
+        $table->addFieldInfo('day', XMLDB_TYPE_CHAR, 25, XMLDB_UNSIGNED, XMLDB_NOTNULL, null, null, null, '*');
+        $table->addFieldInfo('dayofweek', XMLDB_TYPE_CHAR, 25, XMLDB_UNSIGNED, XMLDB_NOTNULL, null, null, null, '*');
+        $table->addFieldInfo('month', XMLDB_TYPE_CHAR, 25, XMLDB_UNSIGNED, XMLDB_NOTNULL, null, null, null, '*');
+        $table->addFieldInfo('nextrun', XMLDB_TYPE_DATETIME, null, null);
+        $table->addKeyInfo('primary', XMLDB_KEY_PRIMARY, array('plugin', 'callfunction'));
+        $table->addKeyInfo('pluginfk', XMLDB_KEY_FOREIGN, array('plugin'), 'module_installed', array('name'));
+
+        create_table($table);
+
+        $table = new XMLDBTable('module_config');
+        $table->addFieldInfo('plugin', XMLDB_TYPE_CHAR, 100, XMLDB_UNSIGNED, XMLDB_NOTNULL);
+        $table->addFieldInfo('field', XMLDB_TYPE_CHAR, 100, XMLDB_UNSIGNED, XMLDB_NOTNULL);
+        $table->addFieldInfo('value', XMLDB_TYPE_TEXT, 'small', XMLDB_UNSIGNED, XMLDB_NOTNULL);
+        $table->addKeyInfo('primary', XMLDB_KEY_PRIMARY, array('plugin', 'field'));
+        $table->addKeyInfo('pluginfk', XMLDB_KEY_FOREIGN, array('plugin'), 'module_installed', array('name'));
+
+        create_table($table);
+
+        $table = new XMLDBTable('module_event_subscription');
+        $table->addFieldInfo('id', XMLDB_TYPE_INTEGER, 10, XMLDB_UNSIGNED, XMLDB_NOTNULL, XMLDB_SEQUENCE, null, null, null);
+        $table->addFieldInfo('plugin', XMLDB_TYPE_CHAR, 255, XMLDB_UNSIGNED, XMLDB_NOTNULL);
+        $table->addFieldInfo('event', XMLDB_TYPE_CHAR, 50, XMLDB_UNSIGNED, XMLDB_NOTNULL);
+        $table->addFieldInfo('callfunction', XMLDB_TYPE_CHAR, 255, XMLDB_UNSIGNED, XMLDB_NOTNULL);
+        $table->addKeyInfo('primary', XMLDB_KEY_PRIMARY, array('id'));
+        $table->addKeyInfo('pluginfk', XMLDB_KEY_FOREIGN, array('plugin'), 'module_installed', array('name'));
+        $table->addKeyInfo('eventfk', XMLDB_KEY_FOREIGN, array('event'), 'event_type', array('name'));
+        $table->addKeyInfo('subscruk', XMLDB_KEY_UNIQUE, array('plugin', 'event', 'callfunction'));
+
+        create_table($table);
+    }
+
+    if ($oldversion < 2014062000) {
         $data = array('callfunction' => 'auth_clean_expired_password_requests',
                       'minute' => '5',
                       'hour' => '0',
@@ -3177,8 +3419,19 @@ function xmldb_core_upgrade($oldversion=0) {
         ensure_record_exists('cron', (object)$data, (object)$data);
     }
 
+    // Add feedbacknotify option to group table
+    if ($oldversion < 2014062500) {
+        require_once(get_config('libroot') . 'group.php');
+        $table = new XMLDBTable('group');
+        $field = new XMLDBField('feedbacknotify');
+        $field->setAttributes(XMLDB_TYPE_INTEGER, 1, null, XMLDB_NOTNULL, null, null, null, GROUP_ROLES_ALL);
+        if (!field_exists($table, $field)) {
+            add_field($table, $field);
+        }
+    }
+
     // Delete leftover data which are not associated to any institution
-    if ($oldversion < 2014032710) {
+    if ($oldversion < 2014073100) {
         // Institution collections
         $collectionids = get_column_sql('
             SELECT id
@@ -3210,6 +3463,290 @@ function xmldb_core_upgrade($oldversion=0) {
             DELETE FROM {usr_registration}
             WHERE {usr_registration}.institution IS NOT NULL
                 AND NOT EXISTS (SELECT 1 FROM {institution} i WHERE i.name = {usr_registration}.institution)');
+    }
+
+    if ($oldversion < 2014081900) {
+        if ($data = check_upgrades('blocktype.text')) {
+            upgrade_plugin($data);
+        }
+    }
+
+    if ($oldversion < 2014091600) {
+        $table = new XMLDBTable('view');
+        $field = new XMLDBField('anonymise');
+        $field->setAttributes(XMLDB_TYPE_INTEGER, 1, null, XMLDB_NOTNULL, null, null, null, 0);
+        add_field($table, $field);
+        set_config('allowanonymouspages', 0);
+    }
+
+    if ($oldversion < 2014091800) {
+        // Add allowarchives column to the group table
+        $table = new XMLDBTable('group');
+
+        $field = new XMLDBField('allowarchives');
+        $field->setAttributes(XMLDB_TYPE_INTEGER, 1, null, XMLDB_NOTNULL, null, null, null, 0);
+        add_field($table, $field);
+
+        // Add submittedstatus column to the view table
+        $table = new XMLDBTable('view');
+
+        $field = new XMLDBField('submittedstatus');
+        $field->setAttributes(XMLDB_TYPE_INTEGER, 1, null, XMLDB_NOTNULL, null, null, null, 0, 'submittedtime');
+        add_field($table, $field);
+
+        // Need to update the submitted status for any existing views that are submitted
+        execute_sql('UPDATE {view} SET submittedstatus = 1 WHERE submittedgroup IS NOT NULL
+                    AND submittedtime IS NOT NULL');
+
+        // Add submittedstatus column to the collection table
+        $table = new XMLDBTable('collection');
+
+        $field = new XMLDBField('submittedstatus');
+        $field->setAttributes(XMLDB_TYPE_INTEGER, 1, null, XMLDB_NOTNULL, null, null, null, 0, 'submittedtime');
+        add_field($table, $field);
+
+        // Need to update the submitted status for any existing collections that are submitted
+        execute_sql('UPDATE {collection} SET submittedstatus = 1 WHERE submittedgroup IS NOT NULL
+                    AND submittedtime IS NOT NULL');
+
+        // Add export queue table - each export is one row.
+        $table = new XMLDBTable('export_queue');
+        $table->addFieldInfo('id', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->addFieldInfo('usr', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL);
+        $table->addFieldInfo('type', XMLDB_TYPE_CHAR, 50);
+        $table->addFieldInfo('exporttype', XMLDB_TYPE_CHAR, 10, null, XMLDB_NOTNULL);
+        $table->addFieldInfo('ctime', XMLDB_TYPE_DATETIME, null, null, XMLDB_NOTNULL);
+        $table->addFieldInfo('starttime', XMLDB_TYPE_DATETIME);
+        $table->addFieldInfo('externalid', XMLDB_TYPE_CHAR, 255);
+        $table->addFieldInfo('submitter', XMLDB_TYPE_INTEGER, 10); // for when the submitter is not the owner
+
+        $table->addKeyInfo('primary', XMLDB_KEY_PRIMARY, array('id'));
+        $table->addKeyInfo('usrfk', XMLDB_KEY_FOREIGN, array('usr'), 'usr', array('id'));
+        $table->addKeyInfo('submitterfk', XMLDB_KEY_FOREIGN, array('submitter'), 'usr', array('id'));
+
+        create_table($table);
+
+        // Add export queue items table which maps what views/collections/artefacts relate to the queue item.
+        $table = new XMLDBTable('export_queue_items');
+        $table->addFieldInfo('id', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->addFieldInfo('exportqueueid', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL);
+        $table->addFieldInfo('collection', XMLDB_TYPE_INTEGER, 10);
+        $table->addFieldInfo('view', XMLDB_TYPE_INTEGER, 10);
+
+        $table->addKeyInfo('primary', XMLDB_KEY_PRIMARY, array('id'));
+        $table->addKeyInfo('exportqueuefk', XMLDB_KEY_FOREIGN, array('exportqueueid'), 'export_queue', array('id'));
+        $table->addKeyInfo('collectionfk', XMLDB_KEY_FOREIGN, array('collection'), 'collection', array('id'));
+        $table->addKeyInfo('viewfk', XMLDB_KEY_FOREIGN, array('view'), 'view', array('id'));
+
+        create_table($table);
+
+        // Add export archive table to hold info that will allow one to download the zip file
+        $table = new XMLDBTable('export_archive');
+        $table->addFieldInfo('id', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->addFieldInfo('usr', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL);
+        $table->addFieldInfo('filename', XMLDB_TYPE_CHAR, 255, null, XMLDB_NOTNULL);
+        $table->addFieldInfo('filetitle', XMLDB_TYPE_CHAR, 255, null, XMLDB_NOTNULL);
+        $table->addFieldInfo('filepath', XMLDB_TYPE_CHAR, 255, null, XMLDB_NOTNULL);
+        $table->addFieldInfo('submission', XMLDB_TYPE_INTEGER, 1, null, XMLDB_NOTNULL, null, null, null, 0);
+        $table->addFieldInfo('ctime', XMLDB_TYPE_DATETIME, null, null, XMLDB_NOTNULL);
+
+        $table->addKeyInfo('primary', XMLDB_KEY_PRIMARY, array('id'));
+        $table->addKeyInfo('usrfk', XMLDB_KEY_FOREIGN, array('usr'), 'usr', array('id'));
+
+        create_table($table);
+
+        // Add archived submissions table to hold submission info
+        $table = new XMLDBTable('archived_submissions');
+        $table->addFieldInfo('id', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+        $table->addFieldInfo('archiveid', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL);
+        $table->addFieldInfo('group', XMLDB_TYPE_INTEGER, 10);
+        $table->addFieldInfo('externalhost', XMLDB_TYPE_CHAR, 50);
+        $table->addFieldInfo('externalid', XMLDB_TYPE_CHAR, 255);
+
+        $table->addKeyInfo('primary', XMLDB_KEY_PRIMARY, array('id'));
+        $table->addKeyInfo('groupfk', XMLDB_KEY_FOREIGN, array('group'), 'group', array('id'));
+        $table->addKeyInfo('archivefk', XMLDB_KEY_FOREIGN, array('archiveid'), 'export_archive', array('id'));
+
+        create_table($table);
+
+        // install the cronjob to process export queue
+        $cron = new StdClass;
+        $cron->callfunction = 'export_process_queue';
+        $cron->minute = '*/6';
+        $cron->hour = '*';
+        $cron->day = '*';
+        $cron->month = '*';
+        $cron->dayofweek = '*';
+        ensure_record_exists('cron', $cron, $cron);
+
+        // install the cronjob to clean up deleted archived submissions items
+        $cron = new StdClass;
+        $cron->callfunction = 'submissions_delete_removed_archive';
+        $cron->minute = '15';
+        $cron->hour = '1';
+        $cron->day = '1';
+        $cron->month = '*';
+        $cron->dayofweek = '*';
+        ensure_record_exists('cron', $cron, $cron);
+    }
+
+    // Add the socialprofile artefacttype
+    if ($oldversion < 2014092300) {
+        // Need to insert directly into the table instead of running upgrade_plugin(), so that we can transition
+        // all the old social network artefact types into the new unified socialprofile type before deleting
+        // the old types from artefact_installed_type
+        insert_record('artefact_installed_type', (object)array('name'=>'socialprofile', 'plugin'=>'internal'));
+
+        // Convert existing messaging types to socialprofile types.
+        $oldmessagingfieldsarray = array('icqnumber', 'msnnumber', 'aimscreenname',
+                                         'yahoochat', 'skypeusername', 'jabberusername');
+        $oldmessagingfields = implode(',', array_map('db_quote', $oldmessagingfieldsarray));
+
+        $sql = "SELECT * FROM {artefact}
+                WHERE artefacttype IN (" . $oldmessagingfields . ")";
+        if ($results = get_records_sql_assoc($sql, array())) {
+            safe_require('artefact', 'internal');
+            foreach ($results as $result) {
+                $i = new ArtefactTypeSocialprofile($result->id, (array)$result);
+                $i->set('artefacttype', 'socialprofile');
+                switch ($result->artefacttype) {
+                    case 'aimscreenname':
+                        $i->set('note', 'aim');
+                        $i->set('description', get_string('aim', 'artefact.internal'));
+                        break;
+                    case 'icqnumber':
+                        $i->set('note', 'icq');
+                        $i->set('description', get_string('icq', 'artefact.internal'));
+                        break;
+                    case 'jabberusername':
+                        $i->set('note', 'jabber');
+                        $i->set('description', get_string('jabber', 'artefact.internal'));
+                        break;
+                    case 'msnnumber':
+                    case 'skypeusername':
+                        // MSN no longer exists and has been replaced by Skype.
+                        $i->set('note', 'skype');
+                        $i->set('description', get_string('skype', 'artefact.internal'));
+                        break;
+                    case 'yahoochat':
+                        $i->set('note', 'yahoo');
+                        $i->set('description', get_string('yahoo', 'artefact.internal'));
+                        break;
+                }
+                $i->set('title', $result->title);
+                $i->commit();
+            }
+        }
+
+        // Clean up elasticsearch fields for the old messaging fields - if elasticsearch is installed.
+        $sql = "SELECT value FROM {search_config} WHERE plugin='elasticsearch' AND field='artefacttypesmap'";
+        if ($result = get_field_sql($sql, array())) {
+            $artefacttypesmap_array = explode("\n", $result);
+            $elasticsearchartefacttypesmap = array();
+            foreach ($artefacttypesmap_array as $key => $value) {
+                $tmpkey = explode("|", $value);
+                if (count($tmpkey) == 3) {
+                    if (!in_array($tmpkey[0], $oldmessagingfieldsarray)) {
+                        // we're going to keep this one.
+                        $elasticsearchartefacttypesmap[] = $value;
+                    }
+                }
+            }
+            // add socialprofile field.
+            $elasticsearchartefacttypesmap[] = "socialprofile|Profile|Text";
+            // now save the data excluding the old messaging fields.
+            set_config_plugin('search', 'elasticsearch', 'artefacttypesmap', implode("\n", $elasticsearchartefacttypesmap));
+        }
+
+        // Delete unused, but still installed artefact types
+        delete_records_select("artefact_installed_type", "name IN (" . $oldmessagingfields . ")");
+
+        // Install the social profile blocktype so users can see their migrated data
+        if ($data = check_upgrades('blocktype.internal/socialprofile')) {
+            upgrade_plugin($data);
+        }
+    }
+
+    if ($oldversion < 2014092300) {
+        if ($data = check_upgrades('artefact.multirecipientnotification')) {
+            upgrade_plugin($data);
+        }
+    }
+
+    if ($oldversion < 2014092303) {
+        // Make sure the 'system messages' and 'messages from other users' have a notification method set
+        // It was possible after earlier upgrades to set method to 'none'.
+        // Also make sure old defaultmethod is respected.
+        $activitytypes = get_records_assoc('activity_type');
+        foreach ($activitytypes as $type) {
+            $type->defaultmethod = get_config('defaultnotificationmethod') ? get_config('defaultnotificationmethod') : 'email';
+            if ($type->name == 'maharamessage' || $type->name == 'usermessage') {
+                $type->allownonemethod = 0;
+            }
+            update_record('activity_type', $type);
+        }
+
+        // Make sure users have their 'system messages' and 'messages from other users' notification method set
+        if ($useractivities = get_records_sql_assoc("SELECT * FROM {activity_type} at, {usr_activity_preference} uap
+                                                     WHERE at.id = uap.activity
+                                                     AND at.name IN ('maharamessage', 'usermessage')
+                                                     AND (method IS NULL OR method = '')", array())) {
+            foreach ($useractivities as $activity) {
+                $userprefs = new stdClass();
+                $userprefs->method = $activity->defaultmethod;
+                update_record('usr_activity_preference', $userprefs, array('usr' => $activity->usr, 'activity' => $activity->activity));
+            }
+        }
+    }
+
+    // Unlock root user grouphomepage template in case it is locked
+    if ($oldversion < 2014092304) {
+        set_field('view', 'locked', 0, 'type', 'grouphomepage', 'owner', 0);
+    }
+
+    if ($oldversion < 2014092305) {
+        if ($fonts = get_records_assoc('skin_fonts', 'fonttype', 'google')) {
+            $fontpath = get_config('dataroot') . 'skins/fonts/';
+            foreach ($fonts as $font) {
+                // if google font is not already in subdir
+                if (!is_dir($fontpath . $font->name)) {
+                    if (file_exists($fontpath . $font->previewfont)) {
+                        // we need to create the subdir and move the file into it
+                        $newfontpath = $fontpath . $font->name . '/';
+                        check_dir_exists($newfontpath, true, true);
+                        rename ($fontpath . $font->previewfont, $newfontpath . $font->previewfont);
+                        // and move the license file if it exists also
+                        if (file_exists($fontpath . $font->licence)) {
+                            rename ($fontpath . $font->licence, $newfontpath . $font->licence);
+                        }
+                    }
+                    else {
+                        // the file is not there for some reason so we might as well delete the font from the db
+                        $result = delete_records('skin_fonts', 'name', $font->name);
+                        if ($result !== false) {
+                            // Check to see if the font is being used in a skin. If it is remove it from
+                            // the skin's viewskin data
+                            $skins = get_records_array('skin');
+                            if (is_array($skins)) {
+                                foreach ($skins as $skin) {
+                                    $options = unserialize($skin->viewskin);
+                                    foreach ($options as $key => $option) {
+                                        if (preg_match('/font_family/', $key) && $option == $font->name) {
+                                            require_once(get_config('docroot') . 'lib/skin.php');
+                                            $skinobj = new Skin($skin->id);
+                                            $viewskin = $skinobj->get('viewskin');
+                                            $viewskin[$key] = false;
+                                            $skinobj->set('viewskin', $viewskin);
+                                            $skinobj->commit();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     return $status;

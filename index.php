@@ -31,12 +31,20 @@ if ($USER->is_logged_in()) {
     require_once(get_config('libroot') . 'view.php');
     $view = $USER->get_view_by_type('dashboard');
 
-    $javascript = array('paginator');
+    $javascript = array('paginator', 'author');
     $blocktype_js = $view->get_all_blocktype_javascript();
     $javascript = array_merge($javascript, $blocktype_js['jsfiles']);
     $inlinejs = "addLoadEvent( function() {\n" . join("\n", $blocktype_js['initjs']) . "\n});";
     $stylesheets = array('<link rel="stylesheet" type="text/css" href="' . get_config('wwwroot') . 'theme/views.css?v=' . get_config('release'). '">');
     $stylesheets = array_merge($stylesheets, $view->get_all_blocktype_css());
+
+    // include slimbox2 js and css files, if it is enabled...
+    if (get_config_plugin('blocktype', 'gallery', 'useslimbox2')) {
+        $langdir = (get_string('thisdirection', 'langconfig') == 'rtl' ? '-rtl' : '');
+        $stylesheets = array_merge($stylesheets, array('<script type="text/javascript" src="' . get_config('wwwroot') . 'lib/slimbox2/js/slimbox2.js?v=' . get_config('release'). '"></script>',
+                                                       '<link rel="stylesheet" type="text/css" href="' . get_config('wwwroot') . 'lib/slimbox2/css/slimbox2' . $langdir . '.css?v=' . get_config('release'). '">'
+                                                       ));
+    }
 
     $viewcontent = $view->build_rows(); // Build content before initialising smarty in case pieform elements define headers.
     $smarty = smarty(

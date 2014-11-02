@@ -21,16 +21,17 @@
     var viewsLoading = null;
     var navBuffer = 660;
 
-    //Public Properties
-    // Whether the browser is IE7 - needed for some hacks
-    ViewManager.isIE8 = $.browser.msie && $.browser.version == 8.0;
-    ViewManager.isIE7 = $.browser.msie && $.browser.version == 7.0;
-    ViewManager.isIE6 = $.browser.msie && $.browser.version == 6.0;
+    // Public Properties
+    // Whether the browser is IE - needed for some hacks
     ViewManager.isOldIE = $.browser.msie && $.browser.version < 9.0;
     ViewManager.contentEditorWidth = 145;
-    // Whether the brower is iPhone, IPad or IPod
-    if (config['handheld_device'] || (navigator.userAgent.match(/iPhone/i)) || (navigator.userAgent.match(/iPod/i)) || (navigator.userAgent.match(/iPad/i))) {
-        ViewManager.isIE6 = true;
+    ViewManager.isMobile = config['handheld_device'] || (navigator.userAgent.match(/iPhone/i))
+                           || (navigator.userAgent.match(/iPod/i))
+                           || (navigator.userAgent.match(/iPad/i))
+                           || (navigator.platform.toLowerCase().indexOf("win") !== -1 && navigator.userAgent.toLowerCase().indexOf("touch") !== -1)
+                           || (navigator.platform.toLowerCase().indexOf("win") !== -1 && navigator.userAgent.indexOf("ARM") !== -1);
+    // Whether the brower is iPhone, IPad, IPod, Windows 8 Tablet or using Windows RT
+    if (ViewManager.isMobile) {
         ViewManager.contentEditorWidth = 175;
     }
     //Public Methods
@@ -50,13 +51,13 @@
         if (oldblock.length) {
             // doing it this way stop inline js in the
             // data.data.html breaking things
-            var temp = $('<div>' + data.data.html + '</div>');
+            var temp = $('<div>').append(data.data.html);
             // Append any inline js to data.data.javascript
-            for (i in temp) {
-                if (temp[i].nodeName === 'SCRIPT' && temp[i].src === '') {
-                    data.data.javascript += temp[i].innerHTML;
+            temp.find('*').each(function() {
+                if ($(this).prop('nodeName') === 'SCRIPT' && $(this).prop('src') === '') {
+                    data.data.javascript += $(this).prop('innerHTML');
                 }
-            }
+            });
             var newblock = temp.find('div.blockinstance');
 
             $('.blockinstance-header', newblock).mousedown(function() {
@@ -92,38 +93,7 @@
         viewThemeSelect = $('#viewtheme-select');
         viewsLoading = $('#views-loading');
 
-        if (!ViewManager.isIE6) {
-            // Hide 'new block here' buttons
-            $('#bottom-pane div.add-button').each(function() {
-                $(this).remove();
-            });
-
-            // Hide controls in each block instance that are not needed
-            $('#bottom-pane input.movebutton').each(function() {
-                $(this).remove();
-            });
-
-            // Remove radio buttons for moving block types into place
-            $('#content-editor input.blocktype-radio').each(function() {
-                if (ViewManager.isIE6 || ViewManager.isIE7 || ViewManager.isIE8) {
-                    $(this).hide();
-                }
-                else {
-                    $(this).get(0).type = 'hidden';
-                }
-            });
-
-            // Remove the a href links that are needed for when js is turned off
-            $('#accordion a.nonjs').each(function() {
-                $(this).hide();
-            });
-
-            // Display the divs that are needed when js is turned on
-            $('#accordion div.withjs').each(function() {
-                $(this).show();
-            });
-        }
-        else if (config['handheld_device'] || ViewManager.isIE6 || (navigator.userAgent.match(/iPhone/i)) || (navigator.userAgent.match(/iPod/i)) || (navigator.userAgent.match(/iPad/i))) {
+        if (ViewManager.isMobile) {
             // Unhide the radio button if the browser is iPhone, IPad or IPod
             $('#editcontent-sidebar').addClass('withradio');
             $('#page').addClass('withradio');
@@ -139,14 +109,39 @@
             $('#accordion *').css('zoom', '1');
             $('#main-column-container .tabswrap ul li a').css('float', 'left'); // fix li elements not floating left by floating anchors
         }
+        else {
+            // Hide 'new block here' buttons
+            $('#bottom-pane div.add-button').each(function() {
+                $(this).remove();
+            });
+
+            // Hide controls in each block instance that are not needed
+            $('#bottom-pane input.movebutton').each(function() {
+                $(this).remove();
+            });
+
+            // Hide radio buttons for moving block types into place
+            $('#content-editor input.blocktype-radio').each(function() {
+                $(this).hide();
+            });
+
+            // Remove the a href links that are needed for when js is turned off
+            $('#accordion a.nonjs').each(function() {
+                $(this).hide();
+            });
+
+            // Display the divs that are needed when js is turned on
+            $('#accordion div.withjs').each(function() {
+                $(this).show();
+            });
+        }
 
         $('#accordion').accordion({
-            clearStyle: true,
             icons: false,
-            autoHeight: false,
+            heightStyle: 'content',
             collapsible: true,
             active: false,
-            change: function(event, ui) {
+            activate: function(event, ui) {
                 var active = $(this).find('.ui-state-active');
                 if (active.length) {
                     var category = active.next('div');
@@ -163,7 +158,7 @@
                         makeNewBlocksDraggable();
                         showColumnBackgroundsOnSort();
                         // Unhide the radio button if the browser is iPhone, IPad or IPod
-                        if (config['handheld_device'] || ViewManager.isIE6 || (navigator.userAgent.match(/iPhone/i)) || (navigator.userAgent.match(/iPod/i)) || (navigator.userAgent.match(/iPad/i))) {
+                        if (ViewManager.isMobile) {
                             // Unhide the radio button if the browser is iPhone, IPad or IPod
                             $('#editcontent-sidebar').addClass('withradio');
                             $('#page').addClass('withradio');
@@ -222,17 +217,15 @@
         // Set equal column heights
         setTimeout(function() {
             //safari needs delay to load images
-            setEqualColumnHeights('.row', 40);
+            setEqualColumnHeights('#column-container > .row', 40);
         }, 150);
 
         showColumnBackgroundsOnSort();
 
         rewriteViewThemeSelector();
 
-        if (!ViewManager.isIE6) {
-            makeNewBlocksDraggable();
-            makeExistingBlocksSortable();
-        }
+        makeNewBlocksDraggable();
+        makeExistingBlocksSortable();
 
         $(viewsLoading).remove();
 
@@ -405,14 +398,6 @@
 
     function makeNewBlocksDraggable() {
         $('.blocktype-list div.blocktype').each(function() {
-            $(this).find('.blocktypelink').off('click keydown'); // remove old event handlers
-            $(this).find('.blocktypelink').on('click keydown', function(e) {
-                var keyCode = $.ui.keyCode;
-                // Add a block when click left button or press 'Space bar' or 'Enter' key
-                if (((e.type == 'click' && e.button == 0) || e.keyCode == keyCode.SPACE || e.keyCode == keyCode.ENTER) && ($('#addblock').is(':hidden'))) {
-                    startAddBlock($(this));
-                }
-            });
             $(this).draggable({
                 start: function(event, ui) {
                     showColumnBackgrounds();
@@ -433,9 +418,34 @@
                 },
                 appendTo: 'body'
             });
+
+            $(this).find('.blocktypelink').off('mouseup keydown'); // remove old event handlers
+            $(this).find('.blocktypelink').on('mouseup keydown', function(e) {
+                // Add a block when click left button or press 'Space bar' or 'Enter' key
+                if (isHit(e) && $('#addblock').is(':hidden')) {
+                    startAddBlock($(this));
+                }
+            });
         });
     }
 
+    /**
+     * Make sure the previous/next key tabbing will move within the dialog
+     */
+    function keytabbinginadialog(dialog, firstelement, lastelement) {
+        firstelement.keydown(function(e) {
+            if (e.keyCode === $j.ui.keyCode.TAB && e.shiftKey) {
+                lastelement.focus();
+                e.preventDefault();
+            }
+        });
+        lastelement.keydown(function(e) {
+            if (e.keyCode === $j.ui.keyCode.TAB && !e.shiftKey) {
+                firstelement.focus();
+                e.preventDefault();
+            }
+        });
+    }
     function startAddBlock(element) {
         var addblockdialog = $('#addblock').removeClass('hidden');
         addblockdialog.one('dialog.end', function(event, options) {
@@ -450,20 +460,11 @@
         computeColumnInputs(addblockdialog);
         setDialogPosition(addblockdialog);
 
-        if (document.addEventListener) {
-            addblockdialog.data('focuslocker', function(e) {
-                if (!addblockdialog[0].contains(e.target)) {
-                    e.stopPropagation();
-                    addblockdialog.find('.deletebutton').focus();
-                }
-            });
-            document.addEventListener('focus', addblockdialog.data('focuslocker'), true);
-        }
-
         $('body').append($('<div>').attr('id', 'overlay'));
 
-        var deletebutton = addblockdialog.find('.deletebutton');
-        deletebutton.focus();
+        addblockdialog.find('.deletebutton').focus();
+
+        keytabbinginadialog(addblockdialog, addblockdialog.find('.deletebutton'), addblockdialog.find('.cancel'));
     }
 
     function makeExistingBlocksSortable() {
@@ -491,12 +492,10 @@
             },
 
             update: function(event, ui) {
-                if (!ViewManager.isIE6) {
-                    $('.row .column-content').each(function() {
-                        $(this).css('min-height', '');
-                    });
-                    setEqualColumnHeights('.row', 40);
-                }
+                $('.row .column-content').each(function() {
+                    $(this).css('min-height', '');
+                });
+                setEqualColumnHeights('#column-container > .row', 40);
             },
 
             start: function(event, ui) {
@@ -519,10 +518,10 @@
         $(this).closest('.cellchooser').find('.active').removeClass('active');
         $(this).parent().addClass('active');
         var position = $(this).val().split('-');
-        var element = $('.row').eq(parseInt(position[0]) - 1).find('.column').eq(parseInt(position[1]) - 1);
+        var element = $('#column-container > .row').eq(parseInt(position[0]) - 1).find('.column').eq(parseInt(position[1]) - 1);
         var options = [get_string('blockordertop')];
         element.find('.column-content .blockinstance .blockinstance-header').each(function() {
-            options.push(get_string('blockorderafter', $(this).find('h2.title').text()));
+            options.push(get_string('blockorderafter', $(this).find('h2.title').html()));
         });
         var selectbox = $('#addblock_position');
         selectbox.html('<option>' + options.join('</option><option>') + '</option>');
@@ -611,10 +610,6 @@
                     currentTallest = $(this).height();
                 }
             });
-            // for ie6, set height since min-height isn't supported
-            if (ViewManager.isIE6) {
-                $(this).find('.column-content').css({'height': currentTallest});
-            }
             $(this).find('.column-content').css({'min-height': currentTallest});
         });
     }
@@ -709,11 +704,7 @@
                     $('.column-content').each(function() {
                         $(this).css('min-height', '');
                     });
-                    setEqualColumnHeights($('.row'), 50);
-                    if (ViewManager.isIE6) {
-                        // refresh the 'add block here' buttons
-                        ViewManager.displayPage(config['wwwroot'] + 'view/blocks.php?id=' + $('#viewid').val());
-                    }
+                    setEqualColumnHeights($('#column-container > .row'), 50);
                     button.removeAttr('disabled');
                 }, function() {
                     button.removeAttr('disabled');
@@ -751,8 +742,8 @@
             computeColumnInputs(addblockdialog);
             var prevcell = button.closest('.column-content');
             var order = prevcell.children().index(button.closest('.blockinstance'));
-            var row = $('.row').index(button.closest('.row'));
-            var column = button.closest('.row').children().index(button.closest('.column'));
+            var row = $('#column-container > .row').index(button.closest('#column-container > .row'));
+            var column = button.closest('#column-container > .row').children().index(button.closest('.column'));
             var radio = addblockdialog.find('.cellchooser').children().eq(row).find('input').eq(column);
             var changefunction = function() {
                 if (radio.prop('checked')) {
@@ -787,27 +778,17 @@
 
             setDialogPosition(addblockdialog);
 
-            if (document.addEventListener) {
-                addblockdialog.data('focuslocker', function(e) {
-                    if (!addblockdialog[0].contains(e.target)) {
-                        e.stopPropagation();
-                        addblockdialog.find('.deletebutton').focus();
-                    }
-                });
-                document.addEventListener('focus', addblockdialog.data('focuslocker'), true);
-            }
-
             $('body').append($('<div>').attr('id', 'overlay'));
 
-            var deletebutton = addblockdialog.find('.deletebutton');
-            deletebutton.focus();
+            addblockdialog.find('.deletebutton').focus();
+            keytabbinginadialog(addblockdialog, addblockdialog.find('.deletebutton'), addblockdialog.find('.cancel'));
         });
     }
 
     function computeColumnInputs(dialog) {
         var inputcontainer = dialog.find('#addblock_cellchooser_container td');
         var result = $('<div>').addClass('cellchooser');
-        $('.row').each(function(i) {
+        $('#column-container > .row').each(function(i) {
             var row = $('<div>');
             $(this).find('.column').each(function(j) {
                 var value = (i + 1) + '-' + (j + 1);
@@ -883,7 +864,7 @@
         if (typeof(arguments[0]) != 'undefined') {
             parentNode = arguments[0];
             // Make the top pane a dropzone for cancelling adding block types
-            if (!self.isIE6 && self.topPane) {
+            if (self.topPane) {
                 var count = 0;
                 new Droppable('top-pane', {
                     'onhover': function() {
@@ -897,17 +878,13 @@
             }
         }
         // Unhide the radio button if the browser is iPhone, IPad or IPod
-        else if (config['handheld_device'] || (navigator.userAgent.match(/iPhone/i)) || (navigator.userAgent.match(/iPod/i)) || (navigator.userAgent.match(/iPad/i)) && self.topPane) {
+        else if (ViewManager.isMobile && self.topPane) {
             forEach(getElementsByTagAndClassName('input', 'blocktype-radio', 'top-pane'), function(i) {
                     setNodeAttribute(i, 'style', 'display:inline');
                 });
-            // Remove radio buttons for moving block types into place
+            // Hide radio buttons for moving block types into place
             $('#top-pane input.blocktype-radio').each(function() {
-                //$(this).attr('type', 'hidden'); // not allowed in jquery
-                $(this).get(0).type = 'hidden'; // TODO need to test this across browsers
-                if (ViewManager.isIE7 || ViewManager.isIE6) {
-                    $(this).hide();
-                }
+                $(this).hide();
             });
         }
         else {
@@ -984,7 +961,7 @@
      */
     function checkColumnButtonDisabledState() {
         // For each row
-        $('.row').each(function() {
+        $('#column-container > .row').each(function() {
 
             // Get the existing number of columns
             var match = $('div.column:first', $(this)).attr('class').match(/columns([0-9]+)/)[1];
@@ -1012,6 +989,12 @@
         });
     }
 
+    /**
+     * return true if the mousedown is <LEFT BUTTON> or the keydown is <Space> or <Enter>
+     */
+    function isHit(e) {
+        return (e.which === 1 || e.button === 1 || e.keyCode === $j.ui.keyCode.SPACE || e.keyCode === $j.ui.keyCode.ENTER);
+    }
     /*
      * Initialises the dialog used to add and move blocks
      */
@@ -1019,8 +1002,14 @@
         $('body').append($('#addblock'));
         $('#addblock').css('width', 500);
 
-        $('#addblock .submit').on('click keydown', function(e) {
-            if (e.type == 'click' || e.keyCode == 13 || e.keyCode == 32) {
+        $('#addblock .cancel, #addblock .deletebutton').on('mousedown keydown', function(e) {
+            if (isHit(e)) {
+                closePositionBlockDialog(e, {'saved': false});
+            }
+        });
+
+        $('#addblock .submit').on('mousedown keydown', function(e) {
+            if (isHit(e)) {
                 var position = $('#addblock .cellchooser input:checked').val().split('-');
                 var order = $('#addblock_position').prop('selectedIndex') + 1;
                 closePositionBlockDialog(e, {
@@ -1029,15 +1018,15 @@
                 });
             }
         });
-
-        $('#addblock .cancel, #addblock .deletebutton').on('click keydown', function(e) {
-            // Stops various errors with click event being run on focus
-            if ((e.type == 'click' && e.buttons < 1) || e.keyCode == 32) {
-                e.stopPropagation();
-                e.preventDefault();
-            }
-            else if (e.type == 'click' || e.keyCode == 13) {
-                closePositionBlockDialog(e, {'saved': false});
+        // To allow for pushing enter button when on selecting the 'cell' column line
+        $('#addblock').on('keydown', function(e) {
+            if (e.keyCode == 13) {
+                var position = $('#addblock .cellchooser input:checked').val().split('-');
+                var order = $('#addblock_position').prop('selectedIndex') + 1;
+                closePositionBlockDialog(e, {
+                    'saved': true,
+                    'row': position[0], 'column': position[1], 'order': order
+                });
             }
         });
     }
@@ -1049,10 +1038,6 @@
         e.stopPropagation();
         e.preventDefault();
         var addblockdialog = $('#addblock');
-        if (addblockdialog.data('focuslocker')) {
-            document.removeEventListener('focus', addblockdialog.data('focuslocker'));
-            addblockdialog.removeData('focuslocker');
-        }
         options.trigger = e.type;
         addblockdialog.addClass('hidden').trigger('dialog.end', options);
         $('#overlay').remove();
@@ -1121,7 +1106,7 @@
         rewriteAddColumnButtons('#row_' + rowid + '_column_' + colid);
         rewriteRemoveColumnButtons('#row_' + rowid + '_column_' + colid);
         makeExistingBlocksSortable(); //('#row_' + rowid);
-        setEqualColumnHeights('.row', 40);
+        setEqualColumnHeights('#column-container > .row', 40);
     }
 
     /**
@@ -1196,13 +1181,9 @@
                     currentTallest = $(this).height();
                 }
             });
-            // for ie6, set height since min-height isn't supported
-            if (ViewManager.isIE6) {
-                $(this).find('.column-content').css({'height': currentTallest});
-            }
             $(this).find('.column-content').css({'min-height': currentTallest});
         });
-        setEqualColumnHeights('.row', 40);
+        setEqualColumnHeights('#column-container > .row', 40);
     }
 
     function getConfigureForm(blockinstance) {
@@ -1263,8 +1244,8 @@
     }
 
     function showMediaPlayers() {
-        if (!config['handheld_device'] && tinyMCE && tinyMCE.activeEditor && tinyMCE.activeEditor.editorId) {
-            tinyMCE.execCommand('mceRemoveControl', false, tinyMCE.activeEditor.editorId);
+        if (!config['handheld_device'] && tinyMCE && tinyMCE.activeEditor && tinyMCE.activeEditor.id) {
+            tinyMCE.execCommand('mceRemoveEditor', false, tinyMCE.activeEditor.id);
         }
         $('#column-container .mediaplayer-container').each(function() {
             $(this).css({'height': ''});
@@ -1343,19 +1324,10 @@
             eval(configblock.javascript);
         })(getElement);
 
-        deletebutton.focus();
-
         // Lock focus to the newly opened dialog
+        newblock.find('.deletebutton').focus();
+        keytabbinginadialog(newblock, newblock.find('.deletebutton'), newblock.find('.cancel'));
         $('#container').attr('aria-hidden', 'true');
-        if (document.addEventListener) {
-            newblock.data('focuslocker', function(e) {
-                if (!newblock[0].contains(e.target) && newblock[0].ownerDocument == e.target.ownerDocument) {
-                    e.stopPropagation();
-                    newblock.find('.deletebutton').focus();
-                }
-            });
-            document.addEventListener('focus', newblock.data('focuslocker'), true);
-        }
     } // end of addConfigureBlock()
 
     function removeConfigureBlocks() {
@@ -1363,10 +1335,6 @@
         setTimeout(function() {
             $('div.configure').each( function() {
                 $(this).addClass('hidden');
-                if ($(this).data('focuslocker')) {
-                    document.removeEventListener('focus', $(this).data('focuslocker'));
-                    $(this).removeData('focuslocker');
-                }
             });
         }, 1);
     }
@@ -1390,7 +1358,7 @@
         }
 
         var h = Math.max(d.h, 200);
-        var w = Math.max(d.w, 500);
+        var w = Math.max(d.w, 625);
         if (config.blockeditormaxwidth && block.find('textarea.wysiwyg').length) {
             w = vpdim.w - 80;
             style.height = h + 'px';
@@ -1506,9 +1474,6 @@ function blockConfigSuccess(form, data) {
         eval(data.formelementsuccess + '(form, data)');
     }
     if (data.blockid) {
-        if (ViewManager.isIE6 && data.viewid) {
-            document.location.href = config['wwwroot'] + 'view/blocks.php?id=' + data.viewid;
-        }
         ViewManager.replaceConfigureBlock(data);
     }
     if (data.otherblocks) {
@@ -1528,7 +1493,7 @@ function blockConfigError(form, data) {
 
 function updateBlockConfigWidth(configblock, width) {
     var vpdim = getViewportDimensions();
-    var w = Math.max(width, 500);
+    var w = Math.max(width, 625);
     var style = {
         'position': 'absolute',
         'z-index': 1

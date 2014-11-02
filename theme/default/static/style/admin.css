@@ -7,7 +7,6 @@
 
  * This file is distributed under the same terms as Mahara itself
  */
-
 /* Admin home > Overview */
 .admin-warning-box h3 {
     color: #333333;
@@ -22,28 +21,29 @@
     background-color: #fafbf7;
 }
 #menuitemlist #rownew td {
-	background-color: #f4f7f9;
+    background-color: #f4f7f9;
 }
 #menuitemlist tr.edit td {
     background-color: #f3f7ec;
 }
 /* Users > Site staff */
 .userlistform {
-	background-color: #EBF0F4;
+    background-color: #EBF0F4;
 }
 /* Users > Add user */
 #adduser .step1 {
-	background: #fafbf7;
+    background: #fafbf7;
 }
 #adduser .step2 {
-	background: #fafbf7;
+    background: #fafbf7;
 }
 #adduser .step3 {
-	background: #F3F7EC;
+    background: #F3F7EC;
 }
 #adduser table table label {
-	color: #333333;
+    color: #333333;
 }
+
 /******************** Responsive design ********************/
 /* for 950px or less */
 @media screen and (max-width: 950px) {
@@ -59,15 +59,19 @@
         float: none;
         width: 98%;
     }
+    .statistics-subpage-full-column {
+        margin-left: 0;
+    }
     /* Users > Add user */
     #adduser table th,
-    #adduser table td {
+     #adduser table td {
         float: none;
         width: 98%;
         padding: 3px 0.9%;
         display: block;
     }
 }
+
 /* for 800px or less */
 @media screen and (max-width: 800px) {
     /* Users > User search > Username account settings */
@@ -87,6 +91,7 @@
         margin: 0 0 10px 0;
     }
 }
+
 /* for 760px or less */
 @media screen and (max-width: 760px) {
     /* Users > Add user */
@@ -115,6 +120,7 @@
         display: block;
     }
 }
+
 /* for 660px or less */
 @media screen and (max-width: 660px) {
     /* Configure site > Fonts */
@@ -125,6 +131,23 @@
     }
     #fontlist ul.actionlist {
         width: 100%;
+    }
+    /* Configure site > Cookie consent */
+    #cookieconsent th,
+     #cookieconsent td {
+        float: left;
+        width: 98%;
+        padding: 3px 0.9%;
+        display: block;
+    }
+    #cookieconsent tr#cookieconsent_enabled_container th {
+        width: auto;
+        display: inline-block;
+        padding-top: 7px;
+    }
+    #cookieconsent tr#cookieconsent_enabled_container td {
+        width: auto;
+        display: inline-block;
     }
     /* Users > Suspended and expired users */
     form#usertype {
@@ -137,6 +160,7 @@
         margin: 0 8px 5px 0;
     }
 }
+
 /* for 650px or less */
 @media screen and (max-width: 650px) {
     /* Admin home > Site statistics */
@@ -147,31 +171,32 @@
         margin: 0;
     }
     .site-stats-left,
-    .site-stats-right {
+     .site-stats-right {
         width: 100%;
         padding: 0 0 10px 0;
         margin: 0;
         float: none;
     }
     #site-stats-graph,
-    .statistics-subpage-left-column {
+     .statistics-subpage-left-column {
         text-align: center;
     }
     #site-stats-graph img {
         width: auto;
     }
     .statistics-subpage-left-column h3,
-    .statistics-subpage-left-column ul {
+     .statistics-subpage-left-column ul {
         text-align: left;
     }
 }
+
 /* for 600px or less */
 @media screen and (max-width: 600px) {
     /* selects */
     #institution_authplugin_container select#dummySelect,
-    select#edituser_site_authinstance,
-    select#edituser_institution_addinstitution,
-    select#uploadcsv_authinstance {
+     select#edituser_site_authinstance,
+     select#edituser_institution_addinstitution,
+     select#uploadcsv_authinstance {
         max-width: 65%;
     }
     /* tables (overriding the responsive rule for data tables) */
@@ -189,7 +214,7 @@
     }
     /* Configure site > Menu */
     #menuitemlist input#namenew,
-    #menuitemlist input#linkedtonew {
+     #menuitemlist input#linkedtonew {
         width: 98%;
     }
     /* Users > User search > Username account settings */
@@ -204,10 +229,13 @@
         width: 50px;
     }
 }
+
 /* for 540px or less  */
 @media screen and (max-width: 540px) {
     /* Admin home > Overview */
-    #register-site,  #site-stats,  #close-site {
+    #register-site,
+    #site-stats,
+    #close-site {
         width: 94%;
         float: none;
         padding: 3% 3%;
@@ -239,7 +267,7 @@
         font-size: 1.333em;
     }
     #firstnamelist,
-    #lastnamelist {
+     #lastnamelist {
         margin-bottom: 10px;
     }
     /* Extensions > Plugin administration */

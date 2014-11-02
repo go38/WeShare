@@ -126,7 +126,7 @@ $elements['viewskin'] = array(
                 ),
                 'viewskin_access' => array(
                         'type' => 'select',
-                        'title' => get_string('skinaccessibility', 'skin'),
+                        'title' => get_string('skinaccessibility1', 'skin'),
                         'defaultvalue' => (!empty($skintype) ? $skintype : null),
                         'options' => $accessoptions,
                 ),
@@ -538,7 +538,7 @@ $elements['viewadvanced'] = array(
         'elements'     => array(
                 'view_custom_css' => array(
                         'type' => 'textarea',
-                        'rows' => 10,
+                        'rows' => 7,
                         'cols' => 50,
                         'style' => 'font-family:monospace',
                         'resizable' => true,
@@ -659,7 +659,7 @@ function designskinform_submit(Pieform $form, $values) {
     $skin['view_button_normal_color'] = $values['view_button_normal_color'];
     $skin['view_button_hover_color'] = $values['view_button_hover_color'];
     $skin['view_button_text_color'] = $values['view_button_text_color'];
-    $skin['view_custom_css'] = clean_css($values['view_custom_css']);
+    $skin['view_custom_css'] = clean_css($values['view_custom_css'], $preserve_css=true);
 
     $viewskin = array();
     $viewskin['id'] = $values['id'];

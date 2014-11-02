@@ -47,10 +47,11 @@ else {
     $smarty->assign('upgradeheading', get_string('performingupgrades', 'admin'));
 }
 
-if (empty($upgrades['disablelogin'])) {
+if (empty($upgrades['settings']['disablelogin'])) {
     auth_setup();
 }
-unset($upgrades['disablelogin']);
+// Remove the "settings" component, which is not a real component (see check_upgrades())
+unset($upgrades['settings']);
 
 if (!$upgrades) {
     die_info(get_string('noupgrades', 'admin'));
@@ -128,7 +129,12 @@ if (!empty($upgrades['core']->install)) {
     $upgrades['lastcoredata'] = true;
     $upgrades['localpostinst'] = true;
     $smarty->assign('install', true);
-}                   
+}
+foreach ($upgrades as $key => $upgrade) {
+    if (isset($upgrade->newinstall)) {
+        unset($upgrades[$key]);
+    }
+}
 
 $js = <<< EOJS
             function processNext() {
@@ -147,11 +153,13 @@ $js = <<< EOJS
                         var message;
                         if (data.coredata) {
                             message = {$coresuccess};
-                        } 
+                            $(data.key).innerHTML = '<img src="{$successicon}" alt=":)" />  ' + message;
+                        }
                         else if (data.localdata) {
                             message = {$localsuccess};
+                            $(data.key).innerHTML = '<img src="{$successicon}" alt=":)" />  ' + message;
                         }
-                        else {
+                        else if (data.install || data.upgrade) {
                             if (data.install) {
                                 message = {$installsuccessstring};
                             }
@@ -164,8 +172,12 @@ $js = <<< EOJS
                                 }
                             }
                             message += data.newversion ? data.newversion : '';
+                            $(data.key).innerHTML = '<img src="{$successicon}" alt=":)" />  ' + message;
                         }
-                        $(data.key).innerHTML = '<img src="{$successicon}" alt=":)" />  ' + message;
+                        else {
+                            message = data.message;
+                            $(data.key).innerHTML = '<img src="{$failureicon}" alt=":(" /> ' + message;
+                        }
                         if (data.feedback) {
                             var feedback_element = DIV();
                             feedback_element.innerHTML = data.feedback;
@@ -177,13 +189,13 @@ $js = <<< EOJS
                         var message = '';
                         if (data.errormessage) {
                             message = data.errormessage;
-                        } 
+                        }
                         else {
                             message = {$failurestring};
                         }
                         $(data.key).innerHTML = '<img src="{$failureicon}" alt=":(" /> ' + message;
                     }
-                }, 
+                },
                 function () {
                     $(element).innerHTML = '<img src="{$failureicon}" alt=":(" /> ' + {$failurestring};
                 },

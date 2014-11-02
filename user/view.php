@@ -10,7 +10,7 @@
  */
 define('INTERNAL', 1);
 define('PUBLIC', 1);
-// Technically these are lies, but we set them like this to hook in the right 
+// Technically these are lies, but we set them like this to hook in the right
 // plugin stylesheet. This file should be provided by artefact/internal anyway.
 define('SECTION_PLUGINTYPE', 'artefact');
 define('SECTION_PLUGINNAME', 'internal');
@@ -105,6 +105,13 @@ if ($viewtheme && $THEME->basename != $viewtheme) {
 }
 $stylesheets = array('<link rel="stylesheet" type="text/css" href="' . get_config('wwwroot') . 'theme/views.css?v=' . get_config('release'). '">');
 $stylesheets = array_merge($stylesheets, $view->get_all_blocktype_css());
+// include slimbox2 js and css files, if it is enabled...
+if (get_config_plugin('blocktype', 'gallery', 'useslimbox2')) {
+    $langdir = (get_string('thisdirection', 'langconfig') == 'rtl' ? '-rtl' : '');
+    $stylesheets = array_merge($stylesheets, array('<script type="text/javascript" src="' . get_config('wwwroot') . 'lib/slimbox2/js/slimbox2.js?v=' . get_config('release'). '"></script>',
+                     '<link rel="stylesheet" type="text/css" href="' . get_config('wwwroot') . 'lib/slimbox2/css/slimbox2' . $langdir . '.css?v=' . get_config('release'). '">'
+                     ));
+}
 
 $name = display_name($user);
 define('TITLE', $name);
@@ -223,7 +230,7 @@ if (!empty($loggedinid) && $loggedinid != $userid) {
                     ),
                     'member' => array(
                         'type'  => 'hidden',
-                        'value' => $userid, 
+                        'value' => $userid,
                     ),
                     'submit' => array(
                         'type'  => 'submit',
@@ -232,7 +239,7 @@ if (!empty($loggedinid) && $loggedinid != $userid) {
                 ),
             ));
             $grouprequestedlistform = $addform;
-        } 
+        }
     }
 
     if ($is_friend) {

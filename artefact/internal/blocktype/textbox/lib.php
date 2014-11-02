@@ -14,7 +14,7 @@ defined('INTERNAL') || die();
 class PluginBlocktypeTextbox extends PluginBlocktype {
 
     public static function get_title() {
-        return get_string('title', 'blocktype.internal/textbox');
+        return get_string('title1', 'blocktype.internal/textbox');
     }
 
     public static function get_description() {
@@ -45,13 +45,12 @@ class PluginBlocktypeTextbox extends PluginBlocktype {
 
             $attachments = $artefact->get_attachments();
             if ($attachments) {
-                $artefact->add_to_render_path($options);
                 require_once(get_config('docroot') . 'artefact/lib.php');
                 foreach ($attachments as &$attachment) {
                     $f = artefact_instance_from_id($attachment->id);
                     $attachment->size = $f->describe_size();
                     $attachment->iconpath = $f->get_icon(array('id' => $attachment->id, 'viewid' => isset($options['viewid']) ? $options['viewid'] : 0));
-                    $attachment->viewpath = get_config('wwwroot') . 'view/artefact.php?artefact=' . $attachment->id . '&view=' . (isset($viewid) ? $viewid : 0);
+                    $attachment->viewpath = get_config('wwwroot') . 'artefact/artefact.php?artefact=' . $attachment->id . '&view=' . (isset($viewid) ? $viewid : 0);
                     $attachment->downloadpath = get_config('wwwroot') . 'artefact/file/download.php?file=' . $attachment->id;
                     if (isset($viewid)) {
                         $attachment->downloadpath .= '&view=' . $viewid;
@@ -64,7 +63,7 @@ class PluginBlocktypeTextbox extends PluginBlocktype {
             if ($artefact->get('allowcomments')) {
                 $commentcount = ArtefactTypeComment::count_comments(null, array($configdata['artefactid']));
                 $commentcount = isset($commentcount[$configdata['artefactid']]) ? $commentcount[$configdata['artefactid']]->comments : 0;
-                $artefacturl = get_config('wwwroot') . 'view/artefact.php?view=' . $viewid . '&artefact=' . $configdata['artefactid'];
+                $artefacturl = get_config('wwwroot') . 'artefact/artefact.php?view=' . $viewid . '&artefact=' . $configdata['artefactid'];
                 $smarty->assign('artefacturl', $artefacturl);
                 $smarty->assign('commentcount', $commentcount);
             }
@@ -132,7 +131,9 @@ class PluginBlocktypeTextbox extends PluginBlocktype {
         return <<<EOF
 function updateTextContent(a) {
     setNodeAttribute('instconf_title', 'value', a.title);
-    tinyMCE.activeEditor.setContent(a.description);
+    if (typeof(tinyMCE) != 'undefined') {
+        tinyMCE.activeEditor.setContent(a.description);
+    }
     setNodeAttribute('instconf_license', 'value', a.license);
     setNodeAttribute('instconf_licensor', 'value', a.licensor);
     setNodeAttribute('instconf_licensorurl', 'value', a.licensorurl);
@@ -263,6 +264,10 @@ if (jQuery('#instconf_license').length) {
 if (jQuery('#instconf_license_advanced_fieldset').length) {
     removeElementClass(getFirstElementByTagAndClassName('fieldset', null, 'instconf_license_advanced_fieldset'), 'hidden');
 }
+if (jQuery('#instconf_artefactids_upload_browse')) {
+    addElementClass('instconf_artefactids_upload_browse', 'hidden');
+    removeElementClass('instconf_artefactids_open_upload_browse_container', 'hidden');
+}
 EOF;
     }
 
@@ -364,13 +369,13 @@ EOF;
                 'type'  => 'html',
                 'class' => 'nojs-hidden-block',
                 'value' => '<a id="chooseartefactlink" href="">'
-                    . get_string('usecontentfromanothertextbox', 'blocktype.internal/textbox') . '</a>',
+                    . get_string('usecontentfromanothertextbox1', 'blocktype.internal/textbox') . '</a>',
             ),
             'managenotes' => array(
                 'type'  => 'html',
                 'class' => 'right hidden',
                 'value' => '<a href="' . $manageurl . '" target="_blank">'
-                    . get_string('managealltextboxcontent', 'blocktype.internal/textbox') . ' &raquo;</a>',
+                    . get_string('managealltextboxcontent1', 'blocktype.internal/textbox') . ' &raquo;</a>',
             ),
             'artefactid' => self::artefactchooser_element(isset($artefactid) ? $artefactid : null),
             'license' => license_form_el_basic(isset($artefact) ? $artefact : null),
@@ -381,6 +386,11 @@ EOF;
                 'width' => '100%',
                 'title' => get_string('license'),
                 'value' => '<div id="instconf_licensereadonly_display">' . (isset($artefact) ? render_license($artefact) : get_string('licensenone')) . '</div>',
+            ),
+            'allowcomments' => array(
+                'type'         => 'checkbox',
+                'title'        => get_string('allowcomments', 'artefact.comment'),
+                'defaultvalue' => (!empty($artefact) ? $artefact->get('allowcomments') : 1),
             ),
             'tags' => array(
                 'type' => 'tags',
@@ -436,6 +446,7 @@ EOF;
                 $artefact->set('licensor', $values['licensor']);
                 $artefact->set('licensorurl', $values['licensorurl']);
             }
+            $artefact->set('allowcomments', (!empty($values['allowcomments']) ? $values['allowcomments'] : 0));
             $artefact->set('tags', $values['tags']);
         }
         else {
@@ -462,6 +473,7 @@ EOF;
                     $artefact->set('licensorurl', $values['licensorurl']);
                 }
                 $artefact->set('tags', $values['tags']);
+                $artefact->set('allowcomments', !empty($values['allowcomments']) ? 1 : 0);
             }
         }
 
@@ -506,6 +518,7 @@ EOF;
         unset($values['makecopy']);
         unset($values['chooseartefact']);
         unset($values['managenotes']);
+        unset($values['allowcomments']);
 
         // Pass back a list of any other blocks that need to be rendered
         // due to this change.
@@ -523,6 +536,7 @@ EOF;
         $element['title'] = get_string('attachments', 'artefact.blog');
         $element['name'] = 'artefactids';
         $element['config']['selectone'] = false;
+        $element['config']['alwaysopen'] = false;
         return $element;
     }
 

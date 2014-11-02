@@ -66,6 +66,7 @@ if (!$records) {
 }
 
 $tokens = array();
+$js = '';
 
 for ($i = 0; $i < count($records); $i++) {
     $r =& $records[$i];
@@ -138,6 +139,29 @@ for ($i = 0; $i < count($records); $i++) {
             ),
         )),
     );
+}
+
+// Only add the call if there is any zclip setup to be done.
+$count = count($records);
+if ($count) {
+    $js = <<<EOF
+\$j(document).ready(function() {
+        for (i = 0; i < {$count}; i++) {
+            var element = document.getElementById("copytoclipboard-" + i);
+            try {
+                var client = new ZeroClipboard(element);
+                client.on("error", function(e) {
+                    var element = document.getElementById("copytoclipboard-" + e.client.id);
+                    \$j(element).hide();
+                });
+            }
+            catch(err) {
+                \$j(element).hide();
+            }
+        }
+});
+
+EOF;
 }
 
 function editurl_validate(Pieform $form, $values) {
@@ -220,17 +244,11 @@ function newurl_submit(Pieform $form, $values) {
     $viewid = $view->get('id');
 
     if ($collection) {
-        $viewids = get_column('collection_view', 'view', 'collection', $collection->get('id'));
+        $collection->new_token();
+        $viewid = reset($collection->get_viewids());
     }
     else {
-        $viewids = array($viewid);
-    }
-
-    $access = View::new_token($viewids[0]);
-    for ($i = 1; $i < count($viewids); $i++) {
-        $access->view  = $viewids[$i];
-        $access->ctime = db_format_timestamp(time());
-        insert_record('view_access', $access);
+        View::new_token($viewid);
     }
 
     redirect('/view/urls.php?id=' . $viewid);
@@ -250,7 +268,7 @@ else {
 }
 $newform = $allownew ? pieform($newform) : null;
 
-$js = <<<EOF
+$js .= <<<EOF
 \$j(function() {
     \$j('.url-open-editform').click(function(e) {
         e.preventDefault();
@@ -260,7 +278,7 @@ $js = <<<EOF
 EOF;
 
 $smarty = smarty(
-    array(),
+    array('js/zeroclipboard/ZeroClipboard.min.js'),
     array(),
     array(),
     array('sidebars' => false)

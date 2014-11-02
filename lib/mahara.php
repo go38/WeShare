@@ -11,7 +11,7 @@
 
 defined('INTERNAL') || die();
 
-/** 
+/**
  * work around silly php settings
  * and broken setup stuff about the install
  * and raise a warning/fail depending on severity
@@ -162,7 +162,7 @@ function ensure_sanity() {
 }
 
 /**
- * Check sanity of things that we only check at installation time - not on 
+ * Check sanity of things that we only check at installation time - not on
  * every request, like ensure_sanity() does
  */
 function ensure_install_sanity() {
@@ -211,7 +211,7 @@ function upgrade_mahara($upgrades) {
     }
     uksort($upgrades, 'sort_upgrades');
     foreach ($upgrades as $name => $data) {
-        if ($name == 'disablelogin') {
+        if ($name == 'settings') {
             continue;
         }
         if ($install) {
@@ -279,7 +279,7 @@ function get_string($identifier, $section='mahara') {
     else {
         $variables = array();
     }
-    
+
     return get_string_location($identifier, $section, $variables);
 }
 
@@ -294,7 +294,7 @@ function get_string_from_language($lang, $identifier, $section='mahara') {
     else {
         $variables = array();
     }
-    
+
     return get_string_location($identifier, $section, $variables, 'format_langstring', $lang);
 }
 
@@ -317,7 +317,7 @@ function get_helpfile_location($plugintype, $pluginname, $form, $element, $page=
         }
         else {
             $subdir .= 'pages/' . $pluginname . '/' . join('/', $pagebits) . '/';
-        } 
+        }
     }
     else if ($section) {
         $subdir .= 'sections/';
@@ -463,16 +463,17 @@ function get_string_location($identifier, $section, $variables, $replacefunc='fo
     // Define the locations of language strings for this section
     $langstringroot = get_language_root($lang);
     $langdirectory  = ''; // The directory in which the language file for this string should ideally reside, if the language has implemented it
-    
+
     if (false === strpos($section, '.')) {
         $langdirectory = 'lang/';
     }
     else {
-        $extras = plugin_types(); // more later..
+        $extras = plugin_types();
+        $extras[] = 'theme'; // Allow themes to have lang files the same as plugins
         foreach ($extras as $tocheck) {
             if (strpos($section, $tocheck . '.') === 0) {
                 $pluginname = substr($section ,strlen($tocheck) + 1);
-                if ($tocheck == 'blocktype' && 
+                if ($tocheck == 'blocktype' &&
                     strpos($pluginname, '/') !== false) { // it belongs to an artefact plugin
                     $bits = explode('/', $pluginname);
                     $langdirectory = 'artefact/' . $bits[0] . '/blocktype/' . $bits[1] . '/lang/';
@@ -622,7 +623,7 @@ function language_get_searchpaths() {
 /**
  * Get the directory in which the specified language pack resides.
  *
- * Defaults to getting the directory for the current_language() - i.e. the 
+ * Defaults to getting the directory for the current_language() - i.e. the
  * language the user is using
  *
  * Returns null if the language can't be found
@@ -841,8 +842,8 @@ function load_config() {
 /**
  * This function returns a value from $CFG
  * or null if it is not found
- * 
- * @param string $key config setting to look for 
+ *
+ * @param string $key config setting to look for
  * @return mixed
  */
 function get_config($key) {
@@ -869,7 +870,7 @@ function set_config($key, $value) {
         if (set_field('config', 'value', $value, 'field', $key)) {
             $status = true;
         }
-    } 
+    }
     else {
         $config = new StdClass;
         $config->field = $key;
@@ -891,7 +892,7 @@ function set_config($key, $value) {
  * or null if it is not found.
  *
  * It will give precedence to config values set in config.php like so:
- * $cfg->plugin->{$plugintype}->{$pluginname}->{$key} = 'whatever';
+ * $cfg->plugin_{$plugintype}_{$pluginname}_{$key} = 'whatever';
  *
  * If it doesn't find one of those, it will look for the config value in
  * the database.
@@ -903,54 +904,47 @@ function set_config($key, $value) {
  */
 function get_config_plugin($plugintype, $pluginname, $key) {
     global $CFG;
+    static $pluginsfetched = array();
 
-    // If we've already fetched this value, then return it
-    if (isset($CFG->plugin->{$plugintype}->{$pluginname}->{$key})) {
+    $typename = "{$plugintype}_{$pluginname}";
+    $configname = "plugin_{$typename}_{$key}";
+    if (isset($CFG->{$configname})) {
+        return $CFG->{$configname};
+    }
+    else if (isset($CFG->plugin->{$plugintype}->{$pluginname}->{$key})) {
+        log_warn(
+            "Mahara 1.9-format plugin config detected in your config.php: \$cfg->plugin->{$plugintype}->{$pluginname}->{$key}."
+            . " You should change this to the Mahara 1.10 format: \$cfg->plugin_{$plugintype}_{$pluginname}_{$key}."
+        );
         return $CFG->plugin->{$plugintype}->{$pluginname}->{$key};
     }
     // If we have already fetched this plugin's data from the database, then return NULL.
     // (Note that some values may come from config.php before we hit the database.)
-    else if (isset($CFG->plugin->pluginsfetched->{$plugintype}->{$pluginname})) {
+    else if (in_array($typename, $pluginsfetched)) {
         return null;
     }
     // We haven't fetched this plugin's data yet. So do it!
     else {
 
-        // First build the object structure for it.
-        if (!isset($CFG->plugin)) {
-            $CFG->plugin = new stdClass();
-        }
-        if (!isset($CFG->plugin->{$plugintype})) {
-            $CFG->plugin->{$plugintype} = new stdClass();
-        }
-        if (!isset($CFG->plugin->{$plugintype}->{$pluginname})) {
-            $CFG->plugin->{$plugintype}->{$pluginname} = new stdClass();
-        }
-
         // To minimize database calls, get all the records for this plugin from the database at once.
         $records = get_records_array($plugintype . '_config', 'plugin', $pluginname, 'field');
         if (!empty($records)) {
             foreach ($records as $record) {
-                if (!isset($CFG->plugin->{$plugintype}->{$pluginname}->{$record->field})) {
-                    $CFG->plugin->{$plugintype}->{$pluginname}->{$record->field} = $record->value;
+                $storeconfigname = "plugin_{$typename}_{$record->field}";
+                if (!isset($CFG->{$storeconfigname})) {
+                    $CFG->{$storeconfigname} = $record->value;
                 }
             }
         }
 
         // Make a note that we've now hit the database over this one.
-        if (!isset($CFG->plugin->pluginsfetched)) {
-            $CFG->plugin->pluginsfetched = new stdClass();
-        }
-        if (!isset($CFG->plugin->pluginsfetched->{$plugintype})) {
-            $CFG->plugin->pluginsfetched->{$plugintype} = new stdClass();
-        }
-        $CFG->plugin->pluginsfetched->{$plugintype}->{$pluginname} = true;
+        $pluginsfetched[] = $typename;
 
         // Now, return it if we found it, otherwise null.
         // (This could be done by a recursive call to get_config_plugin(), but it's
         // less error-prone to do it this way and it doesn't cause that much duplication)
-        if (isset($CFG->plugin->{$plugintype}->{$pluginname}->{$key})) {
-            return $CFG->plugin->{$plugintype}->{$pluginname}->{$key};
+        if (isset($CFG->{$configname})) {
+            return $CFG->{$configname};
         }
         else {
             return null;
@@ -958,36 +952,34 @@ function get_config_plugin($plugintype, $pluginname, $key) {
     }
 }
 
+/**
+ * Set or update a plugin config value.
+ *
+ * @param string $plugintype The plugin type: 'artefact', 'blocktype', etc
+ * @param string $pluginname The plugin name: 'file', 'creativecommons', etc
+ * @param string $key The config name
+ * @param string $value The config's new value
+ * @return boolean Whether or not the config was updated successfully
+ */
 function set_config_plugin($plugintype, $pluginname, $key, $value) {
     global $CFG;
     $table = $plugintype . '_config';
 
+    $success = false;
     if (false !== get_field($table, 'value', 'plugin', $pluginname, 'field', $key)) {
-        //if (set_field($table, 'value', $key, 'plugin', $pluginname, 'field', $value)) {
-        if (set_field($table, 'value', $value, 'plugin', $pluginname, 'field', $key)) {
-            $status = true;
-        }
+        $success = set_field($table, 'value', $value, 'plugin', $pluginname, 'field', $key);
     }
     else {
-        $pconfig = new StdClass;
+        $pconfig = new stdClass();
         $pconfig->plugin = $pluginname;
         $pconfig->field  = $key;
         $pconfig->value  = $value;
-        $status = insert_record($table, $pconfig);
+        $success = insert_record($table, $pconfig);
     }
     // Now update the cached version
-    if ($status) {
-        if (!isset($CFG->plugin)) {
-            $CFG->plugin = new stdClass();
-        }
-        if (!isset($CFG->plugin->{$plugintype})) {
-            $CFG->plugin->{$plugintype} = new stdClass();
-        }
-        if (!isset($CFG->plugin->{$plugintype}->{$pluginname})) {
-            $CFG->plugin->{$plugintype}->{$pluginname} = new stdClass();
-        }
-
-        $CFG->plugin->{$plugintype}->{$pluginname}->{$key} = $value;
+    if ($success) {
+        $configname = "plugin_{$plugintype}_{$pluginname}_{$key}";
+        $CFG->{$configname} = $value;
         return true;
     }
     return false;
@@ -995,7 +987,7 @@ function set_config_plugin($plugintype, $pluginname, $key, $value) {
 
 /**
  * This function returns a value for $CFG for a plugin instance
- * or null if it is not found. Initially this is interesting only 
+ * or null if it is not found. Initially this is interesting only
  * for multiauth. Note that it may go and look in the database
  *
  * @param string $plugintype   E.g. auth
@@ -1030,7 +1022,7 @@ function get_config_plugin_instance($plugintype, $pluginid, $key) {
 
 /**
  * This function returns a value for $CFG for a plugin instance
- * or null if it is not found. Initially this is interesting only 
+ * or null if it is not found. Initially this is interesting only
  * for multiauth. Note that it may go and look in the database
  *
  * @param string $plugintype   E.g. auth
@@ -1168,7 +1160,7 @@ function get_configs_user_institutions($key, $userid = null) {
 /**
  * This function prints an array or object
  * wrapped inside <pre></pre>
- * 
+ *
  * @param $mixed value to print
  */
 function print_object($mixed) {
@@ -1301,7 +1293,7 @@ function get_user_institution_language($userid = null, &$sourceinst = null) {
 /**
  * Helper function to sprintf language strings
  * with a variable number of arguments
- * 
+ *
  * @param mixed $string raw string to use, or an array of strings, one for each plural form
  * @param array $args arguments to sprintf
  * @param string $lang The language
@@ -1364,7 +1356,7 @@ function check_dir_exists($dir, $create=true, $recursive=true) {
 
 
 /**
- * Function to require a plugin file. This is to avoid doing 
+ * Function to require a plugin file. This is to avoid doing
  * require and include directly with variables.
  *
  * This function is the one safe point to require plugin files.
@@ -1447,7 +1439,7 @@ function safe_require($plugintype, $pluginname, $filename='lib.php', $function='
     if ($function == 'include') { return include($realpath); }
     if ($function == 'require_once') { return require_once($realpath); }
     if ($function == 'include_once') { return include_once($realpath); }
-    
+
 }
 
 /**
@@ -1497,8 +1489,8 @@ function safe_require_plugin($plugintype, $pluginname, $filename='lib.php', $fun
 function plugin_types() {
     static $pluginstocheck;
     if (empty($pluginstocheck)) {
-        // ORDER MATTERS! artefact has to be first!
-        $pluginstocheck = array('artefact', 'auth', 'notification', 'search', 'blocktype', 'interaction', 'grouptype', 'import', 'export');
+        // ORDER MATTERS! artefact has to be before blocktype
+        $pluginstocheck = array('artefact', 'auth', 'notification', 'search', 'blocktype', 'interaction', 'grouptype', 'import', 'export', 'module');
     }
     return $pluginstocheck;
 }
@@ -1519,17 +1511,18 @@ function plugin_types_installed() {
     return $plugins;
 }
 
-/** 
- * This return returns the names of plugins installed 
+/**
+ * This returns the names of plugins installed
  * for the given plugin type.
- * 
+ *
  * @param string $plugintype type of plugin
+ * @param bool $all - return all (true) or only active (false) plugins
  * @return array of objects with fields (version (int), release (str), active (bool), name (str))
  */
 function plugins_installed($plugintype, $all=false) {
     static $records = array();
 
-    if (defined('INSTALLER') || !isset($records[$plugintype][true])) {
+    if (defined('INSTALLER') || defined('TESTSRUNNING') || !isset($records[$plugintype][true])) {
 
         $sort = $plugintype == 'blocktype' ? 'artefactplugin,name' : 'name';
 
@@ -1547,8 +1540,31 @@ function plugins_installed($plugintype, $all=false) {
             }
         }
     }
+    if (isset($records[$plugintype])) {
+        return $records[$plugintype][$all];
+    }
+    return false;
+}
 
-    return $records[$plugintype][$all];
+/**
+ * This returns the names of plugins installed
+ * for all plugin types.
+ *
+ * @param bool $all - return all (true) or only active (false) plugins
+ * @return array of objects with fields (version (int), release (str), active (bool), name (str))
+ */
+
+function plugin_all_installed($all=false) {
+    $plugintypes = plugin_types_installed();
+    $result = array();
+    foreach ($plugintypes as $plugintype) {
+        $plugins = plugins_installed($plugintype, $all);
+        foreach ($plugins as $plugin) {
+            $plugin->plugintype = $plugintype;
+            $result[] = $plugin;
+        }
+    }
+    return $result;
 }
 
 /**
@@ -1595,7 +1611,7 @@ function blocktype_single_to_namespaced($blocktype, $artefact='') {
 /**
  * Given a blocktype name, convert it to the namespaced version.
  *
- * This will be $artefacttype/$blocktype, or just plain $blocktype for system 
+ * This will be $artefacttype/$blocktype, or just plain $blocktype for system
  * blocktypes.
  *
  * This is useful for language strings
@@ -1631,7 +1647,15 @@ function blocktype_artefactplugin($blocktype) {
  */
 function handle_event($event, $data) {
     global $USER;
-    if (!$e = get_record('event_type', 'name', $event)) {
+    static $event_types = array(), $coreevents_cache = array(), $eventsubs_cache = array();
+
+    if (empty($event_types)) {
+        $event_types = array_fill_keys(get_column('event_type', 'name'), true);
+    }
+
+    $e = $event_types[$event];
+
+    if (is_null($e)) {
         throw new SystemException("Invalid event");
     }
 
@@ -1667,25 +1691,38 @@ function handle_event($event, $data) {
         insert_record('event_log', $logentry);
     }
 
+    if (empty($coreevents_cache)) {
+        $rs = get_recordset('event_subscription');
+        foreach($rs as $record) {
+            $coreevents_cache[$record['event']][] = $record['callfunction'];
+        }
+        $rs->close();
+    }
 
-    if ($coreevents = get_records_array('event_subscription', 'event', $event)) {
+    $coreevents = isset($coreevents_cache[$event]) ? $coreevents_cache[$event] : array();
+
+    if (!empty($coreevents)) {
         require_once('activity.php'); // core events can generate activity.
         foreach ($coreevents as $ce) {
-            if (function_exists($ce->callfunction)) {
-                call_user_func($ce->callfunction, $data);
+            if (function_exists($ce)) {
+                call_user_func($ce, $data);
             }
             else {
                 log_warn("Event $event caused a problem with a core subscription "
-                . " $ce->callfunction, which wasn't callable.  Continuing with event handlers");
+                . " $ce, which wasn't callable.  Continuing with event handlers");
             }
         }
     }
 
     $plugintypes = plugin_types_installed();
     foreach ($plugintypes as $name) {
-        if ($subs = get_records_array($name . '_event_subscription', 'event', $event)) {
+        $cache_key = "{$event}__{$name}";
+        if (!isset($eventsubs_cache[$cache_key])) {
+            $eventsubs_cache[$cache_key] = get_records_array($name . '_event_subscription', 'event', $event);
+        }
+        if ($eventsubs_cache[$cache_key]) {
             $pluginsinstalled = plugins_installed($name);
-            foreach ($subs as $sub) {
+            foreach ($eventsubs_cache[$cache_key] as $sub) {
                 if (!isset($pluginsinstalled[$sub->plugin])) {
                     continue;
                 }
@@ -1704,9 +1741,9 @@ function handle_event($event, $data) {
 }
 
 /**
- * function to convert an array of objects to 
+ * function to convert an array of objects to
  * an array containing one field per place
- * 
+ *
  * @param array $array input array
  * @param mixed $field field to look for in each object
  */
@@ -1716,26 +1753,10 @@ function mixed_array_to_field_array($array, $field) {
     return array_map($repl_fun, $array, $fields);
 }
 
-
-/** 
- * Adds stuff to the log
- * @todo write this function
- *
- * @param string $plugintype plugin type or core
- * @param string $pluginname plugin name or core component (eg 'view')
- * @param string $action action string (like 'add')
- * @param int $user id of user making the action
- * @param int $id relevant id (ie, profile view would have id of profile owner)
- * 
- */
-function add_to_log($plugintype, $pluginname, $action, $user, $id=0) {
-
-}
-
 /**
  * Used by XMLDB
  */
-function debugging ($message, $level) {
+function debugging($message, $level) {
     log_debug($message);
 }
 function xmldb_dbg($message) {
@@ -1743,27 +1764,54 @@ function xmldb_dbg($message) {
 }
 define('DEBUG_DEVELOPER', 'whocares');
 
-/** 
+
+/**
+ * Helper interface to hold the Plugin class's abstract static functions
+ */
+interface IPlugin {
+    /**
+     * The name of this plugintype. Used in directory names, table names, etc.
+     * @return string
+     */
+    public static function get_plugintype_name();
+}
+
+/**
  * Base class for all plugintypes.
  */
-class Plugin {
-    
+abstract class Plugin implements IPlugin {
+
     /**
-     * This function returns an array of crons it wants to have run
-     * Each item should be a StdClass object containing - 
-     * - callfunction (static function on the Plugin Class)
-     * - any or all of minute, hour, day, month, dayofweek 
-     * (will default to * if not supplied)
+     * This function returns an array of crons it wants to have run.
+     *
+     * The return value should be an array of objects. Each object should have these fields:
+     *
+     * - callfunction (mandatory): The name of the cron function. This must be a public static function
+     * of the particular plugin subclass. It will be called with no parameters, and should return no
+     * value.
+     * - minute (defaults to *)
+     * - hour (defaults to *)
+     * - day (defaults to *)
+     * - month (defaults to *)
+     * - dayofweek (defaults to *)
+     *
+     * @return array
      */
     public static function get_cron() {
         return array();
     }
 
-    /** 
-     * This function returns an array of events to subscribe to
-     * by unique name. 
+    /**
+     * This function returns an array of events to subscribe to by unique name.
      * If an event the plugin is trying to subscribe to is unknown by the
      * core, an exception will be thrown.
+     *
+     * The return value should be array of objects. Each object should have these fields:
+     *
+     *  - event: The name of the event to subscribe. Must be present in the "event_type" table.
+     *  - plugin: The name of the plugin that holds the callfunction (probably this one!)
+     *  - callfunction: The function to call when the event occurs.
+     *
      * @return array
      */
     public static function get_event_subscriptions() {
@@ -1773,44 +1821,177 @@ class Plugin {
 
     /**
      * This function will be run after every upgrade to the plugin.
-     * 
+     *
      * @param int $fromversion version upgrading from (or 0 if installing)
+     * @return boolean to indicate whether upgrade was successful or not
      */
     public static function postinst($fromversion) {
         return true;
     }
 
     /**
-     * Whether this plugin has admin plugin config options.
-     * If you return true here, you must supply a valid pieform
-     * in {@link get_config}
+     * Whether this plugin should show a config form on the Administration->Extensions screen.
+     *
+     * If you return true here, you will also need to define the following methods:
+     * - get_config_options()
+     * - [optional] validate_config_options($form, $values)
+     * - save_config_options($form, $values)
+     *
+     * @return boolean
      */
     public static function has_config() {
         return false;
     }
 
     /**
-    * Does this plugin offer any activity types
-    * If it does, you must subclass ActivityTypePlugin like 
-    * ActivityType{$PluginType}{$Pluginname}
-    */
+     * If has_config() is true, this function should return a pieform array, which must at least
+     * contain an "elements" list. This list does NOT need to contain a submit button, and it should not
+     * contain any elements called "plugintype", "pluginname", "type", or "save".
+     *
+     * The form definition does NOT need to contain a successcallbac, validatecallback, or jsform setting.
+     * If these are present, they'll be ignored.
+     *
+     * @return false|array
+     */
+    public static function get_config_options() {
+        throw new SystemException("get_config_options not defined");
+    }
+
+    /**
+     * If has_config() is true, this function will be used as the Pieform validation callback function.
+     *
+     * @param Pieform $form
+     * @param array $values
+     */
+    public static function validate_config_options(Pieform $form, $values) {
+    }
+
+    /**
+     * If has_config() is true, this function will be used as the Pieform success callback function
+     * for the plugin's config form.
+     *
+     * @param Pieform $form
+     * @param array $values
+     */
+    public static function save_config_options(Pieform $form, $values) {
+        throw new SystemException("save_config_options not defined");
+    }
+
+
+    /**
+     * This function returns a list of activities this plugin brings. (i.e. things that can
+     * send notifications to users)
+     *
+     * It should return an array of objects. Each object should have these fields:
+     * - name: The (internal) name of the activity type
+     * - defaultmethod: The default notification to be used for this activity
+     * - admin
+     * - delay
+     * - allowonemethod
+     * - onlyapplyifwatched
+     *
+     * These fields correspond directly with the columns in the "activity_type" table.
+     *
+     * You must also implement in the plugin's lib.php file an ActivityTypePlugin subclass whose name
+     * matches the pattern ActivityType{$Plugintype}{$Pluginname}{$ActivityName}. For instance,
+     * ActivityTypeInteractionForumNewpost.
+     *
+     * @return array
+     */
     public static function get_activity_types() {
         return array();
     }
 
     /**
-    * Can this plugin be disabled?
-    * All internal type plugins, and ones in which Mahara won't work should override this.
-    * Probably at least one plugin per plugin-type should override this.
-    */
+     * Indicates whether this plugin can be disabled.
+     *
+     * All internal type plugins, and ones in which Mahara won't work should override this.
+     * Probably at least one plugin per plugin-type should override this.
+     */
     public static function can_be_disabled() {
         return true;
+    }
+
+    /**
+     * Check whether this plugin is okay to be installed.
+     *
+     * To prevent installation, throw an InstallationException
+     *
+     * @throws InstallationException
+     */
+    public static function sanity_check() {
+    }
+
+    /**
+     * The relative path for this plugin's stuff in theme directories.
+     *
+     * @param string $pluginname The middle part in a dwoo reference, i.e. in "export:html/file:index.tpl", it's the "html/file".
+     * @return string
+     */
+    public static function get_theme_path($pluginname) {
+        return static::get_plugintype_name() . '/' . $pluginname;
+    }
+
+
+    /**
+     * Get institution preference page settings for current artefact.
+     * @param Institution $institution
+     * @return array of form elements
+     */
+    public static function get_institutionprefs_elements(Institution $institution = null) {
+        return array();
+    }
+
+    /**
+     * Validate institution settings values.
+     * @param Pieform $form
+     * @param array $values
+     */
+    public static function institutionprefs_validate(Pieform $form, $values) {
+        return;
+    }
+
+    /**
+     * Submit institution settings values.
+     * @param Pieform $form
+     * @param array $values
+     * @param Institution $institution
+     */
+    public static function institutionprefs_submit(Pieform $form, $values, Institution $institution) {
+        return;
+    }
+
+    /**
+     * Get user preference page settings for current artefact.
+     * @param stdClass $prefs Saved preferences
+     * @return array of form elements
+     */
+    public static function get_accountprefs_elements(stdClass $prefs) {
+        return array();
+    }
+
+    /**
+     * Validate account settings values.
+     * @param Pieform $form
+     * @param array $values
+     */
+    public static function accountprefs_validate(Pieform $form, $values) {
+        return;
+    }
+
+    /**
+     * Submit account settings values.
+     * @param Pieform $form
+     * @param array $values
+     */
+    public static function accountprefs_submit(Pieform $form, $values) {
+        return;
     }
 }
 
 /**
  * formats a unix timestamp to a nice date format.
- * 
+ *
  * @param int $date unix timestamp to format
  * @param string $formatkey language key to fetch the format from
  * @param string $notspecifiedkey (optional) language key to fetch 'not specified string' from
@@ -1943,14 +2124,14 @@ function pieform_reply($code, $data) {
     if (isset($data['goto'])) {
         redirect($data['goto']);
     }
-    // NOT explicitly exiting here. Pieforms will throw an exception which will 
+    // NOT explicitly exiting here. Pieforms will throw an exception which will
     // force the user to fix their form
 }
 
 function pieform_element_calendar_configure($element) {
     global $THEME;
-    $element['jsroot'] = get_config('wwwroot') . 'js/jscalendar/';
-    $element['themefile'] = $THEME->get_url('style/calendar.css');
+    $element['jsroot'] = get_config('wwwroot') . 'js/jquery/jquery-ui/';
+    $element['themefile'] = $THEME->get_url('style/datepicker.css');
     $element['imagefile'] = $THEME->get_url('images/btn_calendar.png');
     $language = substr(current_language(), 0, 2);
     $element['language'] = $language;
@@ -1965,13 +2146,13 @@ function pieform_element_textarea_configure($element) {
 }
 
 /**
- * Should be used to provide the 'templatedir' directive to pieforms using a 
+ * Should be used to provide the 'templatedir' directive to pieforms using a
  * template for layout.
  *
- * @param string $file The file to be used as a pieform template, e.g. 
- *                     "admin/site/files.php". This is the value you used as 
+ * @param string $file The file to be used as a pieform template, e.g.
+ *                     "admin/site/files.php". This is the value you used as
  *                     the 'template' option for your pieform
- * @param string $pluginlocation Which plugin to search for the template, e.g. 
+ * @param string $pluginlocation Which plugin to search for the template, e.g.
  *                               artefact/file
  */
 function pieform_template_dir($file, $pluginlocation='') {
@@ -2072,18 +2253,30 @@ function can_view_view($view, $user_id=null) {
         return true;
     }
 
-    $access = View::user_access_records($view_id, $user_id);
-
-    if (empty($access)) {
-        return false;
-    }
-
     // If the view's owner is suspended, deny access to the view
     if ($view->get('owner')) {
         if ((!$owner = $view->get_owner_object()) || $owner->suspendedctime) {
             return false;
         }
     }
+
+    if ($SESSION->get('mnetuser')) {
+        $mnettoken = get_cookie('mviewaccess:' . $view_id);
+    }
+
+    // If the page has been marked "objectionable" admins should be able to view
+    // it for review purposes.
+    if ($view->is_objectionable()) {
+        if ($owner = $view->get('owner')) {
+            if ($user->is_admin_for_user($owner)) {
+                return true;
+            }
+        }
+        else if ($view->get('group') && $user->get('admin')) {
+            return true;
+        }
+    }
+
 
     // Overriding start/stop dates are set by the owner to deny access
     // to users who would otherwise be allowed to see the view.  However,
@@ -2095,8 +2288,9 @@ function can_view_view($view, $user_id=null) {
     $overridestop = $view->get('stopdate');
     $allowedbyoverride = (empty($overridestart) || $overridestart < $dbnow) && (empty($overridestop) || $overridestop > $dbnow);
 
-    if ($SESSION->get('mnetuser')) {
-        $mnettoken = get_cookie('mviewaccess:'.$view_id);
+    $access = View::user_access_records($view_id, $user_id);
+    if (empty($access)) {
+        return false;
     }
 
     foreach ($access as &$a) {
@@ -2146,17 +2340,6 @@ function can_view_view($view, $user_id=null) {
                 if (!in_array($a->institution, array_keys($user->get('institutions')))) {
                     continue;
                 }
-            }
-            else if ($a->accesstype == 'objectionable') {
-                if ($owner = $view->get('owner')) {
-                    if ($user->is_admin_for_user($owner)) {
-                        return true;
-                    }
-                }
-                else if ($view->get('group') && $user->get('admin')) {
-                    return true;
-                }
-                continue;
             }
             if (!$allowedbyoverride && $a->visible) {
                 continue;
@@ -2278,7 +2461,7 @@ function get_views($users, $userlooking=null, $limit=5, $type=null) {
             ' . db_format_tsfield('atime') . ',
             ' . db_format_tsfield('mtime') . ',
             ' . db_format_tsfield('v.ctime', 'ctime') . '
-        FROM 
+        FROM
             {view} v
             INNER JOIN {view_access} a ON
                 v.id=a.view
@@ -2318,7 +2501,7 @@ function get_views($users, $userlooking=null, $limit=5, $type=null) {
             ' . db_format_tsfield('atime') . ',
             ' . db_format_tsfield('mtime') . ',
             ' . db_format_tsfield('v.ctime', 'ctime') . '
-        FROM 
+        FROM
             {view} v
             INNER JOIN {view_access} a ON v.id=a.view AND a.usr=?
         WHERE
@@ -2345,7 +2528,7 @@ function get_views($users, $userlooking=null, $limit=5, $type=null) {
             ' . db_format_tsfield('v.atime','atime') . ',
             ' . db_format_tsfield('v.mtime','mtime') . ',
             ' . db_format_tsfield('v.ctime','ctime') . '
-        FROM 
+        FROM
             {view} v
             INNER JOIN {view_access} a ON v.id=a.view
             INNER JOIN {group_member} m ON m.group=a.group AND m.member=?
@@ -2400,21 +2583,50 @@ function _get_views_trim_list(&$list, &$users, $limit, &$results) {
     return false;
 }
 
+/**
+ * Checks if artefact or at least one of its ancestors is in view
+ *
+ * @param int|object $artefact ID of an artefact or object itself.
+ *                   Will load object if ID is supplied.
+ * @param int $view ID of a page that contains artefact.
+ *
+ * @return boolean True if artefact is in view, False otherwise.
+ */
 function artefact_in_view($artefact, $view) {
-    $sql = 'SELECT a.id 
-            FROM {view_artefact} a WHERE "view" = ? AND artefact = ?
-            UNION
-            SELECT c.parent 
-            FROM {view_artefact} top JOIN {artefact_parent_cache} c
-              ON c.parent = top.artefact
-            WHERE top.view = ? AND c.artefact = ?
-            UNION
-            SELECT s.id
-            FROM {view} v INNER JOIN {skin} s ON v.skin = s.id
-            WHERE v.id = ? AND ? in (s.bodybgimg, s.viewbgimg)
-    ';
+    if (!is_object($artefact)) {
+        $artefact = artefact_instance_from_id($artefact);
+    }
 
-    return record_exists_sql($sql, array($view, $artefact, $view, $artefact, $view, $artefact));
+    $ancestors = $artefact->get_item_ancestors();
+
+    $params = array($view, $artefact->get('id'), $artefact->get('id'));
+    $extrasql = '';
+    if ($ancestors) {
+        $extrasql = "SELECT a.parent
+                FROM {view_artefact} top JOIN {artefact} a
+                    ON a.parent = top.artefact
+                WHERE top.view = ? AND top.artefact IN (" . implode(',', $ancestors) . ")
+                UNION";
+        $params[] = $view;
+    }
+
+    $sql = "SELECT a.id
+            FROM {view_artefact} a WHERE \"view\" = ? AND artefact = ?
+            UNION
+            SELECT aa.artefact
+            FROM {artefact} a INNER JOIN {artefact_attachment} aa
+                ON a.id = aa.artefact
+            WHERE aa.attachment = ?
+            UNION
+            $extrasql
+            SELECT s.id
+            FROM {view} v INNER JOIN {skin} s
+                ON v.skin = s.id
+            WHERE v.id = ? AND ? in (s.bodybgimg, s.viewbgimg)
+    ";
+    $params = array_merge($params, array($view, $artefact->get('id')));
+
+    return record_exists_sql($sql, $params);
 }
 
 function get_dir_contents($directory) {
@@ -2738,7 +2950,42 @@ function profile_sideblock() {
     $data['invitedgroupsmessage'] = $data['invitedgroups'] == 1 ? get_string('invitedgroup') : get_string('invitedgroups');
     $data['pendingfriends'] = count_records('usr_friend_request', 'owner', $USER->get('id'));
     $data['pendingfriendsmessage'] = $data['pendingfriends'] == 1 ? get_string('pendingfriend') : get_string('pendingfriends');
-    $data['groups'] = group_get_user_groups($USER->get('id'));
+    // Check if we want to limit the displayed groups by the account setting
+    $limitto = null;
+    $limit = $USER->get_account_preference('groupsideblockmaxgroups');
+    if (isset($limit) && is_numeric($limit)) {
+        $limitto = intval($limit);
+    }
+    $sort = null;
+    if ($sortorder = $USER->get_account_preference('groupsideblocksortby')) {
+        $sort = $sortorder;
+    }
+    if ($limitto === null) {
+        $data['groups'] = group_get_user_groups($USER->get('id'), null, $sort);
+        $total = count($data['groups']);
+    }
+    else if ($limitto === 0) {
+        $data['groups'] = null;
+    }
+    else {
+        list($data['groups'], $total) = group_get_user_groups($USER->get('id'), null, $sort, $limitto);
+    }
+    $limitstr = '';
+    if (!empty($limitto) && $limitto < $total) {
+        switch ($sort) {
+            case 'earliest':
+                $limitstr = get_string('numberofmygroupsshowingearliest', 'blocktype.mygroups', $limitto, $total);
+                break;
+            case 'latest':
+                $limitstr = get_string('numberofmygroupsshowinglatest', 'blocktype.mygroups', $limitto, $total);
+                break;
+            default:
+                $limitstr = get_string('numberofmygroupsshowing', 'blocktype.mygroups', $limitto, $total);
+                break;
+        }
+    }
+
+    $data['grouplimitstr'] = $limitstr;
     $data['views'] = get_records_sql_array(
         'SELECT v.id, v.title, v.urlid, v.owner
         FROM {view} v
@@ -2763,13 +3010,21 @@ function profile_sideblock() {
          ORDER BY a.title',
          array(get_string('profile'), $USER->get('id'))
     );
+    if (!empty($data['artefacts'])) {
+        // check if we have any blogposts and fetch their blog id if we do
+        foreach ($data['artefacts'] as $key => $value) {
+            if ($value->artefacttype == 'blogpost') {
+                $value->blogid = get_field('artefact', 'parent', 'id', $value->id);
+            }
+        }
+    }
     return $data;
 }
 
 /**
  * Gets data about users who have been online in the last while.
  *
- * The time is configured by setting the 'accessidletimeout' configuration 
+ * The time is configured by setting the 'accessidletimeout' configuration
  * option.
  *
  * Limits the number of users to display based on the 'onlineuserssideblockmaxusers'
@@ -2942,7 +3197,9 @@ function progressbar_sideblock($preview=false) {
         // Get all institutions where user is member
         $institutions = array();
         foreach ($USER->institutions as $inst) {
-            $institutions = array_merge($institutions, array($inst->institution => $inst->displayname));
+            if (empty($inst->suspended)) {
+                $institutions = array_merge($institutions, array($inst->institution => $inst->displayname));
+            }
         }
         // Set user's first institution in case that institution isn't
         // set yet or user is not member of currently set institution.
@@ -2964,9 +3221,27 @@ function progressbar_sideblock($preview=false) {
         // by function param instead
         $institution = param_alphanum('institution', $default[0]);
     }
+    // We need to check to see if any of the institutions have profile completeness to allow
+    // the select box to work correctly for users with more than one institution
+    $multiinstitutionprogress = false;
+    $counting = null;
+    if (!empty($institutions)) {
+        foreach ($institutions as $key => $value) {
+            if ($result = get_records_select_assoc('institution_config', 'institution=? and field like \'progressbaritem_%\'', array($key), 'field', 'field, value')) {
+                $multiinstitutionprogress = true;
+                if ($key == $institution) {
+                    $counting = $result;
+                    break;
+                }
+            }
+        }
+    }
+    else {
+        $counting = get_records_select_assoc('institution_config', 'institution=? and field like \'progressbaritem_%\'', array($institution), 'field', 'field, value');
+    }
 
     // Get artefacts that count towards profile completeness
-    if ($counting = get_records_select_assoc('institution_config', 'institution=? and field like \'progressbaritem_%\'', array($institution), 'field', 'field, value')) {
+    if ($counting) {
         // Without locked ones (site locked and institution locked)
         $sitelocked = (array) get_column('institution_locked_profile_field', 'profilefield', 'name', 'mahara');
         $instlocked = (array) get_column('institution_locked_profile_field', 'profilefield', 'name', $institution);
@@ -3106,7 +3381,20 @@ function progressbar_sideblock($preview=false) {
             'totalcounting' => $totalcounting,
         );
     }
-
+    else if ($multiinstitutionprogress) {
+        return array(
+            'data' => null,
+            'percent' => 0,
+            'preview' => $preview,
+            'count' => ($preview ? 1 : count($institutions)),
+            // This is important if user is member
+            // of more than one institution ...
+            'institutions' => $institutions,
+            'institution' => $institution,
+            'totalcompleted' => 0,
+            'totalcounting' => 0,
+        );
+    }
     return array(
         'data' => null,
         'percent' => 0,
@@ -3119,10 +3407,10 @@ function progressbar_sideblock($preview=false) {
 
 
 /**
- * Cronjob to recalculate how much quota each user is using and update it as 
+ * Cronjob to recalculate how much quota each user is using and update it as
  * appropriate.
  *
- * This gives a backstop for the possibility that there is a bug elsewhere that 
+ * This gives a backstop for the possibility that there is a bug elsewhere that
  * has caused the quota count to get out of sync
  */
 function recalculate_quota() {
@@ -3630,4 +3918,60 @@ function check_case_sensitive($a, $table) {
         }
     }
     return $a;
+}
+
+/**
+ * Check one array of associative arrays against another to see if
+ * there are any differences and return a merged array based on the order
+ * of the $first array with the differences of $second appended on
+ *
+ * @param array $first contains associative arrays
+ * @param array $second contains associative arrays
+ *
+ * @return array all the different associative arrays
+ */
+function combine_arrays($first, $second) {
+    foreach ($first as $k => $v) {
+        foreach ($second as $sk => $sv) {
+            $diff = array_diff($v, $sv);
+            if (empty($diff)) {
+                // arrays are the same
+                unset($second[$sk]);
+            }
+        }
+    }
+    $merged = array_merge($first, $second);
+    return $merged;
+}
+
+/**
+ * Perform checks to see if there is enough server capacity to run a task.
+ *
+ * @param  $threshold   Pass in a threshold to test against - optional
+ * @return bool
+ */
+function server_busy($threshold = false) {
+    // Get current server load information - code from:
+    // http://www.php.net//manual/en/function.sys-getloadavg.php#107243
+    if (stristr(PHP_OS, 'win')) {
+        $wmi = new COM("Winmgmts://");
+        $server = $wmi->execquery("SELECT LoadPercentage FROM Win32_Processor");
+        $cpu_num = 0;
+        $load_total = 0;
+        foreach ($server as $cpu) {
+            $cpu_num++;
+            $load_total += $cpu->loadpercentage;
+        }
+        $load = round(($load_total / $cpu_num), 2);
+    }
+    else {
+        $sys_load = sys_getloadavg();
+        $load = $sys_load[0];
+    }
+
+    $threshold = ($threshold) ? $threshold : '0.75'; // TODO: find out a good base number
+    if ($load > $threshold) {
+        return true;
+    }
+    return false;
 }

@@ -57,6 +57,7 @@
         </TABLE>
         <TABLE NAME="institution">
             <FIELDS>
+                <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
                 <FIELD NAME="name" TYPE="char" LENGTH="255" NOTNULL="true"/>
                 <FIELD NAME="displayname" TYPE="char" LENGTH="255" NOTNULL="true"/>
                 <FIELD NAME="registerallowed" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0"/>
@@ -84,6 +85,7 @@
             </FIELDS>
             <KEYS>
                 <KEY NAME="primary" TYPE="primary" FIELDS="name" />
+                <KEY NAME="inst_id_uk" TYPE="unique" FIELDS="id"/>
                 <KEY NAME="stylefk" TYPE="foreign" FIELDS="style" REFTABLE="style" REFFIELDS="id"/>
             </KEYS>
         </TABLE>
@@ -312,6 +314,8 @@
                 <FIELD NAME="name" TYPE="char" LENGTH="50" NOTNULL="true" />
                 <FIELD NAME="admin" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" />
                 <FIELD NAME="delay" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" />
+                <FIELD NAME="allownonemethod" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" />
+                <FIELD NAME="defaultmethod" TYPE="char" LENGTH="255" NOTNULL="false" DEFAULT="email" />
                 <FIELD NAME="plugintype" TYPE="char" LENGTH="25" NOTNULL="false" />
                 <FIELD NAME="pluginname" TYPE="char" LENGTH="255" NOTNULL="false" />
             </FIELDS>
@@ -395,6 +399,8 @@
                 <FIELD NAME="editwindowstart" TYPE="datetime" NOTNULL="false" />
                 <FIELD NAME="editwindowend" TYPE="datetime" NOTNULL="false" />
                 <FIELD NAME="sendnow" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" />
+                <FIELD NAME="feedbacknotify" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="1" />
+                <FIELD NAME="allowarchives" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" />
             </FIELDS>
             <KEYS>
                 <KEY NAME="primary" TYPE="primary" FIELDS="id" />
@@ -472,6 +478,7 @@
                 <FIELD NAME="license" TYPE="char" LENGTH="255" NOTNULL="false" />
                 <FIELD NAME="licensor" TYPE="char" LENGTH="255" NOTNULL="false" />
                 <FIELD NAME="licensorurl" TYPE="char" LENGTH="255" NOTNULL="false" />
+                <FIELD NAME="path" TYPE="char" LENGTH="1024" NOTNULL="false" />
             </FIELDS>
             <KEYS>
                 <KEY NAME="primary" TYPE="primary" FIELDS="id" />
@@ -482,6 +489,25 @@
                 <KEY NAME="groupfk" TYPE="foreign" FIELDS="group" REFTABLE="group" REFFIELDS="id" />
                 <KEY NAME="authorfk" TYPE="foreign" FIELDS="author" REFTABLE="usr" REFFIELDS="id" />
             </KEYS>
+        </TABLE>
+        <TABLE NAME="artefact_access">
+            <FIELDS>
+                <FIELD NAME="artefact" TYPE="int" LENGTH="10" NOTNULL="true" />
+                <FIELD NAME="accesstype" TYPE="char" LENGTH="16" NOTNULL="false" ENUM="true" ENUMVALUES="'public', 'loggedin', 'friends'" />
+                <FIELD NAME="group" TYPE="int" LENGTH="10" NOTNULL="false" />
+                <FIELD NAME="usr" TYPE="int" LENGTH="10" NOTNULL="false" />
+                <FIELD NAME="institution" TYPE="char" LENGTH="255" NOTNULL="false" />
+                <FIELD NAME="ctime" TYPE="datetime" NOTNULL="true" />
+            </FIELDS>
+            <KEYS>
+                <KEY NAME="artefactfk" TYPE="foreign" FIELDS="artefact" REFTABLE="artefact" REFFIELDS="id" />
+                <KEY NAME="groupfk" TYPE="foreign" FIELDS="group" REFTABLE="group" REFFIELDS="id" />
+                <KEY NAME="usrfk" TYPE="foreign" FIELDS="usr" REFTABLE="usr" REFFIELDS="id" />
+                <KEY NAME="institutionfk" TYPE="foreign" FIELDS="institution" REFTABLE="institution" REFFIELDS="name" />
+            </KEYS>
+            <INDEXES>
+                <INDEX NAME="accesstypeix" UNIQUE="false" FIELDS="accesstype"/>
+            </INDEXES>
         </TABLE>
         <TABLE NAME="artefact_attachment">
             <FIELDS>
@@ -514,18 +540,6 @@
             <KEYS>
                 <KEY NAME="primary" TYPE="primary" FIELDS="artefact,tag" />
                 <KEY NAME="artefactfk" TYPE="foreign" FIELDS="artefact" REFTABLE="artefact" REFFIELDS="id" />
-            </KEYS>
-        </TABLE>
-        <TABLE NAME="artefact_parent_cache">
-            <FIELDS>
-                <FIELD NAME="artefact" TYPE="int" LENGTH="10" NOTNULL="true" />
-                <FIELD NAME="parent" TYPE="int" LENGTH="10" NOTNULL="true" />
-                <FIELD NAME="dirty" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" />
-            </FIELDS>
-            <KEYS>
-                <KEY NAME="primary" TYPE="primary" FIELDS="artefact,parent" />
-                <KEY NAME="artefactfk" TYPE="foreign" FIELDS="artefact" REFTABLE="artefact" REFFIELDS="id" />
-                <KEY NAME="parentfk" TYPE="foreign" FIELDS="parent" REFTABLE="artefact" REFFIELDS="id" />
             </KEYS>
         </TABLE>
         <TABLE NAME="artefact_access_usr">
@@ -606,7 +620,7 @@
             <FIELDS>
                 <FIELD NAME="usr" TYPE="int" LENGTH="10" NOTNULL="true" />
                 <FIELD NAME="activity" TYPE="int" LENGTH="10" NOTNULL="true" />
-                <FIELD NAME="method" TYPE="char" LENGTH="255" NOTNULL="true" />
+                <FIELD NAME="method" TYPE="char" LENGTH="255" NOTNULL="false" />
             </FIELDS>
             <KEYS>
                 <KEY NAME="primary" TYPE="primary" FIELDS="usr,activity" />
@@ -755,6 +769,7 @@
                 <FIELD NAME="submittedgroup" TYPE="int" LENGTH="10" NOTNULL="false" />
                 <FIELD NAME="submittedhost" TYPE="char" LENGTH="255" NOTNULL="false" />
                 <FIELD NAME="submittedtime" TYPE="datetime" NOTNULL="false" />
+                <FIELD NAME="submittedstatus" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" />
                 <FIELD NAME="numrows" TYPE="int" LENGTH="2" NOTNULL="true" DEFAULT="1" />
                 <FIELD NAME="numcolumns" TYPE="int" LENGTH="2" NOTNULL="true" />
                 <FIELD NAME="layout" TYPE="int" LENGTH="10" NOTNULL="false"/>
@@ -770,6 +785,7 @@
                 <FIELD NAME="accessconf" TYPE="char" LENGTH="40" NOTNULL="false"/>
                 <FIELD NAME="locked" TYPE="int" LENGTH="1" DEFAULT="0" NOTNULL="true" />
                 <FIELD NAME="urlid" TYPE="char" LENGTH="100" NOTNULL="false" />
+                <FIELD NAME="anonymise" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" />
             </FIELDS>
             <KEYS>
                 <KEY NAME="primary" TYPE="primary" FIELDS="id" />
@@ -869,7 +885,7 @@
         <TABLE NAME="view_access">
             <FIELDS>
                 <FIELD NAME="view" TYPE="int" LENGTH="10" NOTNULL="true" />
-                <FIELD NAME="accesstype" TYPE="char" LENGTH="16" NOTNULL="false" ENUM="true" ENUMVALUES="'public', 'loggedin', 'friends', 'objectionable'" />
+                <FIELD NAME="accesstype" TYPE="char" LENGTH="16" NOTNULL="false" ENUM="true" ENUMVALUES="'public', 'loggedin', 'friends'" />
                 <FIELD NAME="group" TYPE="int" LENGTH="10" NOTNULL="false" />
                 <FIELD NAME="role" TYPE="char" LENGTH="255" NOTNULL="false" />
                 <FIELD NAME="usr" TYPE="int" LENGTH="10" NOTNULL="false" />
@@ -1059,6 +1075,7 @@
                 <FIELD NAME="submittedgroup" TYPE="int" LENGTH="10" NOTNULL="false" />
                 <FIELD NAME="submittedhost" TYPE="char" LENGTH="255" NOTNULL="false" />
                 <FIELD NAME="submittedtime" TYPE="datetime" NOTNULL="false" />
+                <FIELD NAME="submittedstatus" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" />
                 <FIELD NAME="group" TYPE="int" LENGTH="10" NOTNULL="false" />
                 <FIELD NAME="institution" TYPE="char" LENGTH="255" NOTNULL="false" />
             </FIELDS>
@@ -1216,6 +1233,86 @@
                 <KEY NAME="viewfk" TYPE="foreign" FIELDS="view" REFTABLE="view" REFFIELDS="id"/>
                 <KEY NAME="blockfk" TYPE="foreign" FIELDS="block" REFTABLE="block_instance" REFFIELDS="id"/>
                 <KEY NAME="usrfk" TYPE="foreign" FIELDS="usr" REFTABLE="usr" REFFIELDS="id"/>
+            </KEYS>
+        </TABLE>
+        <TABLE NAME="objectionable">
+            <FIELDS>
+                <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true" />
+                <FIELD NAME="objecttype" TYPE="char" LENGTH="20" NOTNULL="true" />
+                <FIELD NAME="objectid" TYPE="int" LENGTH="10" NOTNULL="true" />
+                <FIELD NAME="reportedby" TYPE="int" LENGTH="10" NOTNULL="true" />
+                <FIELD NAME="report" TYPE="text" NOTNULL="true" />
+                <FIELD NAME="reportedtime" TYPE="datetime" NOTNULL="true" />
+                <FIELD NAME="resolvedby" TYPE="int" LENGTH="10" NOTNULL="false" />
+                <FIELD NAME="resolvedtime" TYPE="datetime" NOTNULL="false" />
+            </FIELDS>
+            <KEYS>
+            <KEY NAME="primary" TYPE="primary" FIELDS="id" />
+                <KEY NAME="reporterfk" TYPE="foreign" FIELDS="reportedby" REFTABLE="usr" REFFIELDS="id" />
+                <KEY NAME="resolverfk" TYPE="foreign" FIELDS="resolvedby" REFTABLE="usr" REFFIELDS="id" />
+            </KEYS>
+            <INDEXES>
+                <INDEX NAME="objectix" UNIQUE="false" FIELDS="objectid, objecttype"/>
+            </INDEXES>
+        </TABLE>
+        <TABLE NAME="export_queue">
+            <FIELDS>
+                <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true" />
+                <FIELD NAME="usr" TYPE="int" LENGTH="10" NOTNULL="true" />
+                <FIELD NAME="type" TYPE="char" LENGTH="50" NOTNULL="false" />
+                <FIELD NAME="exporttype" TYPE="char" LENGTH="10" NOTNULL="true" />
+                <FIELD NAME="ctime" TYPE="datetime" NOTNULL="true"  />
+                <FIELD NAME="starttime" TYPE="datetime" NOTNULL="false" />
+                <FIELD NAME="externalid" TYPE="char" LENGTH="255" NOTNULL="false" />
+                <FIELD NAME="submitter" TYPE="int" LENGTH="10" NOTNULL="false" />
+            </FIELDS>
+            <KEYS>
+                <KEY NAME="primary" TYPE="primary" FIELDS="id" />
+                <KEY NAME="usrfk" TYPE="foreign" FIELDS="usr" REFTABLE="usr" REFFIELDS="id" />
+                <KEY NAME="submitterfk" TYPE="foreign" FIELDS="submitter" REFTABLE="usr" REFFIELDS="id" />
+            </KEYS>
+        </TABLE>
+        <TABLE NAME="export_queue_items">
+            <FIELDS>
+                <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true" />
+                <FIELD NAME="exportqueueid" TYPE="int" LENGTH="10" NOTNULL="true" />
+                <FIELD NAME="collection" TYPE="int" LENGTH="10" NOTNULL="false" />
+                <FIELD NAME="view" TYPE="int" LENGTH="10" NOTNULL="false" />
+            </FIELDS>
+            <KEYS>
+                <KEY NAME="primary" TYPE="primary" FIELDS="id" />
+                <KEY NAME="exportqueuefk" TYPE="foreign" FIELDS="exportqueueid" REFTABLE="export_queue" REFFIELDS="id" />
+                <KEY NAME="collectionfk" TYPE="foreign" FIELDS="collection" REFTABLE="collection" REFFIELDS="id" />
+                <KEY NAME="viewfk" TYPE="foreign" FIELDS="view" REFTABLE="view" REFFIELDS="id" />
+            </KEYS>
+        </TABLE>
+        <TABLE NAME="export_archive">
+            <FIELDS>
+                <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true" />
+                <FIELD NAME="usr" TYPE="int" LENGTH="10" NOTNULL="true" />
+                <FIELD NAME="filename" TYPE="char" LENGTH="255" NOTNULL="true" />
+                <FIELD NAME="filetitle" TYPE="char" LENGTH="255" NOTNULL="true" />
+                <FIELD NAME="filepath" TYPE="char" LENGTH="255" NOTNULL="true" />
+                <FIELD NAME="submission" TYPE="int" LENGTH="1" NOTNULL="true" DEFAULT="0" />
+                <FIELD NAME="ctime" TYPE="datetime" NOTNULL="true"  />
+            </FIELDS>
+            <KEYS>
+                <KEY NAME="primary" TYPE="primary" FIELDS="id" />
+                <KEY NAME="usrfk" TYPE="foreign" FIELDS="usr" REFTABLE="usr" REFFIELDS="id" />
+            </KEYS>
+        </TABLE>
+        <TABLE NAME="archived_submissions">
+            <FIELDS>
+                <FIELD NAME="id" TYPE="int" LENGTH="10" NOTNULL="true" SEQUENCE="true" />
+                <FIELD NAME="archiveid" TYPE="int" LENGTH="10" NOTNULL="true" />
+                <FIELD NAME="group" TYPE="int" LENGTH="10" NOTNULL="true" />
+                <FIELD NAME="externalhost" TYPE="char" LENGTH="50" NOTNULL="false" />
+                <FIELD NAME="externalid" TYPE="char" LENGTH="255" NOTNULL="false" />
+            </FIELDS>
+            <KEYS>
+                <KEY NAME="primary" TYPE="primary" FIELDS="id" />
+                <KEY NAME="archivefk" TYPE="foreign" FIELDS="archiveid" REFTABLE="export_archive" REFFIELDS="id" />
+                <KEY NAME="groupfk" TYPE="foreign" FIELDS="group" REFTABLE="group" REFFIELDS="id" />
             </KEYS>
         </TABLE>
     </TABLES>

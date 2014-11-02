@@ -89,7 +89,7 @@ $inlinejs = <<<EOF
                 }
             }
             var scrolltop = (((getViewport().h / 2) - 100) > 0) ? (getViewport().h / 2) - 100 : 0;
-            meta.css('left', (((getViewport().w / 2) - 200) > 0) ? (getViewport().w / 2) - 200 : 0);
+            meta.css('left', '30%');
             meta.css('top', (getViewport().t + scrolltop));
             jQuery(document.body).append('<div id="overlay"></div>');
             meta.find('.metadataclose').focus();
@@ -124,7 +124,7 @@ $smarty->assign('id', $id);
 $smarty->assign('metadata', $metadata);
 $smarty->assign('filter', $filter);
 $smarty->assign('pagination', $pagination['html']);
-$smarty->assign('PAGEHEADING', hsc(TITLE));
+$smarty->assign('PAGEHEADING', TITLE);
 $smarty->display('skin/index.tpl');
 
 function filter_submit(Pieform $form, $values) {

@@ -43,13 +43,13 @@ function objectionSuccess(form, data) {
 
 function moveFeedbackForm(tinymceused) {
     if (tinymceused) {
-        tinyMCE.execCommand('mceRemoveControl', false, 'add_feedback_form_message');
+        tinyMCE.execCommand('mceRemoveEditor', false, 'add_feedback_form_message');
     }
     form = $('add_feedback_form');
     removeElement(form);
     appendChildNodes($('add_feedback_link').parentNode, form);
     if (tinymceused) {
-       tinyMCE.execCommand('mceAddControl', false, 'add_feedback_form_message');
+       tinyMCE.execCommand('mceAddEditor', false, 'add_feedback_form_message');
     }
 }
 
@@ -89,10 +89,15 @@ function isTinyMceUsed() {
 addLoadEvent(function () {
     if ($('add_feedback_form')) {
         if ($('add_feedback_link')) {
-
-            var isIE6 = document.all && !window.opera &&
-                (!document.documentElement || typeof(document.documentElement.style.maxHeight) == "undefined");
-
+            if (typeof(tinyMCE) != 'undefined') {
+                tinyMCE.on('SetupEditor', function(editor) {
+                    if (editor.id == 'add_feedback_form_message') {
+                        editor.on('init', function() {
+                            editor.hide();
+                        });
+                    }
+                });
+            }
             connect('add_feedback_link', 'onclick', function(e) {
                 var tinymceused = isTinyMceUsed();
 
@@ -114,18 +119,15 @@ addLoadEvent(function () {
                     setElementPosition('add_feedback_form', formposition);
                     appendChildNodes(document.body, DIV({id: 'overlay'}));
                 }
-                // IE6 fails to hide tinymce properly after feedback
-                // submission, so force it to reload the page by disconnecting
-                // the submit handler
-                if (isIE6) {
-                    disconnectAll('add_feedback_form', 'onsubmit');
-                }
 
                 if (tinymceused) {
-                    tinyMCE.get('add_feedback_form_message').focus();
+                    var mce = tinyMCE.get('add_feedback_form_message');
+                    mce.show();
+                    jQuery('.mce-toolbar.mce-first').siblings().toggleClass('hidden');
+                    mce.focus();
                 }
                 else {
-                    $('add_feedback_form_message').focus();
+                    $j('#add_feedback_form input:text').eq(1).focus();
                 }
 
                 return false;

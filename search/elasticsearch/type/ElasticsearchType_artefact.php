@@ -215,7 +215,7 @@ class ElasticsearchType_artefact extends ElasticsearchType
 
         $sql = 'SELECT  a.id, a.artefacttype, a.parent, a.owner, a.title, a.description, a.institution, a.group, a.author,
         p.artefacttype AS parent_artefacttype, p.title AS parent_title, p.description  AS parent_description, a.license,
-        afi.width, afi.height
+        afi.width, afi.height, a.note
         FROM {artefact} a
         LEFT OUTER JOIN {artefact} p ON p.id = a.parent
         LEFT OUTER JOIN {artefact_file_image} afi ON afi.artefact = a.id
@@ -283,6 +283,15 @@ class ElasticsearchType_artefact extends ElasticsearchType
                 case 'task':
                     if (isset($record->parent) && intval($record->parent) > 0) {
                         $record->link = 'artefact/plans/plan.php?id=' . $record->parent;
+                    }
+                    break;
+                case 'socialprofile':
+                    $record->note = str_replace(array("\r\n", "\n", "\r"), ' ', strip_tags($record->note));
+                    $socialprofile = new ArtefactTypeSocialprofile($record->id);
+                    $icons = $socialprofile->get_profile_icons(array($record));
+                    if (!empty($icons)) {
+                        $record->link = $icons[0]->link;
+                        $record->icon = $icons[0]->icon;
                     }
                     break;
             }
@@ -358,7 +367,6 @@ class ElasticsearchType_artefact extends ElasticsearchType
                 WHERE   vart.artefact = ?
                 AND (vac.startdate IS NULL OR vac.startdate < current_timestamp)
                 AND (vac.stopdate IS NULL OR vac.stopdate > current_timestamp)
-                AND (vac.accesstype != \'objectionable\' OR vac.accesstype IS NULL)
                 UNION
                 SELECT vac.view AS view_id, vac.accesstype, vac.group, vac.role, vac.usr, vac.institution
                 FROM {artefact} art
@@ -367,7 +375,6 @@ class ElasticsearchType_artefact extends ElasticsearchType
                 WHERE   art.id = ?
                 AND (vac.startdate IS NULL OR vac.startdate < current_timestamp)
                 AND (vac.stopdate IS NULL OR vac.stopdate > current_timestamp)
-                AND (vac.accesstype != \'objectionable\' OR vac.accesstype IS NULL);
                 ',
                 array($artefactid, $artefactid)
         );

@@ -165,6 +165,7 @@ function adduser_validate(Pieform $form, $values) {
 
     // Don't exceed max user accounts for the institution
     if ($institution->isFull()) {
+        $institution->send_admin_institution_is_full_message();
         $form->set_error('authinstance', get_string('institutionmaxusersexceeded', 'admin'));
         return;
     }
@@ -222,7 +223,7 @@ function adduser_validate(Pieform $form, $values) {
             $mimetype = file_mime_type($values['leap2afile']['tmp_name']);
         }
         else {
-            $mimetype = $values['leap2afile']['type'];
+            $mimetype = trim($values['leap2afile']['type'], '"');
         }
         $date = time();
         $niceuser = preg_replace('/[^a-zA-Z0-9_-]/', '-', $values['username']);

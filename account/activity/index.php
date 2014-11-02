@@ -69,7 +69,7 @@ function markread(form, action) {
 
     var e = getElementsByTagAndClassName(null,'tocheck'+action,form);
     var pd = {};
-    
+
     for (cb in e) {
         if (e[cb].checked == true) {
             pd[e[cb].name] = 1;
@@ -92,7 +92,7 @@ function markread(form, action) {
             pd[p] = paginatorData.params[p];
         }
     }
-    
+
     sendjsonrequest('index.json.php', pd, 'GET', function (data) {
         paginator.updateResults(data);
         updateUnreadCount(data);
@@ -239,7 +239,7 @@ function delete_all_notifications_submit() {
     }
 
     db_commit();
-    $SESSION->add_ok_msg(get_string('deletednotifications', 'activity', $count));
+    $SESSION->add_ok_msg(get_string('deletednotifications1', 'activity', $count));
     redirect(get_config('wwwroot') . 'account/activity/index.php?type='.$type);
 }
 

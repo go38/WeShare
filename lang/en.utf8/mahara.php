@@ -15,9 +15,11 @@ defined('INTERNAL') || die();
 $string['add']     = 'Add';
 $string['addone']  = 'Add one';
 $string['cancel']  = 'Cancel';
+$string['copytoclipboard']  = 'Copy secret URL to the clipboard';
 $string['delete']  = 'Delete';
 $string['deletespecific'] = 'Delete "%s"';
 $string['deleteitem']  = 'Delete';
+$string['deleted']  = 'deleted';
 $string['moveitemup']  = 'Move up';
 $string['moveitemdown']  = 'Move down';
 $string['edit']    = 'Edit';
@@ -31,6 +33,7 @@ $string['update']  = 'Update';
 $string['change']  = 'Change';
 $string['send']    = 'Send';
 $string['go']      = 'Go';
+$string['configfor']     = 'Configuration for';
 $string['default'] = 'Default';
 $string['upload']  = 'Upload';
 $string['complete']  = 'Complete';
@@ -45,6 +48,22 @@ $string['Help'] = 'Help';
 $string['closehelp'] = 'Close help';
 $string['applychanges'] = 'Apply changes';
 $string['general'] = 'General';
+$string['units'] = 'Units';
+$string['status'] = 'Status';
+$string['toggletoolbarson'] = 'Toggle toolbars on. Show full list of buttons';
+$string['toggletoolbarsoff'] = 'Toggle toolbars off. Show basic buttons';
+$string['defaulthint'] = 'Type in a search term';
+$string['imagexofy'] = 'Image {x} of {y}';
+$string['clickformore'] = '(Press \'enter\' to display more information)';
+$string['goto'] = 'Go to \'%s\'';
+$string['gotomore'] = 'Read more...';
+// Objectionable strings.
+$string['complaint'] = 'Complaint';
+$string['notifyadministrator'] = 'Notify administrator';
+$string['notifyadministratorconfirm'] = 'Are you sure you wish to report this page as containing objectionable material?';
+$string['notobjectionable'] = 'Not objectionable';
+$string['reportobjectionablematerial'] = 'Report objectionable material';
+$string['reportsent'] = 'Your report has been sent.';
 // responsive design strings
 $string['tabs'] = 'Tabs';
 $string['tab'] = 'tab';
@@ -161,6 +180,7 @@ $string['resultsperpage'] = 'Results per page';
 // License metadata
 $string['license'] = 'License';
 $string['licenseother'] = 'Other license (enter URL)';
+$string['licenseotherurl'] = 'Enter URL';
 $string['licensedesc'] = 'The license for this content.';
 $string['licensenone'] = 'None selected';
 $string['licensenonedetailed'] = '%s has not chosen a license for this content.';
@@ -199,6 +219,7 @@ $string['progressbargenerictask'] = array(
     1 => 'Add %d: %s'
 );
 $string['profilecompletionforwhichinstitution'] = 'for';
+$string['noprogressitems'] = 'No profile completion items for this institution.';
 
 // Online users sideblock strings
 $string['onlineusers'] = 'Online users';
@@ -369,6 +390,7 @@ $string['cookiesnotenabled'] = 'Your browser does not have cookies enabled or is
 $string['institution'] = 'Institution';
 $string['institutioncontacts'] = '\'%s\' contacts';
 $string['institutionlink'] = '<a href="%s">%s</a>';
+$string['link'] = '<a href="%s">%s</a>';
 $string['loggedoutok'] = 'You have been logged out successfully';
 $string['login'] = 'Login';
 $string['loginfailed'] = 'You have not provided the correct credentials to log in. Please check your username and password are correct.';
@@ -403,11 +425,15 @@ $string['mustspecifyoldpassword'] = 'You must specify your current password.';
 $string['Site'] = 'Site';
 
 // Misc. register stuff that could be used elsewhere
+$string['profileicon'] = 'Profile image';
+$string['bulkselect'] = 'Select users for editing / reports';
 $string['emailaddress'] = 'Email address';
 $string['emailaddressdescription'] = ' ';
 $string['firstname'] = 'First name';
+$string['firstnameall'] = 'All first names';
 $string['firstnamedescription'] = ' ';
 $string['lastname'] = 'Last name';
+$string['lastnameall'] = 'All last names';
 $string['lastnamedescription'] = ' ';
 $string['studentid'] = 'ID number';
 $string['displayname'] = 'Display name';
@@ -555,9 +581,43 @@ $string['noenddate'] = 'No end date';
 $string['day']       = 'day';
 $string['days']      = 'days';
 $string['weeks']     = 'weeks';
+$string['month']    = 'month';
 $string['months']    = 'months';
 $string['years']     = 'years';
-// Boolean site option
+$string['year']     = 'year';
+
+// Datepicker options
+$string['datepicker_clearText'] = 'Clear';
+$string['datepicker_clearStatus'] = '';
+$string['datepicker_closeText'] = 'Done';
+$string['datepicker_closeStatus'] = 'Close without change';
+$string['datepicker_prevText'] = 'Prev';
+$string['datepicker_prevStatus'] = 'Show the previous month';
+$string['datepicker_nextText'] = 'Next';
+$string['datepicker_nextStatus'] = 'Show the next month';
+$string['datepicker_currentText'] = 'Now';
+$string['datepicker_currentStatus'] = 'Show the current month';
+$string['datepicker_monthNames'] = "['January','February','March','April','May','June','July','August','September','October','November','December']";
+$string['datepicker_monthNamesShort'] = "['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']";
+$string['datepicker_monthStatus'] = 'Show a different month';
+$string['datepicker_yearStatus'] = 'See another year';
+$string['datepicker_weekHeader'] = 'Wk';
+$string['datepicker_weekStatus'] = '';
+$string['datepicker_dayNames'] = "['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']";
+$string['datepicker_dayNamesShort'] = "['Sun','Mon','Tue','Wed','Thu','Fri','Sat']";
+$string['datepicker_dayNamesMin'] = "['Su','Mo','Tu','We','Th','Fr','Sa']";
+$string['datepicker_dayStatus'] = 'Using DD as the first day of the week';
+$string['datepicker_dateStatus'] = 'Select DD, MM d, yy';
+$string['datepicker_initStatus'] = 'Choose the date';
+$string['datepicker_timeOnlyTitle'] = 'Select time';
+$string['datepicker_timeText'] = 'Time';
+$string['datepicker_hourText'] = 'Hour';
+$string['datepicker_minuteText'] = 'Minute';
+$string['datepicker_secondText'] = 'Second';
+$string['datepicker_millisecText'] = 'Millisecond';
+$string['datepicker_timezoneText'] = 'Timezone';
+$string['datepicker_amNames'] = "['AM', 'A']";
+$string['datepicker_pmNames'] = "['PM', 'P']";
 
 // Site content pages
 $string['sitecontentnotfound'] = '%s text not available';
@@ -568,6 +628,7 @@ $string['email']                    = 'Email';
 $string['emails']                    = 'Emails';
 $string['subject']                  = 'Subject';
 $string['message']                  = 'Message';
+$string['messageoptional']          = 'Message <span class="accessible-hidden">(optional)</span>';
 $string['messagesent']              = 'Your message has been sent';
 $string['nosendernamefound']        = 'No sender name was submitted';
 $string['emailnotsent']             = 'Failed to send contact email. Error message: "%s"';
@@ -683,6 +744,7 @@ $string['addemail'] = 'Add email address';
 
 // Search
 $string['search'] = 'Search';
+$string['searchtype'] = 'Search type';
 $string['searchusers'] = 'Search users';
 $string['Query'] = 'Search';
 $string['query'] = 'Search';
@@ -708,6 +770,8 @@ $string['republish'] = 'Publish';
 $string['view'] = 'Page';
 $string['artefactnotpublishable'] = 'Artefact %s is not publishable in page %s';
 $string['nopublishpermissiononartefact'] = 'You do not have permission to publish %s.';
+$string['nopathfound'] = 'No path found for this artefact.';
+$string['cantmoveitem'] = 'Cannot move this artefact.';
 
 $string['belongingto'] = 'Belonging to';
 $string['allusers'] = 'All users';
@@ -733,7 +797,7 @@ $string['virusfounduser'] = 'The file you have uploaded, %s, has been scanned by
 $string['fileunknowntype'] = 'The type of your uploaded file could not be determined. Your file may be corrupted, or it could be a configuration problem. Please contact your administrator.';
 $string['virusrepeatsubject'] = 'Warning: %s is a repeat virus uploader.';
 $string['virusrepeatmessage'] = 'The user %s has uploaded multiple files which have been scanned by a virus checker and found to be infected.';
-
+$string['exportfiletoobig'] = 'The file about to be generated will be too big. Please clear some disk space.';
 $string['phpuploaderror'] = 'An error occurred during file upload: %s (Error code %s).';
 $string['phpuploaderror_1'] = 'The uploaded file exceeds the upload_max_filesize directive in php.ini.';
 $string['phpuploaderror_2'] = 'The uploaded file exceeds the max_file_size directive that was specified in the HTML form.';
@@ -1025,6 +1089,7 @@ $string['hidden'] = 'hidden';
 $string['lastupdate'] = 'Last update';
 $string['lastupdateorcomment'] = 'Last update or comment';
 $string['Title'] = 'Title';
+$string['anonymoususer'] = '(Author\'s name hidden)';
 
 // import related strings (maybe separated later)
 $string['importedfrom'] = 'Imported from %s';
@@ -1043,7 +1108,7 @@ $string['profiledescription'] = 'Your profile page is what others see when they 
 
 // Dashboard views
 $string['mydashboard'] = 'My dashboard';
-$string['editdashboard'] = 'Edit';
+$string['editdashboard'] = 'Edit dashboard';
 $string['usersdashboard'] = "%s's dashboard";
 $string['dashboarddescription'] = 'Your dashboard page is what you see on the homepage when you first log in. Only you have access to it.';
 $string['topicsimfollowing'] = "Topics I am following";
@@ -1058,28 +1123,24 @@ $string['choosetheme'] = 'Choose theme...';
 
 // Homepage info block
 $string['Hide2'] = 'Hide information box';
-$string['createcollect'] = 'Create and collect';
-$string['createcollectsubtitle'] = 'Develop your portfolio';
-$string['updateprofile'] = 'Update your profile';
-$string['uploadfiles'] = 'Upload your files';
-$string['createresume'] = 'Create your résumé';
-$string['publishblog'] = 'Publish a journal';
-$string['Organise'] = 'Organise';
-$string['organisesubtitle'] = 'Showcase your portfolio';
-$string['organisedescription'] = 'Organise your portfolio into <a href="%s">pages.</a> Create different pages for different audiences - you choose the elements to include.';
-$string['sharenetwork'] = 'Share and network';
-$string['sharenetworksubtitle'] = 'Find friends and join groups';
-$string['findfriends'] = 'Find friends';
-$string['joinsomegroups'] = 'Join groups';
-$string['controlyourprivacy'] = 'Control your privacy';
-$string['discusstopics'] = 'Discuss topics';
-$string['howtodisable'] = 'You have hidden the information box. You can control its visibility in <a href="%s">Settings</a>.';
+$string['create'] = 'Create';
+$string['createsubtitle'] = 'Develop your portfolio';
+$string['createdetail'] = 'Create your electronic portfolio in a flexible personal learning environment';
+$string['share'] = 'Share';
+$string['sharesubtitle'] = 'Control your privacy';
+$string['sharedetail'] = 'Share your achievements and development in a space you control';
+$string['engage'] = 'Engage';
+$string['engagesubtitle'] = 'Find people and join groups';
+$string['engagedetail'] = 'Engage with other people in discussion forums and collaborate with them in groups';
+$string['howtodisable'] = 'You have hidden the information box. You can control its visibility in <a
+href="%s">Settings</a>.';
 
 // Blocktype
 $string['setblocktitle'] = 'Set a block title';
 
 // Download
 $string['filenotfound'] = 'File not found';
+$string['filenotfoundmaybeexpired'] = 'File not found. Your export file only exists for 24 hours after it was created. You will need to export your content again.';
 
 $string['betweenxandy'] = 'Between %s and %s';
 
@@ -1100,3 +1161,6 @@ It provides users with tools to create and maintain a digital portfolio of their
 
 // Form change checker
 $string['wanttoleavewithoutsaving?'] = 'You have made changes - do you want to leave the page without saving them?';
+
+// TinyMCE maharaimage plugin
+$string['attachedimage'] = 'Attached image';

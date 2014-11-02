@@ -420,6 +420,7 @@ class LeapImportBlog extends LeapImportArtefactPlugin {
             'title' => (string)$blogpostentry->title . ' ' . get_string('attachment', 'artefact.blog'),
             'owner' => $importer->get('usr'),
         );
+        $data->oldextension = end(explode('.', $data->title));
         return ArtefactTypeFile::save_file($pathname, $data, $importer->get('usrobj'), true);
     }
 
@@ -517,12 +518,39 @@ class LeapImportBlog extends LeapImportArtefactPlugin {
                 'description' => isset($description) ? $description : null,
                 // TODO: Support for this "file" mode in interactive import
 //                 'file'        => isset($file) ? $file : null,
+                'files'       => self::add_files_to_import_entry_request_blogpost($entry, $importer, $blogentryid),
                 'ctime'       => (string)$entry->published,
                 'mtime'       => (string)$entry->updated,
                 'published'   => PluginImportLeap::is_correct_category_scheme($entry, $importer, 'readiness', 'Unready') ? 0 : 1,
                 'tags'        => PluginImportLeap::get_entry_tags($entry),
             ),
         );
+    }
+
+    /**
+     * Add file attachment information to import entry request for a blogpost
+     *
+     * @param SimpleXMLElement $entry    The entry to create the blogpost from
+     * @param PluginImportLeap $importer The importer
+     * @param int $blogentryid         The ID of the import entry of the blog in which to put the post
+     */
+    private static function add_files_to_import_entry_request_blogpost(SimpleXMLElement $entry, PluginImportLeap $importer, $blogentryid) {
+        $files = array();
+        if (isset($entry->link)) {
+            foreach ($entry->link as $link) {
+                if ($importer->curie_equals($link['rel'], '', 'related') && isset($link['href'])) {
+                    if ($has_attachments = get_records_select_array('import_entry_requests', 'importid = ? AND entryid = ?', array($importer->get('importertransport')->get('importid'), (string)$link['href']))) {
+                        foreach ($has_attachments as $has_attachment) {
+                            $attachment = unserialize($has_attachment->entrycontent);
+                            $files[] = array('title' => $attachment['title'],
+                                             'description' => $attachment['description'],
+                                             );
+                        }
+                    }
+                }
+            }
+        }
+        return $files;
     }
 
     /**
@@ -537,7 +565,6 @@ class LeapImportBlog extends LeapImportArtefactPlugin {
         if ($config['isfile']) {
             LeapImportFile::add_import_entry_request_file($entry, $importer);
         }
-
         return PluginImportLeap::add_import_entry_request($importer->get('importertransport')->get('importid'), (string)$entry->id, self::STRATEGY_IMPORT_AS_ENTRY, 'blog', array(
             'owner'   => $importer->get('usr'),
             'type'    => 'blogpost',
@@ -547,6 +574,7 @@ class LeapImportBlog extends LeapImportArtefactPlugin {
                 'description' => $config['content']['description'],
                 // TODO: Support for this "file" mode in interactive import
 //                 'file'        => isset($file) ? $file : null,
+                'files'       => self::add_files_to_import_entry_request_blogpost($entry, $importer, $blogentryid),
                 'ctime'       => (string)$entry->published,
                 'mtime'       => (string)$entry->updated,
                 'published'   => PluginImportLeap::is_correct_category_scheme($entry, $importer, 'readiness', 'Unready') ? 0 : 1,

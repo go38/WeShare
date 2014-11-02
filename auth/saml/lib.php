@@ -146,6 +146,7 @@ class AuthSaml extends Auth {
             if (!empty($this->config['weautocreateusers'])) {
                 $institution = new Institution($this->institution);
                 if ($institution->isFull()) {
+                    $institution->send_admin_institution_is_full_message();
                     throw new XmlrpcClientException('SSO attempt from ' . $institution->displayname . ' failed - institution is full');
                 }
                 $user = new User;
@@ -245,7 +246,7 @@ class AuthSaml extends Auth {
         // tidy up the session for retries
         $SESSION->set('messages', array());
         $SESSION->set('wantsurl', null);
-        
+
         // redirect for logout of SAML 2.0 IdP
         redirect($CFG->wwwroot.'/auth/saml/index.php?logout=1');
     }
@@ -516,7 +517,7 @@ class PluginAuthSaml extends PluginAuth {
         }
     }
 
-    public static function save_config_options($values) {
+    public static function save_config_options($form, $values) {
         $configs = array('simplesamlphplib', 'simplesamlphpconfig');
         foreach ($configs as $config) {
             set_config_plugin('auth', 'saml', $config, $values[$config]);

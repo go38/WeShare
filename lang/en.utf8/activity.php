@@ -37,13 +37,18 @@ $string['unread'] = 'Unread';
 
 $string['markasread'] = 'Mark as read';
 $string['selectall'] = 'Select all';
+$string['selectallread'] = 'All unread notifications';
+$string['selectalldelete'] = 'All notifications for deletion';
 $string['recurseall'] = 'Recurse all';
 $string['alltypes'] = 'All types';
 
 $string['markedasread'] = 'Marked your notifications as read';
 $string['failedtomarkasread'] = 'Failed to mark your notifications as read';
 
-$string['deletednotifications'] = 'Deleted %s notifications';
+$string['deletednotifications1'] = array(
+0 => 'Deleted %s notification',
+1 => 'Deleted %s notifications'
+);
 $string['failedtodeletenotifications'] = 'Failed to delete your notifications';
 
 $string['stopmonitoring'] = 'Stop monitoring';
@@ -65,9 +70,12 @@ $string['newviewmessage'] = '%s has created a new page "%s"';
 $string['newcontactusfrom'] = 'New contact us from';
 $string['newcontactus'] = 'New contact us';
 
+$string['newcollectionaccessmessage'] = 'You have been added to the access list for the collection "%s" by %s';
 $string['newviewaccessmessage'] = 'You have been added to the access list for the page "%s" by %s';
+$string['newcollectionaccessmessagenoowner'] = 'You have been added to the access list for the collection "%s"';
 $string['newviewaccessmessagenoowner'] = 'You have been added to the access list for the page "%s"';
-$string['newviewaccesssubject'] = 'New page access';
+$string['newcollectionaccesssubject'] = 'New access to collection "%s"';
+$string['newviewaccesssubject1'] = 'New access to page "%s"';
 
 $string['viewmodified'] = 'has changed their page';
 $string['ongroup'] = 'on group';

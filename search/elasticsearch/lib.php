@@ -336,7 +336,7 @@ class PluginSearchElasticsearch extends PluginSearch {
         return $config;
     }
 
-    public function save_config_options($values) {
+    public static function save_config_options($form, $values) {
         set_config_plugin('search', 'elasticsearch', 'cronlimit', $values['cronlimit']);
 
         // Changes in artefact types:
@@ -912,8 +912,7 @@ class ElasticsearchFilterAcl extends \Elastica\Filter\BoolOr
 
     private function getGroupsList(){
         $list = array();
-        $groups = group_get_user_groups($this->user->get('id'));
-        foreach ($groups as $group) {
+        foreach (group_get_user_groups($this->user->get('id')) as $group) {
             $list[$group->role][] = $group->id;
             $list['member'][] = $group->id;
         }

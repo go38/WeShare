@@ -27,15 +27,24 @@ require_once('ddl.php');
  *
  * @param string $name The name of the plugin to check. If no name is specified,
  *                     all plugins are checked.
- * @return array of objects
+ * @return mixed If a name is specified, an object will be returned with upgrade data
+ *                     about the requested component (which can be "core", "local", or a plugin).
+ *                     If the component desn't need to be updated, an empty array will be returned.
+ *               If no name is specified, an array of such objects will be returned.
+ *                     It will also include an array key "settings", which will be an array
+ *                     that may contain metadata about the upgrade/install process.
  */
 function check_upgrades($name=null) {
 
     $pluginstocheck = plugin_types();
 
     $toupgrade = array();
+    $settings = array();
+    $toupgradecount = 0;
+    $newinstallcount = 0;
     $installing = false;
     $disablelogin = false;
+    $newinstalls = array();
 
     require('version.php');
     if (isset($config->disablelogin) && !empty($config->disablelogin)) {
@@ -217,8 +226,9 @@ function check_upgrades($name=null) {
         }
 
         if (empty($pluginversion)) {
+            $newinstall = false;
             if (empty($installing) && $pluginkey != $name) {
-                continue;
+                $newinstall = true;
             }
             $plugininfo = new StdClass;
             $plugininfo->install = true;
@@ -230,7 +240,28 @@ function check_upgrades($name=null) {
             if (property_exists($config, 'requires_parent')) {
                 $plugininfo->requires_parent = $config->requires_parent;
             }
-            $toupgrade[$pluginkey] = $plugininfo;
+
+            $classname = generate_class_name($plugintype, $pluginname);
+            safe_require($plugintype, $pluginname);
+            try {
+                $classname::sanity_check();
+            }
+            catch (InstallationException $exc) {
+                $plugininfo->to = get_string('notinstalled', 'admin');
+                $plugininfo->torelease = get_string('notinstalled', 'admin');
+                $plugininfo->errormsg = $exc->getMessage();
+            }
+
+            if ($newinstall) {
+                $plugininfo->from = get_string('notinstalled', 'admin');
+                $plugininfo->fromrelease = get_string('notinstalled', 'admin');
+                $plugininfo->newinstall = true;
+                $newinstallcount ++;
+                $newinstalls[$pluginkey] = $plugininfo;
+            }
+            else {
+                $toupgrade[$pluginkey] = $plugininfo;
+            }
         }
         else if ($config->version > $pluginversion) {
             if (isset($config->minupgradefrom) && isset($config->minupgraderelease)
@@ -239,6 +270,7 @@ function check_upgrades($name=null) {
                                           . " ($config->minupgraderelease) first "
                                           . " (you have $pluginversion ($pluginrelease))");
             }
+            $toupgradecount ++;
             $plugininfo = new StdClass;
             $plugininfo->upgrade = true;
             $plugininfo->from = $pluginversion;
@@ -251,25 +283,54 @@ function check_upgrades($name=null) {
             if (property_exists($config, 'requires_parent')) {
                 $plugininfo->requires_parent = $config->requires_parent;
             }
+
+            $classname = generate_class_name($plugintype, $pluginname);
+            safe_require($plugintype, $pluginname);
+            try {
+                $classname::sanity_check();
+            }
+            catch (InstallationException $exc) {
+                $plugininfo->to = $config->version;
+                $plugininfo->torelease = $pluginrelease;
+                $plugininfo->errormsg = $exc->getMessage();
+                $toupgrade[$pluginkey] = $plugininfo;
+
+                continue;
+            }
+
             $toupgrade[$pluginkey] = $plugininfo;
         }
     }
 
     // if we've just asked for one, don't return an array...
-    if (!empty($name) && count($toupgrade) == 1) {
-        $upgrade = new StdClass;
-        $upgrade->name = $name;
-        foreach ((array)$toupgrade[$name] as $key => $value) {
-            $upgrade->{$key} = $value;
+    if (!empty($name)){
+        if (count($toupgrade) == 1) {
+            $upgrade = new StdClass;
+            $upgrade->name = $name;
+            foreach ((array)$toupgrade[$name] as $key => $value) {
+                $upgrade->{$key} = $value;
+            }
+            $upgrade->disablelogin = $disablelogin;
+            return $upgrade;
         }
-        $upgrade->disablelogin = $disablelogin;
-        return $upgrade;
+        else {
+            return array();
+        }
     }
-    $toupgrade['disablelogin'] = $disablelogin;
-    if (count($toupgrade) == 1) {
-        $toupgrade = array();
+
+    // Nothing needed to be upgraded or installed
+    if (count($toupgrade) == 0) {
+        if (!empty($name))
+        $disablelogin = false;
     }
+
+    // If we get here, it's because we have an array of objects to return
     uksort($toupgrade, 'sort_upgrades');
+    $settings['disablelogin'] = $disablelogin;
+    $settings['newinstallcount'] = $newinstallcount;
+    $settings['newinstalls'] = $newinstalls;
+    $settings['toupgradecount'] = $toupgradecount;
+    $toupgrade['settings'] = $settings;
     return $toupgrade;
 }
 
@@ -464,19 +525,23 @@ function upgrade_plugin($upgrade) {
             if (!class_exists($classname)) {
                 throw new InstallationException(get_string('classmissing', 'error',  $classname, $pluginname, $plugintype));
             }
-            $activity->plugintype = $plugintype;
-            $activity->pluginname = $pluginname;
-            $where = (object) array(
-                'name'       => $activity->name,
-                'plugintype' => $plugintype,
-                'pluginname' => $pluginname,
-            );
-            // Work around the fact that insert_record cached the columns that
-            // _were_ in the activity_type table before it was upgraded
-            global $INSERTRECORD_NOCACHE;
-            $INSERTRECORD_NOCACHE = true;
-            ensure_record_exists('activity_type', $where, $activity);
-            unset($INSERTRECORD_NOCACHE);
+            // Add activity_type if it doesn't exist
+            if (!get_record('activity_type', 'name', $activity->name, 'plugintype', $plugintype, 'pluginname', $pluginname)) {
+                $activity->plugintype = $plugintype;
+                $activity->pluginname = $pluginname;
+                $activity->defaultmethod = get_config('defaultnotificationmethod') ? get_config('defaultnotificationmethod') : $activity->defaultmethod;
+                $where = (object) array(
+                    'name'       => $activity->name,
+                    'plugintype' => $plugintype,
+                    'pluginname' => $pluginname,
+                );
+                // Work around the fact that insert_record cached the columns that
+                // _were_ in the activity_type table before it was upgraded
+                global $INSERTRECORD_NOCACHE;
+                $INSERTRECORD_NOCACHE = true;
+                ensure_record_exists('activity_type', $where, $activity);
+                unset($INSERTRECORD_NOCACHE);
+            }
         }
     }
 
@@ -768,6 +833,7 @@ function core_install_firstcoredata_defaults() {
     set_config('createpublicgroups', 'all');
     set_config('allowpublicviews', 1);
     set_config('allowpublicprofiles', 1);
+    set_config('allowanonymouspages', 0);
     set_config('generatesitemap', 1);
     set_config('showselfsearchsideblock', 0);
     set_config('showtagssideblock', 1);
@@ -847,18 +913,18 @@ function core_install_firstcoredata_defaults() {
         insert_record('event_subscription', (object)$sub);
     }
 
-    // install the activity types
+    // Install the activity types. Name, admin, delay, allownonemethod, defaultmethod.
     $activitytypes = array(
-        array('maharamessage', 0, 0),
-        array('usermessage', 0, 0),
-        array('watchlist', 0, 1),
-        array('viewaccess', 0, 1),
-        array('contactus', 1, 1),
-        array('objectionable', 1, 1),
-        array('virusrepeat', 1, 1),
-        array('virusrelease', 1, 1),
-        array('institutionmessage', 0, 0),
-        array('groupmessage', 0, 1),
+        array('maharamessage',      0, 0, 0, 'email'),
+        array('usermessage',        0, 0, 0, 'email'),
+        array('watchlist',          0, 1, 1, 'email'),
+        array('viewaccess',         0, 1, 1, 'email'),
+        array('contactus',          1, 1, 1, 'email'),
+        array('objectionable',      1, 1, 1, 'email'),
+        array('virusrepeat',        1, 1, 1, 'email'),
+        array('virusrelease',       1, 1, 1, 'email'),
+        array('institutionmessage', 0, 0, 1, 'email'),
+        array('groupmessage',       0, 1, 1, 'email'),
     );
 
     foreach ($activitytypes as $at) {
@@ -866,13 +932,13 @@ function core_install_firstcoredata_defaults() {
         $a->name = $at[0];
         $a->admin = $at[1];
         $a->delay = $at[2];
+        $a->allownonemethod = $at[3];
+        $a->defaultmethod = $at[4];
         insert_record('activity_type', $a);
     }
 
     // install the cronjobs...
     $cronjobs = array(
-        'rebuild_artefact_parent_cache_dirty'       => array('*', '*', '*', '*', '*'),
-        'rebuild_artefact_parent_cache_complete'    => array('0', '4', '*', '*', '*'),
         'auth_clean_partial_registrations'          => array('5', '0', '*', '*', '*'),
         'auth_clean_expired_password_requests'      => array('5', '0', '*', '*', '*'),
         'auth_handle_account_expiries'              => array('5', '10', '*', '*', '*'),
@@ -881,6 +947,8 @@ function core_install_firstcoredata_defaults() {
         'auth_remove_old_session_files'             => array('30', '20', '*', '*', '*'),
         'recalculate_quota'                         => array('15', '2', '*', '*', '*'),
         'import_process_queue'                      => array('*/5', '*', '*', '*', '*'),
+        'export_process_queue'                      => array('*/6', '*', '*', '*', '*'),
+        'submissions_delete_removed_archive'        => array('15', '1', '1', '*', '*'),
         'cron_send_registration_data'               => array(rand(0, 59), rand(0, 23), '*', '*', rand(0, 6)),
         'export_cleanup_old_exports'                => array('0', '3,15', '*', '*', '*'),
         'import_cleanup_old_imports'                => array('0', '4,16', '*', '*', '*'),
@@ -1332,6 +1400,8 @@ function activate_plugin_form($plugintype, $plugin) {
             'submit'     => array(
                 'type'  => 'submit',
                 'class' => 'linkbtn',
+                'title' => ($plugin->active ? get_string('hide') : get_string('show')) . ' ' . $plugintype . ' ' . $plugin->name,
+                'hiddenlabel' => true,
                 'value' => $plugin->active ? get_string('hide') : get_string('show')
             ),
         ),
