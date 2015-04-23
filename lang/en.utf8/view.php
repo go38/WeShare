@@ -27,7 +27,7 @@ $string['userviewurltaken']       = 'This URL is already taken. Please choose an
 $string['description']            = 'Page description';
 $string['startdate']              = 'Access start date/time';
 $string['stopdate']               = 'Access end date/time';
-$string['stopdatecannotbeinpast'] = 'Stop date cannot be in the past';
+$string['stopdatecannotbeinpast1'] = '"To" date cannot be in the past';
 $string['startdatemustbebeforestopdate'] = 'Start date must be before stop date';
 $string['newstopdatecannotbeinpast'] = 'The end date for \'%s\' access cannot be in the past.';
 $string['newstartdatemustbebeforestopdate'] = 'The start date for \'%s\' access must be before the end date.';
@@ -95,7 +95,7 @@ $string['listedinpages'] = 'Listed in pages';
 
 // access levels
 $string['public'] = 'Public';
-$string['loggedin'] = 'Logged-in users';
+$string['registeredusers'] = 'Registered users';
 $string['friends'] = 'Friends';
 $string['groups'] = 'Groups';
 $string['users'] = 'Users';
@@ -134,7 +134,10 @@ $string['viewunobjectionablesubject'] = 'Page %s was marked as not objectionable
 $string['viewunobjectionablebody'] = '%s has looked at %s by %s and marked it as no longer containing objectionable material.';
 $string['updatewatchlistfailed'] = 'Update of watchlist failed';
 $string['watchlistupdated'] = 'Your watchlist has been updated.';
-$string['viewvisitcount'] = '%d page visit(s) from %s to %s';
+$string['viewvisitcount'] = array(
+    0 => '%d page visit from %s to %s',
+    1 => '%d page visits from %s to %s',
+);
 $string['profilenotshared'] = 'Full access to this user profile is restricted.';
 
 $string['friend'] = 'Friend';
@@ -164,13 +167,13 @@ $string['submitconfirm'] = 'If you submit \'%s\' to %s for assessment, you will 
 $string['viewsubmitted'] = 'Page submitted';
 $string['collectionsubmitted'] = 'Collection submitted';
 $string['collectionviewsalreadysubmitted'] = "Some pages in this collection have already been submitted: \"%s\"\nYou cannot submit the collection until they have been released, or removed from the collection.";
-$string['viewalreadysubmitted'] = 'This page has already been submitted to another assignment or Mahara group.';
-$string['collectionalreadysubmitted'] = 'This collection has already been submitted to another assignment or Mahara group.';
+$string['viewalreadysubmitted'] = 'This page has already been submitted to another assignment or group.';
+$string['collectionalreadysubmitted'] = 'This collection has already been submitted to another assignment or group.';
 $string['collectionsubmissionexceptiontitle'] = 'Could not submit collection';
-$string['collectionsubmissionexceptionmessage'] = 'This collection can not be submitted, for the following reason:';
+$string['collectionsubmissionexceptionmessage'] = 'This collection cannot be submitted for the following reason:';
 $string['cantsubmitemptycollection'] = 'This collection does not contain any pages.';
 $string['viewsubmissionexceptiontitle'] = 'Could not submit page';
-$string['viewsubmissionexceptionmessage'] = 'This page can not be submitted, for the following reason:';
+$string['viewsubmissionexceptionmessage'] = 'This page cannot be submitted for the following reason:';
 $string['submitviewtogroup'] = 'Submit \'%s\' to \'%s\' for assessment';
 $string['cantsubmitviewtogroup'] = 'You cannot submit this page to this group for assessment.';
 $string['cantsubmitcollectiontogroup'] = 'You cannot submit this collection.';
@@ -180,7 +183,7 @@ $string['cantdeleteview'] = 'You cannot delete this page.';
 $string['deletespecifiedview'] = 'Delete page "%s"';
 $string['deleteviewconfirm1'] = 'Do you really want to delete this page? It cannot be undone.';
 $string['deleteviewconfirmbackup'] = 'Please consider creating a backup of this page by <a href="%sexport/" target="_blank">exporting</a> it.';
-$string['deleteviewconfirmnote1'] = '<strong>NOTE:</strong> All your files and journal entries that you linked in this page will still be available.<br/>However, any feedback placed on this page will be deleted.';
+$string['deleteviewconfirmnote1'] = '<strong>Note:</strong> All your files and journal entries that you linked in this page will still be available.<br/>However, any feedback placed on this page will be deleted.';
 $string['deleteviewconfirmnote2'] = 'This page is a part of the collection <a href="%s">"%s"</a>.';
 
 $string['editaccesspagedescription5'] = '<p>You are the only one who can see your pages and collections by default. On this page you decide who can access them besides you. Click the "Add" buttons next to the groups and people with whom you wish to share your pages.</p> <p>Click <a href="#" onclick=\'contextualHelp("","","core","view","editaccess","", $j("#main-column-container h1 .help a")[0]); return false;\'>help</a> for more detailed information.</p>';
@@ -253,7 +256,6 @@ $string['nrrows'] = array(
     '%s row',
     '%s rows',
 );
-$string['generatingpreview'] = 'Generating preview...';
 
 $string['addnewblockhere'] = 'Add new block here';
 $string['add'] = 'Add';
@@ -295,6 +297,7 @@ $string['addarow'] = 'Add a row';
 $string['removethisrow'] = 'Remove this row';
 $string['columnlayout'] = 'Column layout';
 $string['layoutpreview'] = 'Layout preview';
+$string['layoutpreviewimage'] = 'Layout preview image';
 $string['Help'] = 'Help';
 
 $string['by'] = 'by';
@@ -364,11 +367,14 @@ $string['filescopiedfromviewtemplate'] = 'Files copied from %s';
 $string['viewfilesdirname'] = 'viewfiles';
 $string['viewfilesdirdesc'] = 'Files from copied pages';
 $string['thisviewmaybecopied'] = 'Copying is allowed';
+$string['thisviewmaynotbecopied'] = 'Copying is not allowed';
 $string['copythisview'] = 'Copy this page';
 $string['copyview'] = 'Copy page';
 $string['createemptyview'] = 'Create empty page';
 $string['copyaview'] = 'Copy a page';
 $string['copyvieworcollection'] = 'Copy a page or collection';
+$string['confirmcopytitle'] = 'Confirm copying';
+$string['confirmcopydesc'] = 'Please choose which you would like to copy:';
 $string['Untitled'] = 'Untitled';
 $string['copyfornewusers'] = 'Copy for new users';
 $string['copyfornewusersdescription1'] = 'Whenever a new user is created, automatically make a personal copy of the selected pages / collections in the user\'s portfolio.';

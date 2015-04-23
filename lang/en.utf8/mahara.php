@@ -15,6 +15,7 @@ defined('INTERNAL') || die();
 $string['add']     = 'Add';
 $string['addone']  = 'Add one';
 $string['cancel']  = 'Cancel';
+$string['copy'] = 'Copy';
 $string['copytoclipboard']  = 'Copy secret URL to the clipboard';
 $string['delete']  = 'Delete';
 $string['deletespecific'] = 'Delete "%s"';
@@ -45,6 +46,7 @@ $string['description'] = 'Description';
 $string['remove']  = 'Remove';
 $string['Close'] = 'Close';
 $string['Help'] = 'Help';
+$string['Helpicon'] = 'Help icon';
 $string['closehelp'] = 'Close help';
 $string['applychanges'] = 'Apply changes';
 $string['general'] = 'General';
@@ -57,6 +59,15 @@ $string['imagexofy'] = 'Image {x} of {y}';
 $string['clickformore'] = '(Press \'enter\' to display more information)';
 $string['goto'] = 'Go to \'%s\'';
 $string['gotomore'] = 'Read more...';
+// generic switch state strings.
+$string['on'] = 'On';
+$string['off'] = 'Off';
+$string['yes'] = 'Yes';
+$string['no'] = 'No';
+$string['true'] = 'True';
+$string['false'] = 'False';
+$string['enabled'] = 'Enabled';
+$string['disabled'] = 'Disabled';
 // Objectionable strings.
 $string['complaint'] = 'Complaint';
 $string['notifyadministrator'] = 'Notify administrator';
@@ -68,12 +79,9 @@ $string['reportsent'] = 'Your report has been sent.';
 $string['tabs'] = 'Tabs';
 $string['tab'] = 'tab';
 $string['selected'] = 'selected';
-$string['disabled'] = 'disabled';
 $string['admin'] = 'Admin';
 $string['menu'] = 'Menu';
 
-$string['no']     = 'No';
-$string['yes']    = 'Yes';
 $string['at'] = 'at';
 $string['From'] = 'From';
 $string['To'] = 'To';
@@ -153,6 +161,8 @@ $string['nameztoa'] = 'Name Z to A';
 $string['firstjoined'] = 'First joined';
 $string['lastjoined'] = 'Last joined';
 $string['date'] = 'Date';
+$string['earliest'] = 'Earliest';
+$string['latest'] = 'Latest';
 $string['dateformatguide'] = 'Use the format YYYY/MM/DD';
 $string['dateofbirthformatguide'] = 'Use the format YYYY/MM/DD';
 $string['datetimeformatguide'] = 'Use the format YYYY/MM/DD HH:MM';
@@ -1073,7 +1083,6 @@ $string['done'] = 'Done';
 $string['back'] = 'Back';
 $string['backto'] = 'Back to %s';
 $string['alphabet'] = 'A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z';
-$string['formatpostbbcode'] = 'You can format your post using %sBBCode%s.';
 $string['Created'] = 'Created';
 $string['Updated'] = 'Updated';
 $string['Total'] = 'Total';
@@ -1164,3 +1173,14 @@ $string['wanttoleavewithoutsaving?'] = 'You have made changes - do you want to l
 
 // TinyMCE maharaimage plugin
 $string['attachedimage'] = 'Attached image';
+$string['imagebrowsertitle'] = 'Insert or select an image';
+$string['imagebrowserdescription'] = 'Paste the URL of an external image, or use the image browser below to select or upload your own image.';
+$string['url'] = 'Image URL';
+$string['style'] = 'Style (CSS)';
+$string['dimensions'] = 'Dimensions';
+$string['constrain'] = 'Constrain';
+$string['vspace'] = 'Vertical space';
+$string['hspace'] = 'Horizontal space';
+$string['border'] = 'Border width';
+$string['alignment'] = 'Alignment';
+

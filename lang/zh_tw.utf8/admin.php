@@ -466,6 +466,7 @@ $string['nostats'] = '沒有可用的統計資料';
 $string['nosuchinstitution'] = '沒有這樣的機構。';
 $string['notadminforinstitution'] = '您不是該機構的管理員';
 $string['nothingtoupgrade'] = '不需要升級';
+$string['notificationsettings'] = '通知設定';
 $string['notificationssaved'] = '通知設定已儲存';
 $string['notinstalled'] = '未安裝';
 $string['noupgrades'] = '不需要升級！您已擁有最新版本！';
