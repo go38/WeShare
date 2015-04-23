@@ -111,6 +111,45 @@ abstract class PluginInteraction extends Plugin implements IPluginInteraction {
     public static function right_nav_menu_items() {
         return array();
     }
+
+    /**
+     * This function returns an array of admin menu items
+     * to be displayed
+     *
+     * See the function find_menu_children() in lib/web.php
+     * for a description of the expected array structure.
+     *
+     * @return array
+     */
+    public static function admin_menu_items() {
+        return array();
+    }
+
+    /**
+     * This function returns an array of institution menu items
+     * to be displayed
+     *
+     * See the function find_menu_children() in lib/web.php
+     * for a description of the expected array structure.
+     *
+     * @return array
+     */
+    public static function institution_menu_items() {
+        return array();
+    }
+
+    /**
+     * This function returns an array of institution staff menu items
+     * to be displayed
+     *
+     * See the function find_menu_children() in lib/web.php
+     * for a description of the expected array structure.
+     *
+     * @return array
+     */
+    public static function institution_staff_menu_items() {
+        return array();
+    }
 }
 
 /**
@@ -243,12 +282,14 @@ function edit_interaction_validation(Pieform $form, $values) {
 }
 
 function edit_interaction_submit(Pieform $form, $values) {
+    require_once('embeddedimage.php');
     safe_require('interaction', $values['plugin']);
     $classname = generate_interaction_instance_class_name($values['plugin']);
     $instance = new $classname($values['id']);
     $instance->set('creator', $values['creator']);
     $instance->set('title', $values['title']);
-    $instance->set('description', $values['description']);
+    $newdescription = EmbeddedImage::prepare_embedded_images($values['description'], 'forum', $instance->get('id'), $instance->get('group'));
+    $instance->set('description', $newdescription);
     if (empty($values['id'])) {
         $instance->set('group', $values['group']);
     }

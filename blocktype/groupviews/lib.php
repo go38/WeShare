@@ -15,6 +15,10 @@ defined('INTERNAL') || die();
 require_once('group.php');
 class PluginBlocktypeGroupViews extends SystemBlocktype {
 
+    const SORTBY_TITLE = 0;
+    const SORTBY_LASTUPDATE = 1;
+    const SORTBY_TIMESUBMITTED = 2;
+
     public static function get_title() {
         return get_string('title', 'blocktype.groupviews');
     }
@@ -24,11 +28,11 @@ class PluginBlocktypeGroupViews extends SystemBlocktype {
     }
 
     public static function single_only() {
-        return false;
+        return true;
     }
 
     public static function get_categories() {
-        return array('general');
+        return array('general' => 18000);
     }
 
     public static function get_viewtypes() {
@@ -168,52 +172,77 @@ class PluginBlocktypeGroupViews extends SystemBlocktype {
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         $configdata = $instance->get('configdata');
         return array(
             'showgroupviews' => array(
-                'type' => 'radio',
+                'type' => 'select',
                 'description' => get_string('displaygroupviewsdesc', 'blocktype.groupviews'),
                 'title' => get_string('displaygroupviews', 'blocktype.groupviews'),
                 'options' => array(
                     1 => get_string('yes'),
                     0 => get_string('no'),
                 ),
-                'separator' => '<br>',
                 'defaultvalue' => isset($configdata['showgroupviews']) ? $configdata['showgroupviews'] : 1,
             ),
+            'sortgroupviewsby' => array(
+                'type' => 'select',
+                'title' => get_string('sortgroupviewstitle', 'blocktype.groupviews'),
+                'options' => array(
+                    PluginBlocktypeGroupViews::SORTBY_TITLE => get_string('sortviewsbyalphabetical', 'blocktype.groupviews'),
+                    PluginBlocktypeGroupViews::SORTBY_LASTUPDATE => get_string('sortviewsbylastupdate', 'blocktype.groupviews'),
+                ),
+                'defaultvalue' => isset($configdata['sortgroupviewsby']) ? (int) $configdata['sortgroupviewsby'] : 0
+            ),
             'showsharedviews' => array(
-                'type' => 'radio',
+                'type' => 'select',
                 'title' => get_string('displaysharedviews', 'blocktype.groupviews'),
                 'description' => get_string('displaysharedviewsdesc1', 'blocktype.groupviews'),
                 'options' => array(
-                    1 => get_string('yes'),
-                    0 => get_string('no'),
+                    0 => get_string('shownone', 'blocktype.groupviews'),
+                    1 => get_string('showbygroupmembers', 'blocktype.groupviews'),
+                    2 => get_string('showbyanybody', 'blocktype.groupviews'),
                 ),
-                'separator' => '<br>',
                 'defaultvalue' => isset($configdata['showsharedviews']) ? $configdata['showsharedviews'] : 1,
             ),
             'showsharedcollections' => array(
-                'type' => 'radio',
+                'type' => 'select',
                 'title' => get_string('displaysharedcollections', 'blocktype.groupviews'),
                 'description' => get_string('displaysharedcollectionsdesc', 'blocktype.groupviews'),
                 'options' => array(
-                    1 => get_string('yes'),
-                    0 => get_string('no'),
+                    0 => get_string('shownone', 'blocktype.groupviews'),
+                    1 => get_string('showbygroupmembers', 'blocktype.groupviews'),
+                    2 => get_string('showbyanybody', 'blocktype.groupviews'),
                 ),
-                'separator' => '<br>',
                 'defaultvalue' => isset($configdata['showsharedcollections']) ? $configdata['showsharedcollections'] : 1,
             ),
+            'sortsharedviewsby' => array(
+                'type' => 'select',
+                'title' => get_string('sortsharedviewstitle', 'blocktype.groupviews'),
+                'options' => array(
+                    PluginBlocktypeGroupViews::SORTBY_TITLE => get_string('sortviewsbyalphabetical', 'blocktype.groupviews'),
+                    PluginBlocktypeGroupViews::SORTBY_LASTUPDATE => get_string('sortviewsbylastupdate', 'blocktype.groupviews'),
+                ),
+                'defaultvalue' => isset($configdata['sortsharedviewsby']) ? (int) $configdata['sortsharedviewsby'] : 0
+            ),
             'showsubmitted' => array(
-                'type' => 'radio',
+                'type' => 'select',
                 'title' => get_string('displaysubmissions', 'blocktype.groupviews'),
                 'description' => get_string('displaysubmissionsdesc', 'blocktype.groupviews'),
                 'options' => array(
                     1 => get_string('yes'),
                     0 => get_string('no'),
                 ),
-                'separator' => '<br>',
                 'defaultvalue' => isset($configdata['showsubmitted']) ? $configdata['showsubmitted'] : 1,
+            ),
+            'sortsubmittedby' => array(
+                'type' => 'select',
+                'title' => get_string('sortsubmittedtitle', 'blocktype.groupviews'),
+                'options' => array(
+                    PluginBlocktypeGroupViews::SORTBY_TITLE => get_string('sortviewsbyalphabetical', 'blocktype.groupviews'),
+                    PluginBlocktypeGroupViews::SORTBY_TIMESUBMITTED => get_string('sortviewsbytimesubmitted', 'blocktype.groupviews'),
+                ),
+                'defaultvalue' => isset($configdata['sortsubmittedby']) ? (int) $configdata['sortsubmittedby'] : 0
             ),
             'count' => array(
                 'type' => 'text',
@@ -239,14 +268,33 @@ class PluginBlocktypeGroupViews extends SystemBlocktype {
         // get the currently requested group
         $group = group_current_group();
         $role = group_user_access($group->id);
+        $bi = group_get_homepage_view_groupview_block($group->id);
+        $configdata = $bi->get('configdata');
+        if (!isset($configdata['sortsubmittedby']) || $configdata['sortsubmittedby'] == PluginBlocktypeGroupViews::SORTBY_TITLE) {
+            $sortsubmittedby = 'c.name, v.title';
+        }
+        else {
+            $sortsubmittedby = 'c.submittedtime DESC, v.submittedtime DESC';
+        }
         if ($role) {
-            $bi = group_get_homepage_view_groupview_block($group->id);
-            $configdata = $bi->get('configdata');
             $limit = isset($configdata['count']) ? intval($configdata['count']) : 5;
             $limit = ($limit > 0) ? $limit : 5;
 
             // Get all views created in the group
-            $sort = array(array('column' => 'type=\'grouphomepage\'', 'desc' => true));
+            // Sortorder: Group homepage should be first, then sort by sortorder
+            $sort = array(
+                    array(
+                            'column' => "type='grouphomepage'",
+                            'desc' => true
+                    )
+            );
+            // Find out what order to sort them by (default is titles)
+            if (!isset($configdata['sortgroupviewsby']) || $configdata['sortgroupviewsby'] == PluginBlocktypeGroupViews::SORTBY_TITLE) {
+                $sort[] = array('column' => 'title');
+            }
+            else {
+                $sort[] = array('column' => 'mtime', 'desc' => true);
+            }
             $data['groupviews'] = View::view_search(null, null, (object) array('group' => $group->id), null, $limit, 0, true, $sort);
             foreach ($data['groupviews']->data as &$view) {
                 if (!$editing && isset($view['template']) && $view['template']) {
@@ -254,20 +302,67 @@ class PluginBlocktypeGroupViews extends SystemBlocktype {
                 }
             }
 
+            // Find out what order to sort them by (default is titles)
+            if (!isset($configdata['sortsharedviewsby']) || $configdata['sortsharedviewsby'] == PluginBlocktypeGroupViews::SORTBY_TITLE) {
+                $sortsharedviewsby = 'v.title';
+                $sortsharedcollectionsby = array(array('column'=>'c.name'));
+            }
+            else {
+                $sortsharedviewsby = 'v.mtime DESC';
+                $sortsharedcollectionsby = array(
+                        array(
+                                'column'=>'GREATEST(c.mtime, (SELECT MAX(v.mtime) FROM {view} v INNER JOIN {collection_view} cv ON v.id=cv.view WHERE cv.collection=c.id))',
+                                'desc' => true
+                        )
+                );
+            }
+
             // For group members, display a list of views that others have
             // shared to the group
-            $data['sharedviews'] = View::get_sharedviews_data($limit, 0, $group->id);
-            foreach ($data['sharedviews']->data as &$view) {
-                if (!$editing && isset($view['template']) && $view['template']) {
-                    $view['form'] = pieform(create_view_form($group, null, $view->id));
+            if (empty($configdata['showsharedviews'])) {
+                $data['sharedviews'] = (object) array(
+                    'data'   => array(),
+                    'count'  => 0,
+                    'limit'  => $limit,
+                    'offset' => 0
+                );
+            }
+            else {
+                $data['sharedviews'] = View::get_sharedviews_data(
+                        $limit,
+                        0,
+                        $group->id,
+                        ($configdata['showsharedviews'] == 2 ? false : true),
+                        $sortsharedviewsby
+                );
+                foreach ($data['sharedviews']->data as &$view) {
+                    if (!$editing && isset($view['template']) && $view['template']) {
+                        $view['form'] = pieform(create_view_form($group, null, $view->id));
+                    }
                 }
             }
 
-            $data['sharedcollections'] = View::get_sharedcollections_data($limit, 0, $group->id);
+            if (empty($configdata['showsharedcollections'])) {
+                $data['sharedcollections'] = (object) array(
+                    'data'   => array(),
+                    'count'  => 0,
+                    'limit'  => $limit,
+                    'offset' => 0
+                );
+            }
+            else {
+                $data['sharedcollections'] = View::get_sharedcollections_data(
+                        $limit,
+                        0,
+                        $group->id,
+                        ($configdata['showsharedcollections'] == 2 ? false : true),
+                        $sortsharedcollectionsby
+                );
+            }
 
             if (group_user_can_assess_submitted_views($group->id, $USER->get('id'))) {
                 // Display a list of views submitted to the group
-                list($collections, $views) = View::get_views_and_collections(null, null, null, null, false, $group->id);
+                list($collections, $views) = View::get_views_and_collections(null, null, null, null, false, $group->id, $sortsubmittedby);
                 $allsubmitted = array_merge(array_values($collections), array_values($views));
                 $data['allsubmitted'] = array(
                     'data'   => array_slice($allsubmitted, 0, $limit),
@@ -287,7 +382,7 @@ class PluginBlocktypeGroupViews extends SystemBlocktype {
             // Display a list of views this user has submitted to this group, and a submission
             // form containing drop-down of their unsubmitted views.
 
-            list($collections, $views) = View::get_views_and_collections($USER->get('id'), null, null, null, false, $group->id);
+            list($collections, $views) = View::get_views_and_collections($USER->get('id'), null, null, null, false, $group->id, $sortsubmittedby);
             $data['mysubmitted'] = array_merge(array_values($collections), array_values($views));
 
             // Only render the submission form in viewing mode

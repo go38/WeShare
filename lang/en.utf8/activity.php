@@ -41,6 +41,7 @@ $string['selectallread'] = 'All unread notifications';
 $string['selectalldelete'] = 'All notifications for deletion';
 $string['recurseall'] = 'Recurse all';
 $string['alltypes'] = 'All types';
+$string['nodelete'] = 'No notifications to delete';
 
 $string['markedasread'] = 'Marked your notifications as read';
 $string['failedtomarkasread'] = 'Failed to mark your notifications as read';
@@ -71,11 +72,16 @@ $string['newcontactusfrom'] = 'New contact us from';
 $string['newcontactus'] = 'New contact us';
 
 $string['newcollectionaccessmessage'] = 'You have been added to the access list for the collection "%s" by %s';
+$string['newcollectionaccessmessageviews'] = 'You have been added to the access list for the pages "%s" in collection "%3$s" by %2$s';
 $string['newviewaccessmessage'] = 'You have been added to the access list for the page "%s" by %s';
+$string['newviewaccessmessageviews'] = 'You have been added to the access list for the pages "%s" by %s';
 $string['newcollectionaccessmessagenoowner'] = 'You have been added to the access list for the collection "%s"';
+$string['newcollectionaccessmessagenoownerviews'] = 'You have been added to the access list for the pages "%s" in collection "%s"';
 $string['newviewaccessmessagenoowner'] = 'You have been added to the access list for the page "%s"';
+$string['newviewaccessmessagenoownerviews'] = 'You have been added to the access list for the pages "%s"';
 $string['newcollectionaccesssubject'] = 'New access to collection "%s"';
 $string['newviewaccesssubject1'] = 'New access to page "%s"';
+$string['newviewaccesssubjectviews'] = 'New access to pages "%s"';
 
 $string['viewmodified'] = 'has changed their page';
 $string['ongroup'] = 'on group';
@@ -112,7 +118,7 @@ $string['objectionablecontentviewartefacthtml'] = '<div style="padding: 0.5em 0;
 <p>Complaint relates to: <a href="%s">%s</a></p>
 <p>Reported by: <a href="%s">%s</a></p>
 </div>';
-$string['objectionablecontentviewartefacttext'] = 'Objectionable content on "%s" in "%s" reported by %s
+$string['objectionablecontentviewartefacttext'] = 'Objectionable content on %s in "%s" reported by %s
 %s
 ------------------------------------------------------------------------
 

@@ -128,8 +128,8 @@ foreach ( $element_list as $element => $type ) {
     }
 
 }
-if ($items['firstname']) {
-    $items['firstname']['autofocus'] = true;
+if ($items['preferredname']) {
+    $items['preferredname']['autofocus'] = true;
 }
 if (isset($items['socialprofile']) && $items['socialprofile']) {
     $items['socialprofile']['title'] = null;
@@ -149,7 +149,7 @@ $elements = array(
         'type' => 'fieldset',
         'legend' => get_string('aboutme', 'artefact.internal'),
         'class' => $fieldset != 'aboutme' ? 'collapsed' : '',
-        'elements' => get_desired_fields($items, array('firstname', 'lastname', 'studentid', 'preferredname', 'introduction'), 'about'),
+        'elements' => get_desired_fields($items, array('lastname', 'firstname', 'studentid', 'preferredname', 'introduction'), 'about'),
     ),
     'contact' => array(
         'type' => 'fieldset',
@@ -257,6 +257,7 @@ function profileform_submit(Pieform $form, $values) {
     global $USER;
     global $element_list;
     global $profilefields;
+    require_once('embeddedimage.php');
 
     db_begin();
 
@@ -399,6 +400,11 @@ function profileform_submit(Pieform $form, $values) {
         }
         else {
             if (!isset($profilefields[$element]) || $values[$element] != $profilefields[$element]) {
+
+                if ($element == 'introduction') {
+                    $newintroduction = EmbeddedImage::prepare_embedded_images($values[$element], 'profileintrotext', $USER->get('id'));
+                    $values[$element] = $newintroduction;
+                }
                 $classname = generate_artefact_class_name($element);
                 $profile = new $classname(0, array('owner' => $USER->get('id')));
                 $profile->set('title', $values[$element]);

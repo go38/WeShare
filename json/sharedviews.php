@@ -72,6 +72,9 @@ $pagination = build_pagination(array(
     'count' => $data->count,
     'limit' => $limit,
     'offset' => $offset,
+    'setlimit' => true,
+    'jumplinks' => 8,
+    'numbersincludeprevnext' => 2,
 ));
 
 $smarty = smarty_core();

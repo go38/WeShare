@@ -35,7 +35,7 @@ class PluginBlocktypeBlog extends PluginBlocktype {
     }
 
     public static function get_categories() {
-        return array('blog');
+        return array('blog' => 10000);
     }
 
     public static function render_instance(BlockInstance $instance, $editing=false) {
@@ -72,6 +72,8 @@ class PluginBlocktypeBlog extends PluginBlocktype {
                     'jsonscript' => 'artefact/blog/posts.json.php',
                 );
             }
+            $configdata['blockid'] = $instance->get('id');
+            $configdata['editing'] = $editing;
             ArtefactTypeBlogpost::render_posts($posts, $template, $configdata, $pagination);
 
             $smarty = smarty_core();
@@ -107,7 +109,7 @@ class PluginBlocktypeBlog extends PluginBlocktype {
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         global $USER;
         safe_require('artefact', 'blog');
         $configdata = $instance->get('configdata');
@@ -174,7 +176,10 @@ class PluginBlocktypeBlog extends PluginBlocktype {
             $blog = $instance->get_artefact_instance($configdata['artefactid']);
             if ($blogposts = $blog->get_children_instances()) {
                 foreach ($blogposts as $blogpost) {
-                    $artefacts = array_merge($artefacts, $blogpost->get_referenced_artefacts_from_postbody());
+                    if ($blogpost->get('published')) {
+                        $artefacts[] = $blogpost->get('id');
+                        $artefacts = array_merge($artefacts, $blogpost->get_referenced_artefacts_from_postbody());
+                    }
                 }
                 $artefacts = array_unique($artefacts);
             }

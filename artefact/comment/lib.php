@@ -243,6 +243,14 @@ class ArtefactTypeComment extends ArtefactType {
             update_record('artefact_comment_comment', $data, 'artefact');
         }
 
+        if (!$this->get('private')) {
+            if ($this->get('onview')) {
+                set_field('view', 'mtime', db_format_timestamp(time()), 'id', $this->get('onview'));
+            }
+            else if ($this->get('onartefact')) {
+                execute_sql("UPDATE {view} SET mtime = ? WHERE id IN (SELECT va.view FROM {view_artefact} va WHERE va.artefact = ?)", array(db_format_timestamp(time()), $this->get('onartefact')));
+            }
+        }
         db_commit();
         $this->dirty = false;
     }
@@ -306,22 +314,51 @@ class ArtefactTypeComment extends ArtefactType {
     }
 
     /**
-     * Generates data object required for displaying comments on the page.
+     * Generates default data object required for displaying comments on the page.
+     * The is called before populating with specific data to send to get_comments() as
+     * an easy way to add variables to get passed to get_comments.
      *
-     * @param  int $limit              The number of comments to display (set to
-     *                                 0 for disabling pagination and showing all comments)
-     * @param  int $offset             The offset of comments used for pagination
-     * @param  int|string $showcomment Optionally show page with particular comment
-     *                                 on it or the last page. $offset will be ignored.
-     *                                 Specify either comment_id or 'last' respectively.
-     *                                 Set to null to use $offset for pagination.
-     * @param  object $view            The view object
-     * @param  object $artefact        Optional artefact object
-     * @param  bool   $export          Determines if comments are fetched for html export purposes
-     * @return object $result          Comments data object
+     * int $limit              The number of comments to display (set to
+     *                         0 for disabling pagination and showing all comments)
+     * int $offset             The offset of comments used for pagination
+     * int|string $showcomment Optionally show page with particular comment
+     *                         on it or the last page. $offset will be ignored.
+     *                         Specify either comment_id or 'last' respectively.
+     *                         Set to null to use $offset for pagination.
+     * object $view            The view object
+     * object $artefact        Optional artefact object
+     * bool   $export          Determines if comments are fetched for html export purposes
+     * bool   $onview          Optional - is viewing artefact comments on view page so don't show edit buttons
+     * string $sort            Optional - the sort order of the comments. Valid options are 'earliest' and 'latest'.
+     * @return object $options Default comments data object
      */
-    public static function get_comments($limit=10, $offset=0, $showcomment, &$view, &$artefact=null, $export=false) {
+    public static function get_comment_options() {
+        $options = new stdClass();
+        $options->limit = 10;
+        $options->offset = 0;
+        $options->showcomment = null;
+        $options->view = null;
+        $options->artefact = null;
+        $options->export = false;
+        $options->onview = false;
+        $sortorder = get_user_institution_comment_sort_order();
+        $options->sort = (!empty($sortorder)) ? $sortorder : 'earliest';
+        return $options;
+    }
+
+    /**
+     * Generates the data object required for displaying comments on the page.
+     *
+     * @param   object  $options  Object of comment options
+     *                            - defaults can be retrieved from get_comment_options()
+     * @return  object $result    Comment data object
+     */
+    public static function get_comments($options) {
         global $USER;
+        // set the object's key/val pairs as variables
+        foreach ($options as $key => $option) {
+            $$key = $option;
+        }
         $userid = $USER->get('id');
         $viewid = $view->get('id');
         if (!empty($artefact)) {
@@ -346,6 +383,7 @@ class ArtefactTypeComment extends ArtefactType {
             'owner'    => $owner,
             'isowner'  => $isowner,
             'export'   => $export,
+            'sort'     => $sort,
             'data'     => array(),
         );
 
@@ -383,13 +421,15 @@ class ArtefactTypeComment extends ArtefactType {
                     ORDER BY a.ctime', array($showcomment));
                     $last = end($ids);
                     if ($last == $showcomment) {
-                        $rank = key($ids);
+                        // Add 1 because array index starts from 0 and therefore key value is offset by 1.
+                        $rank = key($ids) + 1;
                         $result->forceoffset = $offset = ((ceil($rank / $limit) - 1) * $limit);
                         $result->showcomment = $showcomment;
                     }
                 }
             }
 
+            $sortorder = (!empty($sort) && $sort == 'latest') ? 'a.ctime DESC' : 'a.ctime ASC';
             $comments = get_records_sql_assoc('
                 SELECT
                     a.id, a.author, a.authorname, a.ctime, a.mtime, a.description, a.group,
@@ -400,7 +440,7 @@ class ArtefactTypeComment extends ArtefactType {
                     INNER JOIN {artefact_comment_comment} c ON a.id = c.artefact
                     LEFT JOIN {usr} u ON a.author = u.id
                 WHERE ' . $where . '
-                ORDER BY a.ctime', array(), $offset, $limit);
+                ORDER BY ' . $sortorder, array(), $offset, $limit);
 
             $files = ArtefactType::attachments_from_id_list(array_keys($comments));
 
@@ -427,7 +467,7 @@ class ArtefactTypeComment extends ArtefactType {
             }
         }
 
-        self::build_html($result);
+        self::build_html($result, $onview);
         return $result;
     }
 
@@ -470,6 +510,53 @@ class ArtefactTypeComment extends ArtefactType {
         return $newest[0];
     }
 
+    /**
+     * Fetching the comments for an artefact to display on a view
+     *
+     * @param   ArtefactType  $artfact  The artefact to display comments for
+     * @param   object  $view     The view on which the artefact appears
+     * @param   int     $blockid  The id of the block instance that connects the artefact to the view
+     * @param   bool    $html     Whether to return the information rendered as html or not
+     * @param   bool    $editing  Whether we are view edit mode or not
+     *
+     * @return  array   $commentcount, $comments   The count of comments and either the comments
+     *                                             or the html to render them.
+     */
+    public function get_artefact_comments_for_view(ArtefactType $artefact, $view, $blockid, $html = true, $editing = false) {
+        if (!is_object($artefact) || !is_object($view)) {
+            throw new MaharaException('we do not have the right information to display the comments');
+        }
+
+        $commentoptions = ArtefactTypeComment::get_comment_options();
+        $commentoptions->limit = 0;
+        $commentoptions->view = $view;
+        $commentoptions->artefact = $artefact;
+        $commentoptions->onview = true;
+        $comments = ArtefactTypeComment::get_comments($commentoptions);
+        $commentcount = isset($comments->count) ? $comments->count : 0;
+
+        // If there are no comments, and comments are not allowed, don't display anything.
+        if ($commentcount == 0 && !$artefact->get('allowcomments')) {
+            return array(0, '');
+        }
+
+        $artefacturl = get_config('wwwroot') . 'artefact/artefact.php?view=' . $view->get('id') . '&artefact=' . $artefact->get('id');
+        if ($html) {
+            $smarty = smarty_core();
+            $smarty->assign('artefacturl', $artefacturl);
+            $smarty->assign('blockid', $blockid);
+            $smarty->assign('commentcount', $commentcount);
+            $smarty->assign('comments', $comments);
+            $smarty->assign('editing', $editing);
+            $smarty->assign('allowcomments', $artefact->get('allowcomments'));
+            $render = $smarty->fetch('artefact/artefactcommentsview.tpl');
+            return array($commentcount, $render);
+        }
+        else {
+            return array($commentcount, $comments);
+        }
+    }
+
     public static function deleted_messages() {
         return array(
             'author' => 'commentremovedbyauthor',
@@ -478,7 +565,7 @@ class ArtefactTypeComment extends ArtefactType {
         );
     }
 
-    public static function build_html(&$data) {
+    public static function build_html(&$data, $onview) {
         global $USER, $THEME;
         $candelete = $data->canedit || $USER->get('admin');
         $deletedmessage = array();
@@ -614,6 +701,7 @@ class ArtefactTypeComment extends ArtefactType {
         $smarty->assign('viewid', $data->view);
         $smarty->assign('position', $data->position);
         $smarty->assign('baseurl', $data->baseurl);
+        $smarty->assign('onview', $onview);
         $data->tablerows = $smarty->fetch('artefact:comment:commentlist.tpl');
         $pagination = build_pagination(array(
             'id' => 'feedback_pagination',
@@ -680,7 +768,7 @@ class ArtefactTypeComment extends ArtefactType {
             );
         }
         $form['elements']['ispublic'] = array(
-            'type'  => 'checkbox',
+            'type'  => 'switchbox',
             'title' => get_string('makepublic', 'artefact.comment'),
             'defaultvalue' => !$defaultprivate,
         );
@@ -805,7 +893,7 @@ class ArtefactTypeComment extends ArtefactType {
     public static function get_config_options() {
         $elements =  array(
             'commentratings' => array(
-                'type'  => 'checkbox',
+                'type'  => 'switchbox',
                 'title' => get_string('commentratings', 'artefact.comment'),
                 'defaultvalue' => get_config_plugin('artefact', 'comment', 'commentratings'),
                 'help'  => true,
@@ -821,6 +909,41 @@ class ArtefactTypeComment extends ArtefactType {
     public static function save_config_options($form, $values) {
         foreach (array('commentratings') as $settingname) {
             set_config_plugin('artefact', 'comment', $settingname, $values[$settingname]);
+        }
+    }
+
+    /**
+     * Fetch all users that are currently watching the view the comment is being added to,
+     * in case of comment on artefact it will be the view the artefact sits on,
+     * so we can use this array to email affected parties.
+     *
+     * @param   int    $posterid   If set, the poster's id is ignored from resulting array
+     * @return  array  $users      An array of user objects of the users that are watching this page or a page this artefact is on
+     */
+    public function get_watchlist_users($posterid = null) {
+        $ontype = ($onview = $this->get('onview')) ? 'onview' : 'onartefact';
+        $values = array();
+        $sql = "SELECT DISTINCT u.id, u.username, u.firstname, u.lastname, u.preferredname, u.email FROM {usr} u";
+        if ($ontype == 'onview') {
+            $sql .= " JOIN {usr_watchlist_view} uwv ON uwv.view = ? AND uwv.usr = u.id";
+            $values[] = $this->get($ontype);
+        }
+        else if ($ontype == 'onartefact') {
+            $sql .= " JOIN {view_artefact} va ON va.artefact = ?
+                      JOIN {usr_watchlist_view} uwv ON uwv.view = va.view AND uwv.usr = u.id";
+            $values[] = $this->get($ontype);
+        }
+        if ($posterid) {
+            $sql .= " WHERE u.id != ?";
+            $values[] = $posterid;
+        }
+
+        $users = get_records_sql_assoc($sql, $values);
+        if ($users) {
+            return $users;
+        }
+        else {
+            return array();
         }
     }
 }
@@ -944,6 +1067,7 @@ function make_public_submit(Pieform $form, $values) {
 
 function delete_comment_submit(Pieform $form, $values) {
     global $SESSION, $USER, $view;
+    require_once('embeddedimage.php');
 
     $comment = new ArtefactTypeComment((int) $values['comment']);
 
@@ -1011,6 +1135,7 @@ function delete_comment_submit(Pieform $form, $values) {
         activity_occurred('feedback', $data, 'artefact', 'comment');
     }
 
+    EmbeddedImage::delete_embedded_images('comment', $comment->get('id'));
     db_commit();
 
     $SESSION->add_ok_msg(get_string('commentremoved', 'artefact.comment'));
@@ -1047,6 +1172,7 @@ function add_feedback_form_validate(Pieform $form, $values) {
 
 function add_feedback_form_submit(Pieform $form, $values) {
     global $view, $artefact, $USER;
+    require_once('embeddedimage.php');
     $data = (object) array(
         'title'       => get_string('Comment', 'artefact.comment'),
         'description' => $values['message'],
@@ -1065,6 +1191,8 @@ function add_feedback_form_submit(Pieform $form, $values) {
         $data->institution = $view->get('institution');
     }
 
+    $owner = $data->owner;
+    $author = null;
     if ($author = $USER->get('id')) {
         $anonymous = false;
         $data->author = $author;
@@ -1100,6 +1228,15 @@ function add_feedback_form_submit(Pieform $form, $values) {
     db_begin();
 
     $comment->commit();
+
+    $newdescription = EmbeddedImage::prepare_embedded_images($values['message'], 'comment', $comment->get('id'), $data->group);
+
+    if ($newdescription !== $values['message']) {
+        $updatedcomment = new stdClass();
+        $updatedcomment->id = $comment->get('id');
+        $updatedcomment->description = $newdescription;
+        update_record('artefact', $updatedcomment, 'id');
+    }
 
     $url = $comment->get_view_url($view->get('id'), true, false);
     $goto = get_config('wwwroot') . $url;
@@ -1192,6 +1329,18 @@ function add_feedback_form_submit(Pieform $form, $values) {
         'commentid' => $comment->get('id'),
         'viewid'    => $view->get('id')
     );
+
+    // We want to add the user placing the comment to the watchlist so they
+    // can get notified about future comments to the page.
+    // @TODO Add a site/institution preference to override this.
+    $updatelink = false;
+    if (!get_field('usr_watchlist_view', 'ctime', 'usr', $author, 'view', $view->get('id')) && ($author != $owner)) {
+        insert_record('usr_watchlist_view', (object) array('usr' => $author,
+                                                           'view' => $view->get('id'),
+                                                           'ctime' => db_format_timestamp(time())));
+        $updatelink = ($artefact) ? get_string('removefromwatchlistartefact', 'view', $view->get('title')) : get_string('removefromwatchlist', 'view');
+    }
+
     activity_occurred('feedback', $data, 'artefact', 'comment');
 
     if (isset($moderatemsg)) {
@@ -1200,7 +1349,12 @@ function add_feedback_form_submit(Pieform $form, $values) {
 
     db_commit();
 
-    $newlist = ArtefactTypeComment::get_comments(10, 0, 'last', $view, $artefact);
+    $commentoptions = ArtefactTypeComment::get_comment_options();
+    $commentoptions->showcomment = 'last';
+    $commentoptions->view = $view;
+    $commentoptions->artefact = $artefact;
+    $newlist = ArtefactTypeComment::get_comments($commentoptions);
+    $newlist->updatelink = $updatelink;
 
     // If you're anonymous and your message is moderated or private, then you won't
     // be able to tell what happened to it. So we'll provide some more explanation in
@@ -1224,8 +1378,8 @@ function add_feedback_form_submit(Pieform $form, $values) {
 
 function add_feedback_form_cancel_submit(Pieform $form) {
     global $view;
-    $form->reply(PIEFORM_OK, array(
-        'goto' => '/' . $view->get_url(false),
+    $form->reply(PIEFORM_CANCEL, array(
+        'location' => $view->get_url(true),
     ));
 }
 
@@ -1271,6 +1425,7 @@ class ActivityTypeArtefactCommentFeedback extends ActivityTypePlugin {
                 $this->url = 'view/view.php?id=' . $onview;
             }
         }
+
         // Now fetch the users that will need to get notified about this event
         // depending on whether the page has an owner, group, or institution id set.
         if (!empty($userid)) {
@@ -1278,7 +1433,8 @@ class ActivityTypeArtefactCommentFeedback extends ActivityTypePlugin {
         }
         else if (!empty($groupid)) {
             require_once(get_config('docroot') . 'lib/group.php');
-            $this->users = get_records_sql_array("SELECT u.* from {usr} u, {group_member} m, {group} g
+            $this->users = get_records_sql_assoc("SELECT u.id, u.username, u.firstname, u.lastname, u.preferredname, u.email
+                                                    from {usr} u, {group_member} m, {group} g
                                                        WHERE g.id = m.group AND m.member = u.id AND m.group = ?
                                                        AND (g.feedbacknotify = " . GROUP_ROLES_ALL . "
                                                            OR (g.feedbacknotify = " . GROUP_ROLES_NONMEMBER . " AND (m.role = 'tutor' OR m.role = 'admin'))
@@ -1289,7 +1445,18 @@ class ActivityTypeArtefactCommentFeedback extends ActivityTypePlugin {
             require_once(get_config('libroot') .'institution.php');
             $institution = new Institution($institutionid);
             $admins = $institution->institution_and_site_admins();
-            $this->users = get_records_sql_array("SELECT * FROM {usr} WHERE id IN (" . implode(',', $admins) . ")", array());
+            $this->users = get_records_sql_assoc("SELECT u.id, u.username, u.firstname, u.lastname, u.preferredname, u.email FROM {usr} u WHERE id IN (" . implode(',', $admins) . ")", array());
+        }
+
+        // Fetch the users who will be notified because this page is on their watchlist
+        if (!$comment->get('private')) {
+            $watchlistusers = $comment->get_watchlist_users($comment->get('author'));
+            if (is_array($this->users)) {
+                $this->users = $this->users + $watchlistusers;
+            }
+            else {
+                $this->users = $watchlistusers;
+            }
         }
 
         if (empty($this->users)) {
@@ -1304,9 +1471,9 @@ class ActivityTypeArtefactCommentFeedback extends ActivityTypePlugin {
 
         // Internal
         $this->message = strip_tags(str_shorten_html($body, 200, true));
-        // Seen as things like emaildigest base the message on $this->message
+        // Seeing as things like emaildigest base the message on $this->message
         // we need to set the language for the $removedbyline here based on first user.
-        $user = $this->users[0];
+        $user = reset($this->users);
         $lang = (empty($user->lang) || $user->lang == 'default') ? get_config('lang') : $user->lang;
 
         // Comment deleted notification
@@ -1357,6 +1524,9 @@ class ActivityTypeArtefactCommentFeedback extends ActivityTypePlugin {
 
         // Email
         $author = $comment->get('author');
+        if ($author) {
+            $this->fromuser = $author;
+        }
         foreach ($this->users as $key => $user) {
             $authorname = empty($author) ? $comment->get('authorname') : display_name($author, $user);
             if (empty($user->lang) || $user->lang == 'default') {
@@ -1373,7 +1543,7 @@ class ActivityTypeArtefactCommentFeedback extends ActivityTypePlugin {
             );
             $this->users[$key]->emailmessage = get_string_from_language(
                 $lang, 'feedbacknotificationtext', 'artefact.comment',
-                $authorname, $title, $posttime, trim(html2text($body)), get_config('wwwroot') . $this->url
+                $authorname, $title, $posttime, trim(html2text(htmlspecialchars($body))), get_config('wwwroot') . $this->url
             );
         }
     }

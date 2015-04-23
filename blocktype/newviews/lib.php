@@ -22,7 +22,7 @@ class PluginBlocktypeNewViews extends SystemBlocktype {
     }
 
     public static function get_categories() {
-        return array('general');
+        return array('general' => 21000);
     }
 
     public static function get_viewtypes() {
@@ -47,7 +47,7 @@ class PluginBlocktypeNewViews extends SystemBlocktype {
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         $configdata = $instance->get('configdata');
         return array('limit' => array(
             'type' => 'text',
@@ -66,5 +66,9 @@ class PluginBlocktypeNewViews extends SystemBlocktype {
 
     public static function get_instance_title(BlockInstance $instance) {
         return get_string('title', 'blocktype.newviews');
+    }
+
+    public static function should_ajaxify() {
+        return true;
     }
 }

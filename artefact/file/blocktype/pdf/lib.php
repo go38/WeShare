@@ -26,32 +26,72 @@ class PluginBlocktypePdf extends PluginBlocktype {
     }
 
     public static function get_categories() {
-        return array('fileimagevideo');
+        return array('fileimagevideo' => 8000);
     }
 
     public static function render_instance(BlockInstance $instance, $editing=false) {
+        global $USER;
+        require_once(get_config('docroot') . 'lib/view.php');
         $configdata = $instance->get('configdata'); // this will make sure to unserialize it for us
         $configdata['viewid'] = $instance->get('view');
+        $view = new View($configdata['viewid']);
+        $group = $view->get('group');
 
-        if (isset($configdata['artefactid'])) {
-            $pdf = $instance->get_artefact_instance($configdata['artefactid']);
+        $result = '';
+        $artefactid = isset($configdata['artefactid']) ? $configdata['artefactid'] : null;
+        if ($artefactid) {
+            $artefact = $instance->get_artefact_instance($configdata['artefactid']);
 
-            if (!file_exists($pdf->get_path())) {
+            if (!file_exists($artefact->get_path())) {
                 return '';
             }
 
-            return '<iframe src="' . get_config('wwwroot') . 'artefact/file/blocktype/pdf/viewer.php?file=' . $configdata['artefactid'] . '&view=' . $instance->get('view')
+            $urlbase = get_config('wwwroot');
+            // edit view doesn't use subdomains, neither do groups
+            if (get_config('cleanurls') && get_config('cleanurlusersubdomains') && !$editing && empty($group)) {
+                $viewauthor = new User();
+                $viewauthor->find_by_id($view->get('owner'));
+                $viewauthorurlid = $viewauthor->get('urlid');
+                if ($urlallowed = !is_null($viewauthorurlid) && strlen($viewauthorurlid)) {
+                    $urlbase = profile_url($viewauthor) . '/';
+                }
+            }
+            // Send the current language to the pdf viewer
+            $language = current_language();
+            $language = str_replace('_', '-', substr($language, 0, ((substr_count($language, '_') > 0) ? 5 : 2)));
+            if ($language != 'en' && !file_exists(get_config('docroot') . 'artefact/file/blocktype/pdf/js/pdfjs/web/locale/' . $language . '/viewer.properties')) {
+                // In case the language file exists as a string with both lower and upper case, eg fr_FR we test for this
+                $language = substr($language, 0, 2) . '-' . strtoupper(substr($language, 0, 2));
+                if (!file_exists(get_config('docroot') . 'artefact/file/blocktype/pdf/js/pdfjs/web/locale/' . $language . '/viewer.properties')) {
+                    // In case we fail to find a language of 5 chars, eg pt_BR (Portugese, Brazil) we try the 'parent' pt (Portugese)
+                    $language = substr($language, 0, 2);
+                    if ($language != 'en' && !file_exists(get_config('docroot') . 'artefact/file/blocktype/pdf/js/pdfjs/web/locale/' . $language . '/viewer.properties')) {
+                        $language = 'en-GB';
+                    }
+                }
+            }
+            $result = '<iframe src="' . $urlbase . 'artefact/file/blocktype/pdf/viewer.php?editing=' . $editing . '&ingroup=' . !empty($group) . '&file=' . $artefactid . '&lang=' . $language . '&view=' . $instance->get('view')
                  . '" width="100%" height="500" frameborder="0"></iframe>';
-        }
 
-        return '';
+            require_once(get_config('docroot') . 'artefact/comment/lib.php');
+            require_once(get_config('docroot') . 'lib/view.php');
+            $view = new View($configdata['viewid']);
+            list($commentcount, $comments) = ArtefactTypeComment::get_artefact_comments_for_view($artefact, $view, $instance->get('id'), true, $editing);
+        }
+        $smarty = smarty_core();
+        if ($artefactid) {
+            $smarty->assign('commentcount', $commentcount);
+            $smarty->assign('comments', $comments);
+        }
+        $smarty->assign('html', $result);
+        return $smarty->fetch('blocktype:pdf:pdfrender.tpl');
     }
 
     public static function has_instance_config() {
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         $configdata = $instance->get('configdata');
         safe_require('artefact', 'file');
         $instance->set('artefactplugin', 'file');
@@ -72,6 +112,7 @@ class PluginBlocktypePdf extends PluginBlocktype {
         $element = ArtefactTypeFileBase::blockconfig_filebrowser_element($instance, $default);
         $element['title'] = get_string('file', 'artefact.file');
         $element['name'] = 'artefactid';
+        $element['accept'] = 'application/pdf';
         $element['config']['selectone'] = true;
         $element['filters'] = array(
             'artefacttype'    => array('file'),

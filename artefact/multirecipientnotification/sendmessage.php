@@ -18,6 +18,7 @@ safe_require('search', 'internal');
 safe_require('artefact', 'multirecipientnotification');
 
 $id = param_integer('id', null);
+$oldreplytoid = param_integer('oldreplyto', null);
 $replytoid = param_integer('replyto', null);
 $messages = null;
 $users = array();
@@ -44,6 +45,22 @@ if (null !== $id) {
 
     $users[] = $id;
 }
+
+if (!is_null($oldreplytoid)) {
+    $message = get_message_thread($oldreplytoid);
+    if (null === $message) {
+        throw new AccessDeniedException(get_string('cantviewmessage', 'group'));
+    }
+    if ($message[0]->usr != $USER->id) {
+        throw new AccessDeniedException(get_string('cantviewmessage', 'group'));
+    }
+    $subject = $message[0]->subject;
+    $prefix = trim(get_string('replysubjectprefix', 'artefact.multirecipientnotification'));
+    if (strpos($subject, $prefix) !== 0) {
+        $subject = $prefix . ' ' . $subject;
+    }
+}
+
 if (!is_null($replytoid)) {
     // Let us validate what we are going to reply first. The message should exist,
     // addressed to us and originated from the user we are replying to.
@@ -153,16 +170,14 @@ switch ($returnto) {
     case 'inbox':
         $goto = 'account/activity';
         break;
-    case 'outbox':
-        $goto = 'artefact/multirecipientnotification/outbox.php';
-        break;
     case 'institution':
         $goto = ($inst = param_alpha('inst', null))
             ? 'institution/index.php?institution=' . $inst
             : 'account/activity';
         break;
     default:
-      $goto = 'user/myfriends.php';
+        $goto = 'artefact/multirecipientnotification/outbox.php';
+        break;
 }
 if ($offset > 0) {
     $goto .= (strpos($goto,'?')) ? '&offset=' . $offset : '?offset=' . $offset;
@@ -181,21 +196,22 @@ $form = pieform(array(
             'initfunction' => 'translate_ids_to_names',
             'multiple' => true,
             'ajaxextraparams' => array(),
-            'width' => '400px',
+            'rules' => array('required' => true),
         ),
         'subject' => array(
             'title' => get_string('titlesubject', 'artefact.multirecipientnotification'),
             'type' => 'text',
             'name' => 'subject',
-            'size' => '80',
+            'size' => '40',
             'defaultvalue' => $subject,
+            'rules' => array('required' => true),
         ),
         'message' => array(
             'type'  => 'textarea',
             'title' => $messages ? get_string('Reply', 'group') : get_string('message'),
             'cols'  => 80,
             'rows'  => 10,
-            'rules' => array('maxlength' => 65536),
+            'rules' => array('maxlength' => 65536, 'required' => true),
         ),
         'goto' => array(
             'type' => 'hidden',

@@ -68,7 +68,7 @@ if (method_exists($authobj, 'change_password')) {
     );
 
     $elements['passwordchange'] = array(
-        'type'         => 'checkbox',
+        'type'         => 'switchbox',
         'title'        => get_string('forcepasswordchange','admin'),
         'description'  => get_string('forcepasswordchangedescription','admin'),
         'defaultvalue' => $user->passwordchange,
@@ -76,20 +76,20 @@ if (method_exists($authobj, 'change_password')) {
 }
 if ($USER->get('admin')) {
     $elements['staff'] = array(
-        'type'         => 'checkbox',
+        'type'         => 'switchbox',
         'title'        => get_string('sitestaff','admin'),
         'defaultvalue' => $user->staff,
         'help'         => true,
     );
     $elements['admin'] = array(
-        'type'         => 'checkbox',
+        'type'         => 'switchbox',
         'title'        => get_string('siteadmin','admin'),
         'defaultvalue' => $user->admin,
         'help'         => true,
     );
 }
 $elements['maildisabled'] = array(
-    'type' => 'checkbox',
+    'type' => 'switchbox',
     'defaultvalue' => get_account_preference($user->id, 'maildisabled'),
     'title' => get_string('disableemail', 'admin'),
     'help' => true,
@@ -108,7 +108,8 @@ if ($USER->get('admin') || get_config_plugin('artefact', 'file', 'institutionalo
         'type'         => 'bytes',
         'title'        => get_string('filequota1','admin'),
         'description'  => get_string('filequotadescription','admin') . '<br>' . $quotaused,
-        'rules'        => array('integer' => true),
+        'rules'        => array('integer' => true,
+                                'minvalue' => 1),
         'defaultvalue' => $user->quota,
     );
 }
@@ -182,7 +183,7 @@ if (count($authinstances) > 1) {
         }
     }
     $remoteusernames = json_encode(get_records_menu('auth_remote_user', 'localusr', $id));
-    $js = "<script type='text/javascript'>
+    $js = "<script type='application/javascript'>
           var externalauths = ['" . implode("','", $externalauthjs) . "'];
           var remoteusernames = " . $remoteusernames . ";
           jQuery(document).ready(function() {
@@ -286,7 +287,7 @@ function edituser_site_validate(Pieform $form, $values) {
                 }
             }
 
-            if (!$form->get_error('username') && record_exists_select('usr', 'LOWER(username) = ?', strtolower($values['username']))) {
+            if (!$form->get_error('username') && record_exists_select('usr', 'LOWER(username) = ?', array(strtolower($values['username'])))) {
                 $form->set_error('username', get_string('usernamealreadytaken', 'auth.internal'));
             }
         }
@@ -353,7 +354,7 @@ function edituser_site_submit(Pieform $form, $values) {
         if ($quotanotifylimit <= 0 || $quotanotifylimit >= 100) {
             $quotanotifylimit = 100;
         }
-        $user->quotausedpercent = $user->quotaused / $user->quota * 100;
+        $user->quotausedpercent = empty($user->quota) ? 0 : ($user->quotaused / $user->quota) * 100;
         $overlimit = false;
         if ($quotanotifylimit <= $user->quotausedpercent) {
             $overlimit = true;
@@ -701,14 +702,14 @@ foreach ($institutions as $i) {
                 'defaultvalue' => $i->studentid,
             ),
             $i->institution.'_staff' => array(
-                'type'         => 'checkbox',
+                'type'         => 'switchbox',
                 'title'        => get_string('institutionstaff','admin'),
                 'defaultvalue' => $i->staff,
             ),
             $i->institution.'_admin' => array(
-                'type'         => 'checkbox',
+                'type'         => 'switchbox',
                 'title'        => get_string('institutionadmin','admin'),
-                'description'  => get_string('institutionadmindescription','admin'),
+                'description'  => get_string('institutionadmindescription1','admin'),
                 'defaultvalue' => $i->admin,
             ),
             $i->institution.'_submit' => array(

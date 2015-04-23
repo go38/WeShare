@@ -122,12 +122,18 @@ if ($artefact->get('artefacttype') == 'folder') {
 $rendered = $artefact->render_self($options);
 $content = '';
 if (!empty($rendered['javascript'])) {
-    $content = '<script type="text/javascript">' . $rendered['javascript'] . '</script>';
+    $content = '<script type="application/javascript">' . $rendered['javascript'] . '</script>';
 }
 $content .= $rendered['html'];
 
 // Feedback
-$feedback = ArtefactTypeComment::get_comments($limit, $offset, $showcomment, $view, $artefact);
+$commentoptions = ArtefactTypeComment::get_comment_options();
+$commentoptions->limit = $limit;
+$commentoptions->offset = $offset;
+$commentoptions->showcomment = $showcomment;
+$commentoptions->view = $view;
+$commentoptions->artefact = $artefact;
+$feedback = ArtefactTypeComment::get_comments($commentoptions);
 
 $inlinejavascript = <<<EOF
 var viewid = {$viewid};
@@ -157,7 +163,7 @@ $viewtheme = $view->get('theme');
 if ($viewtheme && $THEME->basename != $viewtheme) {
     $THEME = new Theme($viewtheme);
 }
-$headers = array('<link rel="stylesheet" type="text/css" href="' . get_config('wwwroot') . 'theme/views.css?v=' . get_config('release'). '">',);
+$headers = array('<link rel="stylesheet" type="text/css" href="' . append_version_number(get_config('wwwroot') . 'theme/views.css' ) . '">',);
 
 // Set up skin, if the page has one
 $owner    = $view->get('owner');

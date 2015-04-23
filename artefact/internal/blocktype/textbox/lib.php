@@ -14,7 +14,7 @@ defined('INTERNAL') || die();
 class PluginBlocktypeTextbox extends PluginBlocktype {
 
     public static function get_title() {
-        return get_string('title1', 'blocktype.internal/textbox');
+        return get_string('title', 'blocktype.internal/textbox');
     }
 
     public static function get_description() {
@@ -22,7 +22,7 @@ class PluginBlocktypeTextbox extends PluginBlocktype {
     }
 
     public static function get_categories() {
-        return array('general');
+        return array('general' => 24000);
     }
 
     public function can_have_attachments() {
@@ -59,15 +59,12 @@ class PluginBlocktypeTextbox extends PluginBlocktype {
                 $smarty->assign('attachments', $attachments);
                 $smarty->assign('count', count($attachments));
             }
-
-            if ($artefact->get('allowcomments')) {
-                $commentcount = ArtefactTypeComment::count_comments(null, array($configdata['artefactid']));
-                $commentcount = isset($commentcount[$configdata['artefactid']]) ? $commentcount[$configdata['artefactid']]->comments : 0;
-                $artefacturl = get_config('wwwroot') . 'artefact/artefact.php?view=' . $viewid . '&artefact=' . $configdata['artefactid'];
-                $smarty->assign('artefacturl', $artefacturl);
-                $smarty->assign('commentcount', $commentcount);
-            }
-
+            require_once(get_config('docroot') . 'lib/view.php');
+            $view = new View($viewid);
+            list($commentcount, $comments) = ArtefactTypeComment::get_artefact_comments_for_view($artefact, $view, $instance->get('id'), true, $editing);
+            $smarty->assign('commentcount', $commentcount);
+            $smarty->assign('comments', $comments);
+            $smarty->assign('blockid', $instance->get('id'));
             return $smarty->fetch('blocktype:textbox:content.tpl');
         }
 
@@ -123,7 +120,7 @@ class PluginBlocktypeTextbox extends PluginBlocktype {
         return $artefact;
     }
 
-    public static function get_instance_config_javascript($instance) {
+    public static function get_instance_config_javascript(BlockInstance $instance) {
         // When an artefact is selected in the artefactchooser, update the
         // contents of the wysiwyg editor and the message about the number
         // of blocks containing the new artefact.
@@ -217,9 +214,6 @@ function updateTextContent(a) {
         removeElementClass('instconf_tagsreadonly_header', 'hidden');
         removeElementClass('instconf_tagsreadonly_container', 'hidden');
     }
-    if (table = getFirstParentByTagAndClassName($('instconf_text_container'), 'table', 'maharatable')) {
-        updateBlockConfigWidth(getFirstParentByTagAndClassName(table, 'div', 'blockinstance'), getElementDimensions(table).w);
-    }
 }
 connect('chooseartefactlink', 'onclick', function(e) {
     e.stop();
@@ -275,7 +269,7 @@ EOF;
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         global $USER;
         require_once('license.php');
         safe_require('artefact', 'file');
@@ -325,6 +319,16 @@ EOF;
         }
         else if ($institution = $view->get('institution')) {
             $manageurl .= '?institution=' . $institution;
+        }
+
+        // Update the attached files in block configdata as
+        // it may change when attached files have been deleted
+        $attachmentids = isset($artefact) ? $artefact->attachment_id_list() : false;
+        if ($attachmentids !== false
+            && $configdata['artefactids'] != $attachmentids) {
+            $configdata['artefactids'] = $attachmentids;
+            $instance->set('configdata', $configdata);
+            $instance->commit();
         }
 
         $elements = array(
@@ -388,7 +392,7 @@ EOF;
                 'value' => '<div id="instconf_licensereadonly_display">' . (isset($artefact) ? render_license($artefact) : get_string('licensenone')) . '</div>',
             ),
             'allowcomments' => array(
-                'type'         => 'checkbox',
+                'type'         => 'switchbox',
                 'title'        => get_string('allowcomments', 'artefact.comment'),
                 'defaultvalue' => (!empty($artefact) ? $artefact->get('allowcomments') : 1),
             ),
@@ -416,8 +420,20 @@ EOF;
         return $elements;
     }
 
+    public static function delete_instance($instance) {
+        require_once('embeddedimage.php');
+        $configdata = $instance->get('configdata');
+        if (!empty($configdata)) {
+            $artefactid = $configdata['artefactid'];
+            if (!empty($artefactid)) {
+                EmbeddedImage::delete_embedded_images($instance->get('blocktype'), $artefactid);
+            }
+        }
+    }
+
     public static function instance_config_save($values, $instance) {
         global $USER;
+        require_once('embeddedimage.php');
         $data = array();
         $view = $instance->get_view();
         foreach (array('owner', 'group', 'institution') as $f) {
@@ -466,7 +482,8 @@ EOF;
                 && $artefact->get('institution') === $data['institution']
                 && !$artefact->get('locked')
                 && $USER->can_edit_artefact($artefact)) {
-                $artefact->set('description', $values['text']);
+                $newdescription = EmbeddedImage::prepare_embedded_images($values['text'], 'textbox', (int)$values['artefactid'], $view->get('group'));
+                $artefact->set('description', $newdescription);
                 if (get_config('licensemetadata')) {
                     $artefact->set('license', $values['license']);
                     $artefact->set('licensor', $values['licensor']);
@@ -478,6 +495,15 @@ EOF;
         }
 
         $artefact->commit();
+
+        $newdescription = EmbeddedImage::prepare_embedded_images($values['text'], 'textbox', $artefact->get('id'), $view->get('group'));
+
+        if ($newdescription !== $values['text']) {
+            $updatedartefact = new stdClass();
+            $updatedartefact->id = $artefact->get('id');
+            $updatedartefact->description = $newdescription;
+            update_record('artefact', $updatedartefact, 'id');
+        }
 
         // Add attachments, if there are any...
         $old = $artefact->attachment_id_list();

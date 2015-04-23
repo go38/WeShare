@@ -87,7 +87,7 @@ class PluginArtefactMultirecipientnotification extends PluginArtefact {
             if (!(strpos($_SERVER['REQUEST_URI'], $searchFor) === false)) {
                 // set new path
                 $redirTarget = get_config('wwwroot') . 'artefact/multirecipientnotification/lib/activity.php';
-                if (strlen($_SERVER['QUERY_STRING'])>0) {
+                if (!empty($_SERVER['QUERY_STRING'])) {
                     // change path
                     $redirTarget .= '?' . $_SERVER['QUERY_STRING'];
                 }
@@ -99,7 +99,7 @@ class PluginArtefactMultirecipientnotification extends PluginArtefact {
             if ((preg_match($searchFor, $_SERVER['REQUEST_URI'])) == 1) {
                 // set new path
                 $redirTarget = get_config('wwwroot') . 'artefact/multirecipientnotification/inbox.php';
-                if (strlen($_SERVER['QUERY_STRING'])>0) {
+                if (!empty($_SERVER['QUERY_STRING'])) {
                     // change path
                     $redirTarget .='?' . $_SERVER['QUERY_STRING'];
                 }
@@ -111,7 +111,7 @@ class PluginArtefactMultirecipientnotification extends PluginArtefact {
             if ((preg_match($searchFor, $_SERVER['REQUEST_URI'])) == 1) {
                 // set new path
                 $redirTarget = get_config('wwwroot') . 'artefact/multirecipientnotification/sendmessage.php';
-                if (strlen($_SERVER['QUERY_STRING']) > 0) {
+                if (!empty($_SERVER['QUERY_STRING'])) {
                     // change path
                     $redirTarget .= '?' . $_SERVER['QUERY_STRING'];
                 }
@@ -120,6 +120,35 @@ class PluginArtefactMultirecipientnotification extends PluginArtefact {
             }
         }
         return $menuExtensions;
+    }
+
+    /**
+     * API-Function get the provided submenu tabs.
+     *
+     * @return array fully described new SUBPAGENAV tab items with title, url, etc.
+     */
+    public static function submenu_items() {
+        $tabs = array(
+            'inbox' => array(
+                'url' => 'artefact/multirecipientnotification/inbox.php',
+                'title' => get_string('labelinbox', 'artefact.multirecipientnotification'),
+                'tooltip' => get_string('inboxdesc1', 'artefact.multirecipientnotification'),
+            ),
+            'outbox' => array(
+                'url' => 'artefact/multirecipientnotification/outbox.php',
+                'title' => get_string('labeloutbox1', 'artefact.multirecipientnotification'),
+                'tooltip' => get_string('outboxdesc', 'artefact.multirecipientnotification'),
+            ),
+            'compose' => array(
+                'url' => 'artefact/multirecipientnotification/sendmessage.php',
+                'title' => get_string('composemessage', 'artefact.multirecipientnotification'),
+                'tooltip' => get_string('composemessagedesc', 'artefact.multirecipientnotification'),
+            ),
+        );
+        if (defined('NOTIFICATION_SUBPAGE') && isset($tabs[NOTIFICATION_SUBPAGE])) {
+            $tabs[NOTIFICATION_SUBPAGE]['selected'] = true;
+        }
+        return $tabs;
     }
 
     public static function postinst($prevversion) {

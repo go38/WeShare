@@ -22,7 +22,7 @@ class PluginBlocktypeHtml extends PluginBlocktype {
     }
 
     public static function get_categories() {
-        return array('fileimagevideo');
+        return array('fileimagevideo' => 9000);
     }
 
     public static function render_instance(BlockInstance $instance, $editing=false) {
@@ -30,24 +30,36 @@ class PluginBlocktypeHtml extends PluginBlocktype {
         $configdata['viewid'] = $instance->get('view');
 
         $result = '';
-        if (isset($configdata['artefactid'])) {
-            $html = $instance->get_artefact_instance($configdata['artefactid']);
+        $artefactid = isset($configdata['artefactid']) ? $configdata['artefactid'] : null;
+        if ($artefactid) {
+            $artefact = $instance->get_artefact_instance($artefactid);
 
-            if (!file_exists($html->get_path())) {
+            if (!file_exists($artefact->get_path())) {
                 return;
             }
 
-            $result = clean_html(file_get_contents($html->get_path()));
-        }
+            $result = clean_html(file_get_contents($artefact->get_path()));
 
-        return $result;
+            require_once(get_config('docroot') . 'artefact/comment/lib.php');
+            require_once(get_config('docroot') . 'lib/view.php');
+            $view = new View($configdata['viewid']);
+            list($commentcount, $comments) = ArtefactTypeComment::get_artefact_comments_for_view($artefact, $view, $instance->get('id'), true, $editing);
+         }
+
+        $smarty = smarty_core();
+        if ($artefactid) {
+            $smarty->assign('commentcount', $commentcount);
+            $smarty->assign('comments', $comments);
+        }
+        $smarty->assign('html', $result);
+        return $smarty->fetch('blocktype:html:html.tpl');
     }
 
     public static function has_instance_config() {
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         $configdata = $instance->get('configdata');
         safe_require('artefact', 'file');
         $instance->set('artefactplugin', 'file');

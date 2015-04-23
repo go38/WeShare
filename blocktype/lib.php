@@ -20,6 +20,33 @@ interface IPluginBlocktype {
 
     public static function get_description();
 
+    /**
+     * Should be an array of blocktype categories that this block should be included in,
+     * for determining how it shows up in the page editor's pallette of blocks.
+     * See the function get_blocktype_categories() in lib/upgrade.php for the full list.
+     *
+     * A block can belong to multiple categories.
+     *
+     * The special category "shortcut" will make the blocktype show up on the top of the
+     * block pallette instead of in a category.
+     *
+     * Blocktypes can have a sortorder in each category, that determines how they are
+     * ordered in the category. To give a sortorder, put the category as the array key,
+     * and the sortorder as the array value, like so:
+     *
+     * return array(
+     *     'shortcut' => 1000,
+     *     'general'  => 500,
+     * );
+     *
+     * If no sortorder is provided, the blocktype's sortorder will default to 100,000.
+     * Core blocktypes should have sortorders separated by 1,000 to give space for 3rd-party
+     * blocks in between.
+     *
+     * Blocktypess with the same sortorder are sorted by blocktype name.
+     *
+     * @return array
+     */
     public static function get_categories();
 
     public static function render_instance(BlockInstance $instance, $editing=false);
@@ -48,6 +75,14 @@ interface IPluginBlocktype {
  * @abstract
  */
 abstract class PluginBlocktype extends Plugin implements IPluginBlocktype {
+
+    /**
+     * Default sortorder for a blocktype that has no sortorder defined for a
+     * particular blocktype category that it's in. See IPluginBlocktype::get_categories()
+     * for a full explanation of blocktype sortorder.
+     * @var int
+     */
+    public static $DEFAULT_SORTORDER = 100000;
 
     public static function get_plugintype_name() {
         return 'blocktype';
@@ -80,6 +115,24 @@ abstract class PluginBlocktype extends Plugin implements IPluginBlocktype {
      * can only reasonably be placed once in a view
     */
     public static function single_only() {
+        return false;
+    }
+
+    /**
+     * Indicates whether this block can be loaded by Ajax after the page is done. This
+     * improves page-load times by allowing blocks to be rendered in parallel instead
+     * of in serial.
+     *
+     * You should avoid enabling this for:
+     * - Blocks with particularly finicky Javascript contents
+     * - Blocks that need to write to the session (the Ajax loader uses the session in read-only)
+     * - Blocks that won't take long to render (static content, external content)
+     * - Blocks that use hide_title_on_empty_content() (since you have to compute the content first
+     * in order for that to work)
+     *
+     * @return boolean
+     */
+    public static function should_ajaxify() {
         return false;
     }
 
@@ -201,7 +254,7 @@ abstract class PluginBlocktype extends Plugin implements IPluginBlocktype {
             JOIN {blocktype_installed_category} btic ON btic.blocktype = bti.name
             JOIN {blocktype_installed_viewtype} btiv ON btiv.blocktype = bti.name
             WHERE btic.category = ? AND bti.active = 1 AND btiv.viewtype = ?
-            ORDER BY bti.name';
+            ORDER BY btic.sortorder, bti.name';
         if (!$bts = get_records_sql_array($sql, array($category, $view->get('type')))) {
             return false;
         }
@@ -271,6 +324,46 @@ abstract class PluginBlocktype extends Plugin implements IPluginBlocktype {
         if (isset($configdata['artefactids'])) {
             $configdata['artefactids'] = array();
         }
+        return $configdata;
+    }
+
+    /**
+     * Takes extra config data for an existing blockinstance of this class
+     * and rewrites it so it can be used to configure a new block instance being put
+     * in a new view
+     *
+     * This is used at view copy time, to give blocktypes the chance to change
+     * the extra configuration for a block based on aspects about the new view
+     *
+     * As an example - when the 'Text' blocktype is copied, we
+     * want it so that all image urls in the $configdata['text'] are
+     * pointing to the new images.
+     *
+     * @param View $view The view that the blocktype will be placed into (e.g.
+     *                   the View being created as a result of the copy)
+     * @param BlockInstance $block The new block
+     * @param array $configdata The configuration data for the old blocktype
+     * @param array $artefactcopies The mapping of old artefact ids to new ones
+     * @return array            The new configuration data.
+     */
+    public static function rewrite_blockinstance_extra_config(View $view, BlockInstance $block, $configdata, $artefactcopies) {
+        return $configdata;
+    }
+
+    /**
+     * Rewrite extra config data for a blockinstance of this class when
+     * importing its view from Leap
+     *
+     * As an example - when the 'text' blocktype is imported, we
+     * want all image urls in the $configdata['text'] are
+     * pointing to the new images.
+     *
+     * @param array $artefactids The mapping of leap entries to their artefact ID
+     *      see more PluginImportLeap->artefactids
+     * @param array $configdata The imported configuration data for the blocktype
+     * @return array            The new configuration data.
+     */
+    public static function import_rewrite_blockinstance_extra_config_leap(array $artefactids, array $configdata) {
         return $configdata;
     }
 
@@ -431,6 +524,10 @@ abstract class SystemBlockType extends PluginBlockType {
 
 class BlockInstance {
 
+    const RETRACTABLE_NO = 0;
+    const RETRACTABLE_YES = 1;
+    const RETRACTABLE_RETRACTED = 2;
+
     private $id;
     private $blocktype;
     private $artefactplugin;
@@ -551,6 +648,23 @@ class BlockInstance {
         unset($values['id']);
         unset($values['change']);
         unset($values['new']);
+        if (isset($values['retractable'])) {
+            switch ($values['retractable']) {
+                case BlockInstance::RETRACTABLE_YES:
+                    $values['retractable'] = 1;
+                    $values['retractedonload'] = 0;
+                    break;
+                case BlockInstance::RETRACTABLE_RETRACTED:
+                    $values['retractable'] = 1;
+                    $values['retractedonload'] = 1;
+                    break;
+                case BlockInstance::RETRACTABLE_NO:
+                default:
+                    $values['retractable'] = 0;
+                    $values['retractedonload'] = 0;
+                    break;
+            }
+        }
 
         // make sure that user is allowed to publish artefact. This is to stop
         // hacking of form value to attach other users private data.
@@ -673,7 +787,7 @@ class BlockInstance {
         }
 
         if ($configure) {
-            list($content, $js) = array_values($this->build_configure_form($new));
+            list($content, $js, $css) = array_values($this->build_configure_form($new));
         }
         else {
             try {
@@ -681,6 +795,7 @@ class BlockInstance {
                 $jsfiles = call_static_method($blocktypeclass, 'get_instance_javascript', $this);
                 $inlinejs = call_static_method($blocktypeclass, 'get_instance_inline_javascript', $this);
                 $js = $this->get_get_javascript_javascript($jsfiles) . $inlinejs;
+                $css = '';
             }
             catch (NotFoundException $e) {
                 // Whoops - where did the image go? There is possibly a bug
@@ -768,32 +883,50 @@ class BlockInstance {
                 }
             }
         }
-
-        return array('html' => $smarty->fetch('view/blocktypecontainerediting.tpl'), 'javascript' => $js);
+        if (is_array($css)) {
+            $css = array_unique($css);
+        }
+        return array('html' => $smarty->fetch('view/blocktypecontainerediting.tpl'), 'javascript' => $js, 'pieformcss' => $css);
     }
 
-    public function render_viewing() {
+    /**
+     * To render the html of a block for viewing
+     *
+     * @param boolean $exporting  Indicate the rendering is for an export
+     *                            If we are doing an export we can't render the block to be loaded via ajax
+     * @return the rendered block
+     */
+    public function render_viewing($exporting=false) {
 
         if (!safe_require_plugin('blocktype', $this->get('blocktype'))) {
             return;
         }
-        $classname = generate_class_name('blocktype', $this->get('blocktype'));
-        try {
-            $content = call_static_method($classname, 'render_instance', $this);
-        }
-        catch (NotFoundException $e) {
-            // Whoops - where did the image go? There is possibly a bug
-            // somewhere else that meant that this blockinstance wasn't
-            // told that the image was previously deleted. But the block
-            // instance is not allowed to treat this as a failure
-            log_debug('Artefact not found when rendering a block instance. '
-                . 'There might be a bug with deleting artefacts of this type? '
-                . 'Original error follows:');
-            log_debug($e->getMessage());
-            $content = '';
-        }
 
         $smarty = smarty_core();
+
+        $classname = generate_class_name('blocktype', $this->get('blocktype'));
+        if (get_config('ajaxifyblocks') && call_static_method($classname, 'should_ajaxify') && $exporting === false) {
+            $content = '';
+            $smarty->assign('loadbyajax', true);
+        }
+        else {
+            $smarty->assign('loadbyajax', false);
+            try {
+                $content = call_static_method($classname, 'render_instance', $this);
+            }
+            catch (NotFoundException $e) {
+                // Whoops - where did the image go? There is possibly a bug
+                // somewhere else that meant that this blockinstance wasn't
+                // told that the image was previously deleted. But the block
+                // instance is not allowed to treat this as a failure
+                log_debug('Artefact not found when rendering a block instance. '
+                    . 'There might be a bug with deleting artefacts of this type? '
+                    . 'Original error follows:');
+                log_debug($e->getMessage());
+                $content = '';
+            }
+        }
+
         $smarty->assign('id',     $this->get('id'));
         $smarty->assign('blocktype', $this->get('blocktype'));
         // hide the title if required and no content is present
@@ -838,7 +971,7 @@ class BlockInstance {
      * Builds the configuration pieform for this blockinstance
      *
      * @return array Array with two keys: 'html' for raw html, 'javascript' for
-     *               javascript to run
+     *               javascript to run, 'css' for dynamic css to add to header
      */
     public function build_configure_form($new=false) {
 
@@ -899,17 +1032,15 @@ class BlockInstance {
             $elements,
             array (
                 'retractable' => array(
-                    'type'         => 'checkbox',
+                    'type'         => 'select',
                     'title'        => get_string('retractable', 'view'),
                     'description'  => get_string('retractabledescription', 'view'),
-                    'defaultvalue' => $retractable,
-                ),
-                'retractedonload' => array(
-                    'type'         => 'checkbox',
-                    'title'        => get_string('retractedonload', 'view'),
-                    'description'  => get_string('retractedonloaddescription', 'view'),
-                    'defaultvalue' => $retractedonload,
-                    'disabled'     => !$retractable,
+                    'options' => array(
+                            BlockInstance::RETRACTABLE_NO => get_string('no'),
+                            BlockInstance::RETRACTABLE_YES => get_string('yes'),
+                            BlockInstance::RETRACTABLE_RETRACTED => get_string('retractedonload', 'view')
+                    ),
+                    'defaultvalue' => $retractable + $retractedonload,
                 ),
             )
         );
@@ -968,8 +1099,8 @@ class BlockInstance {
         $html = $pieform->build();
         // We probably need a new version of $pieform->build() that separates out the js
         // Temporary evil hack:
-        if (preg_match('/<script type="text\/javascript">(new Pieform\(.*\);)<\/script>/', $html, $matches)) {
-            $js = "var pf_{$form['name']} = " . $matches[1] . "pf_{$form['name']}.init();";
+        if (preg_match('/<script type="(text|application)\/javascript">(new Pieform\(.*\);)<\/script>/', $html, $matches)) {
+            $js = "var pf_{$form['name']} = " . $matches[2] . "pf_{$form['name']}.init();";
         }
         else {
             $js = '';
@@ -979,7 +1110,6 @@ class BlockInstance {
         // by checking for an api function that has been added especially for
         // the purpose, but that is not part of Pieforms. Maybe one day later
         // it will be though
-        // $js = '';
         foreach ($elements as $key => $element) {
             $element['name'] = $key;
             $function = 'pieform_element_' . $element['type'] . '_views_js';
@@ -995,22 +1125,21 @@ class BlockInstance {
         else if (is_string($configjs)) {
             $js .= $configjs;
         }
-        $js .= '
-        $j(function() {
-            $j("#instconf_retractable").click(function() {
-                if (this.checked) {
-                    $j("#instconf_retractedonload").removeAttr("disabled");
-                    $j("#instconf_retractedonload").removeAttr("checked");
-                }
-                else {
-                    $j("#instconf_retractedonload").removeAttr("checked");
-                    $j("#instconf_retractedonload").attr("disabled", true);
-                }
-            });
-        });
-        ';
 
-        $renderedform = array('html' => $html, 'javascript' => $js);
+        // We need to load any dynamic css required for the pieform. We do this
+        // by checking for an api function that has been added especially for
+        // the purpose, but that is not part of Pieforms. Maybe one day later
+        // it will be though
+        $css = array();
+        foreach ($elements as $key => $element) {
+            $element['name'] = $key;
+            $function = 'pieform_element_' . $element['type'] . '_views_css';
+            if (is_callable($function)) {
+                $css[] = call_user_func_array($function, array($pieform, $element));
+            }
+        }
+
+        $renderedform = array('html' => $html, 'javascript' => $js, 'css' => $css);
         return $renderedform;
     }
 
@@ -1325,12 +1454,20 @@ class BlockInstance {
             // We need the artefact instance before we can get its attachments
             $tocopy = array();
             $attachmentlists = array();
+            $embedlists = array();
             foreach ($descendants as $d) {
                 if (!isset($artefactcopies[$d])) {
                     $tocopy[$d] = artefact_instance_from_id($d);
                     // Get attachments.
                     $attachmentlists[$d] = $tocopy[$d]->attachment_id_list();
                     foreach ($attachmentlists[$d] as $a) {
+                        if (!isset($artefactcopies[$a]) && !isset($tocopy[$a])) {
+                            $tocopy[$a] = artefact_instance_from_id($a);
+                        }
+                    }
+                    // Get embedded file artefacts
+                    $embedlists[$d] = $tocopy[$d]->embed_id_list();
+                    foreach ($embedlists[$d] as $a) {
                         if (!isset($artefactcopies[$a]) && !isset($tocopy[$a])) {
                             $tocopy[$a] = artefact_instance_from_id($a);
                         }
@@ -1345,6 +1482,9 @@ class BlockInstance {
                 if (!empty($attachmentlists[$aid])) {
                     $artefactcopies[$aid]->oldattachments = $attachmentlists[$aid];
                 }
+                if (!empty($embedlists[$aid])) {
+                    $artefactcopies[$aid]->oldembeds= $embedlists[$aid];
+                }
                 $artefactcopies[$aid]->newid = $a->copy_for_new_owner($view->get('owner'), $view->get('group'), $view->get('institution'));
             }
 
@@ -1352,7 +1492,7 @@ class BlockInstance {
             if (isset($configdata['artefactid'])) {
                 $configdata['artefactid'] = $artefactcopies[$configdata['artefactid']]->newid;
             }
-            else {
+            if (isset($configdata['artefactids'])) {
                 foreach ($configdata['artefactids'] as &$oldid) {
                     $oldid = $artefactcopies[$oldid]->newid;
                 }
@@ -1361,6 +1501,10 @@ class BlockInstance {
         else {
             $configdata = call_static_method($blocktypeclass, 'rewrite_blockinstance_config', $view, $configdata);
         }
+
+        // Rewrite the extra configuration of block
+        $configdata = call_static_method($blocktypeclass, 'rewrite_blockinstance_extra_config', $view, $newblock, $configdata, $artefactcopies);
+
         $newblock->set('configdata', $configdata);
         $newblock->commit();
         return true;

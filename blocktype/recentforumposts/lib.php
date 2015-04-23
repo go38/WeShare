@@ -23,7 +23,7 @@ class PluginBlocktypeRecentForumPosts extends SystemBlocktype {
     }
 
     public static function get_categories() {
-        return array('general');
+        return array('general' => 23000);
     }
 
     private static function get_group(BlockInstance $instance) {
@@ -118,7 +118,7 @@ class PluginBlocktypeRecentForumPosts extends SystemBlocktype {
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         global $USER;
 
         $elements   = array();
@@ -205,5 +205,9 @@ class PluginBlocktypeRecentForumPosts extends SystemBlocktype {
             return get_string('latestforumposts', 'interaction.forum');
         }
         return get_string('title', 'blocktype.recentforumposts');
+    }
+
+    public static function should_ajaxify() {
+        return true;
     }
 }

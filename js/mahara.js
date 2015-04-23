@@ -16,7 +16,7 @@ function get_string(s) {
     if (typeof(str) == 'object') {
         var index = 0;
         if (args.length > 0 && typeof(plural) == 'function') {
-            index = plural(parseInt(args[0]));
+            index = plural(parseInt(args[0], 10));
             if (typeof(index) == 'boolean') {
                 index = index ? 1 : 0;
             }
@@ -59,7 +59,7 @@ function globalErrorHandler(data) {
 function show_login_form(submit) {
     if($('ajax-login-form') == null) {
         var loginForm = DIV({id: 'ajax-login-form'});
-        loginForm.innerHTML = '<h2>' + get_string('login') + '</h2><a href="/">&laquo; ' + get_string('home') + '<\/a><div id="loginmessage">' + get_string('sessiontimedout') + '</div><form class="pieform" name="login" method="post" action="" id="login" onsubmit="' + submit + '(this, 42); return false;"><table cellspacing="0" border="0" class="maharatable"><tbody><tr id="login_login_username_header" class="required text"><th><label for="login_login_username">' + get_string('username') + ':<\/label><\/th><\/tr><tr id="login_login_username_container"><td><input type="text" class="required text autofocus" id="login_login_username" name="login_username" value=""><\/td><\/tr><tr><td class="description"> <\/td><\/tr><tr id="login_login_password_header" class="required password"><th><label for="login_login_password">' + get_string('password') + ':<\/label><\/th><\/tr><tr id="login_login_password_container"><td><input type="password" class="required password" id="login_login_password" name="login_password" value=""><\/td><\/tr><tr><td class="description"> <\/td><\/tr><tr id="login_submit_container"><td><input type="submit" class="submit" id="login_submit" name="submit" value="' + get_string('login') + '"><\/td><\/tr><\/tbody><\/table><div id="homepage"><\/div><input type="hidden" name="sesskey" value=""><input type="hidden" name="pieform_login" value=""><\/form><script type="text\/javascript">var login_btn = null;addLoadEvent(function() {    connect($(\'login_submit\'), \'onclick\', function() { login_btn = \'login_submit\'; });});connect(\'login\', \'onsubmit\', function() { formStartProcessing(\'login\', login_btn); });<\/script>';
+        loginForm.innerHTML = '<h2>' + get_string('login') + '</h2><a href="/">&laquo; ' + get_string('home') + '<\/a><div id="loginmessage">' + get_string('sessiontimedout') + '</div><form class="pieform" name="login" method="post" action="" id="login" onsubmit="' + submit + '(this, 42); return false;"><table cellspacing="0" border="0" class="maharatable"><tbody><tr id="login_login_username_header" class="required text"><th><label for="login_login_username">' + get_string('username') + ':<\/label><\/th><\/tr><tr id="login_login_username_container"><td><input type="text" class="required text autofocus" id="login_login_username" name="login_username" value=""><\/td><\/tr><tr><td class="description"> <\/td><\/tr><tr id="login_login_password_header" class="required password"><th><label for="login_login_password">' + get_string('password') + ':<\/label><\/th><\/tr><tr id="login_login_password_container"><td><input type="password" class="required password" id="login_login_password" name="login_password" value=""><\/td><\/tr><tr><td class="description"> <\/td><\/tr><tr id="login_submit_container"><td><input type="submit" class="submit" id="login_submit" name="submit" value="' + get_string('login') + '"><\/td><\/tr><\/tbody><\/table><div id="homepage"><\/div><input type="hidden" name="sesskey" value=""><input type="hidden" name="pieform_login" value=""><\/form><script type="application\/javascript">var login_btn = null;addLoadEvent(function() {    connect($(\'login_submit\'), \'onclick\', function() { login_btn = \'login_submit\'; });});connect(\'login\', \'onsubmit\', function() { formStartProcessing(\'login\', login_btn); });<\/script>';
         appendChildNodes(document.body, DIV({id: 'overlay'}));
         appendChildNodes(document.body, loginForm);
         $('login_login_username').focus();
@@ -108,8 +108,25 @@ function formStartProcessing(form, btn) {
 
         button.disabled = "disabled";
         button.blur();
+
+        // Start the progress meter if it is enabled.
+        if (typeof(form) !== 'undefined' && typeof(form.elements) !== 'undefined' && typeof(form.elements['progress_meter_token']) !== 'undefined') {
+            meter_update_timer(form.elements['progress_meter_token'].value);
+        }
     }
 }
+
+function meter_update_timer(instance) {
+    sendjsonrequest( config.wwwroot + 'json/progress_meter.php', { 'instance' : instance }, 'GET', function(data) {
+        if (typeof(data) != 'undefined') {
+            if (!data.data.finished || !jQuery('#meter_overlay').is(':visible')) {
+                setTimeout(function() { meter_update_timer(instance) }, 1000);
+            }
+            meter_update(data.data);
+        }
+    }, false, true, false, true);
+}
+
 function formStopProcessing(form, btn) {
     processingStop();
 }
@@ -152,6 +169,12 @@ function displayMessage(message, type, hideprevmsg) {
     }
 }
 
+/**
+ * This variable determines the completeness of a json request
+ * = true if the request is still in progress
+ */
+var isRequestStillProcessing = false;
+
 /* Display a nice little loading notification */
 function processingStart(msg) {
     if (!msg) {
@@ -163,16 +186,20 @@ function processingStart(msg) {
         DIV(msg)
     );
     showElement('loading-box');
+
+    isRequestStillProcessing = true;
 }
 
 /* Hide the loading notification */
 function processingStop() {
     hideElement('loading-box');
+
+    isRequestStillProcessing = false;
 }
 // End message related functions
 
 // Function to post a data object to a json script.
-function sendjsonrequest(script, data, rtype, successcallback, errorcallback, quiet, anon) {
+function sendjsonrequest(script, data, rtype, successcallback, errorcallback, quiet, anon, extraquiet) {
     //log('sendjsonrequest(script=', script, ', data=', data, ', rtype=', rtype, ', success=', successcallback, ', error=', errorcallback, ', quiet=', quiet, ')');
     donothing = function () { return; };
     if (typeof(successcallback) != 'function') {
@@ -181,7 +208,9 @@ function sendjsonrequest(script, data, rtype, successcallback, errorcallback, qu
     if (typeof(errorcallback) != 'function') {
         errorcallback = donothing;
     }
-    processingStart();
+    if (typeof(extraquiet) == 'undefined' || !extraquiet) {
+        processingStart();
+    }
     if (!anon) {
         data.sesskey = config.sesskey;
     }
@@ -220,19 +249,31 @@ function sendjsonrequest(script, data, rtype, successcallback, errorcallback, qu
 
     d.addCallbacks(function (result) {
         document.documentElement.style.cursor = '';
-        var data = evalJSONRequest(result);
+        var data;
+        try {
+            data = jQuery.parseJSON(result.responseText);
+        }
+        catch (e) {
+            logError('sendjsonrequest() received invalid JSON');
+            processingStop();
+            errorcallback();
+            return;
+        }
+
         var errtype = false;
         if (!data.error) { 
             errtype = 'ok';
         }
         else if (data.error == 'local') {
             errtype = 'error';
+            errorcallback();
         }
         else {
             logWarning('invoking globalErrorHandler(', data, this, arguments, ')');
             // Trying something ninja. The call failed, but in the event that the global error
             // handler can recover, maybe it can be called
             globalErrorHandler(data);
+            errorcallback();
         }
         if (errtype) {
             if (typeof(data.message) == 'string') {
@@ -490,8 +531,6 @@ function contextualHelpPosition(ref, contextualHelpContainer) {
 
         if (containerwidth >= screenwidth) {
             // Very small screen, resize the help box to fit
-            var margin = containerwidth - $j(contextualHelpContainer).width();
-            $j(contextualHelpContainer).css('width', screenwidth - margin);
             position.left = oldposition.left - oldoffset.left;
         }
         else {
@@ -721,8 +760,8 @@ function progressbarUpdate(artefacttype, remove) {
     // if we have the artefacttype and it needs to be updated
     if (typeof artefacttype != 'undefined') {
         if ($('progress_counting_' + artefacttype)) {
-            var counting = parseInt($('progress_counting_' + artefacttype).innerHTML);
-            var oldcompleted = parseInt($('progress_completed_' + artefacttype).innerHTML);
+            var counting = parseInt($('progress_counting_' + artefacttype).innerHTML, 10);
+            var oldcompleted = parseInt($('progress_completed_' + artefacttype).innerHTML, 10);
             var completed = oldcompleted + change;
             $('progress_completed_' + artefacttype).innerHTML = completed;
             var progressitem = $('progress_item_' + artefacttype);
@@ -737,8 +776,8 @@ function progressbarUpdate(artefacttype, remove) {
             }
             // now update the totals if we need to
             if ((oldcompleted > 0 && oldcompleted <= counting && remove ) || (completed <= counting && !remove)) {
-                var totalcounting = parseInt($('progress_counting_total').innerHTML);
-                var totalcompleted = parseInt($('progress_completed_total').innerHTML) + change;
+                var totalcounting = parseInt($('progress_counting_total').innerHTML, 10);
+                var totalcompleted = parseInt($('progress_completed_total').innerHTML, 10) + change;
                 $('progress_completed_total').innerHTML = totalcompleted;
                 var percentage = roundToFixed((totalcompleted / totalcounting) * 100, 0);
                 $('progress_bar_percentage').innerHTML = percentage + '%';
@@ -746,6 +785,37 @@ function progressbarUpdate(artefacttype, remove) {
             }
         }
     }
+}
+
+function meter_update(data) {
+    if (! jQuery('#meter_overlay')) {
+        return false;
+    }
+
+    if (data.finished) {
+        jQuery('#meter_overlay').hide();
+
+        if (typeof(data.redirect) !== 'undefined') {
+            window.location.href = data.redirect;
+        }
+        return true;
+    }
+
+    jQuery('#meter_overlay').show();
+
+    if (data.denominator) {
+        data.message += ' ... ' + (Math.round(100 * data.numerator / data.denominator)) + '% done';
+    }
+    jQuery('#meter_message').html(data.message);
+    if (data.denominator > 0) {
+        new_width = jQuery('#meter_wrap').width() * data.numerator / data.denominator;
+    }
+    else {
+        new_width = 0;
+    }
+    jQuery('#meter_fill').width(new_width);
+
+    return true;
 }
 
 function quotaUpdate(quotaused, quota) {
@@ -862,4 +932,12 @@ jQuery(document).ready(function() {
 */
 jQuery(document).ready(function() {
     jQuery('body').removeClass('no-js').addClass('js');
+});
+
+/**
+ * Check if the page is ready in javascript
+ */
+var is_page_ready = false;
+jQuery(document).ready(function() {
+    is_page_ready = true;
 });

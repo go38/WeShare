@@ -147,7 +147,7 @@ class User {
                 WHERE
                     username = ?';
 
-        $user = get_record_sql($sql, $username);
+        $user = get_record_sql($sql, array($username));
 
         if (false == $user) {
             throw new AuthUnknownUserException("User with username \"$username\" is not known");
@@ -186,7 +186,7 @@ class User {
                             (
                                 LOWER(username) = (
                                     SELECT
-                                        username
+                                        LOWER(username)
                                     FROM
                                         {usr} us
                                     JOIN
@@ -195,8 +195,7 @@ class User {
                                         LOWER(aru.remoteusername) = ' . db_quote($username) . '
                                         AND us.authinstance = ' . db_quote($parentid) . '
                                 )
-                                AND
-                                u.authinstance = ' . db_quote($parentid) . '
+                                AND u.authinstance = ' . db_quote($parentid) . '
                             )
                     ';
             }
@@ -995,6 +994,10 @@ class User {
             }
         }
         if ($a->get('group')) {
+            if ($USER->get('id') == $a->get('author')) {
+                // uploader of group file should always have access to it
+                return true;
+            }
             // Only group artefacts can have artefact_access_role & artefact_access_usr records
             return (bool) count_records_sql("SELECT COUNT(*) FROM {artefact_access_role} ar
                 INNER JOIN {group_member} g ON ar.role = g.role
@@ -1467,6 +1470,20 @@ class LiveUser extends User {
         if ($parentid = get_field('auth_instance_config', 'value', 'field', 'parent', 'instance', $instanceid)) {
             $instanceid = $parentid;
         }
+        // Check for a suspended institution
+        // If a user in more than one institution and one of them is suspended
+        // make sure their authinstance is not set to the suspended institution
+        // otherwise they will not be able to login.
+        $authinstance = get_record_sql('
+            SELECT i.suspended, i.displayname
+            FROM {institution} i JOIN {auth_instance} a ON a.institution = i.name
+            WHERE a.id = ?', array($instanceid));
+        if ($authinstance->suspended) {
+            $sitename = get_config('sitename');
+            throw new AccessTotallyDeniedException(get_string('accesstotallydenied_institutionsuspended', 'mahara', $authinstance->displayname, $sitename));
+            return false;
+        }
+
         $auth = AuthFactory::create($instanceid);
 
         // catch the AuthInstanceException that allows authentication plugins to
@@ -1474,17 +1491,6 @@ class LiveUser extends User {
         try {
             if ($auth->authenticate_user_account($user, $password)) {
                 $this->authenticate($user, $auth->instanceid);
-                // Check for a suspended institution
-                $authinstance = get_record_sql('
-                    SELECT i.suspended, i.displayname
-                    FROM {institution} i JOIN {auth_instance} a ON a.institution = i.name
-                    WHERE a.id = ?', array($instanceid));
-                if ($authinstance->suspended) {
-                    $sitename = get_config('sitename');
-                    throw new AccessTotallyDeniedException(get_string('accesstotallydenied_institutionsuspended', 'mahara', $authinstance->displayname, $sitename));
-                    return false;
-                }
-
                 return true;
             }
         }
@@ -1522,6 +1528,13 @@ class LiveUser extends User {
         // the instituion_config table was added.
         if (get_config('version') >= '2014010800') {
             set_cookie('lastinstitution', $this->sitepages_institutionname_by_theme('loggedouthome'), '2240561472', true);
+        }
+
+        // Clear any secret URL access cookies
+        foreach (array('viewaccess:', 'mviewaccess:', 'viewaccess:') as $cookiename) {
+            foreach (get_cookies($cookiename) as $id => $token) {
+                set_cookie($cookiename . $id, '', 1);
+            }
         }
 
         require_once(get_config('libroot') . 'ddl.php');

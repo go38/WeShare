@@ -24,7 +24,7 @@ class PluginBlocktypeGallery extends PluginBlocktype {
     }
 
     public static function get_categories() {
-        return array('fileimagevideo');
+        return array('fileimagevideo' => 5000);
     }
 
     public static function get_instance_javascript(BlockInstance $instance) {
@@ -39,7 +39,7 @@ class PluginBlocktypeGallery extends PluginBlocktype {
         }
     }
 
-    public static function get_instance_config_javascript() {
+    public static function get_instance_config_javascript(BlockInstance $instance) {
         return array(
             'js/configform.js',
             'js/slideshow.js',
@@ -160,7 +160,7 @@ class PluginBlocktypeGallery extends PluginBlocktype {
                         $width = 75; // Currently only thumbnail size, that Flickr supports
 
                         $api_key = get_config_plugin('blocktype', 'gallery', 'flickrapikey');
-                        $URL = 'http://api.flickr.com/services/rest/?method=flickr.photosets.getPhotos&extras=url_sq,url_t&photoset_id=' . $var2 . '&api_key=' . $api_key;
+                        $URL = 'https://api.flickr.com/services/rest/?method=flickr.photosets.getPhotos&extras=url_sq,url_t&photoset_id=' . $var2 . '&api_key=' . $api_key;
                         $xmlDoc = new DOMDocument('1.0', 'UTF-8');
                         $config = array(
                             CURLOPT_URL => $URL,
@@ -367,8 +367,27 @@ class PluginBlocktypeGallery extends PluginBlocktype {
 
                 // If the Thumbnails are Square or not...
                 if ($style == 2) {
-                    $src .= '&size=' . $width . 'x' . $width;
-                    $height = $width;
+                    // Determine the scaling for the fitting the image in the square of $width size
+                    // Calculate the bigger, width vs height, to work out the ratio
+                    $configwidth = $width - (get_config_plugin('blocktype', 'gallery', 'photoframe') ? 8 : 0); // $width - photo frame padding
+                    $imagewidth = $image->get('width');
+                    $imageheight = $image->get('height');
+                    if ($imagewidth > $imageheight) {
+                        $ratio = $imagewidth / $configwidth;
+                    }
+                    else {
+                        $ratio = $imageheight / $configwidth;
+                    }
+                    $ratiowidth = floor($imagewidth / $ratio);
+                    $ratioheight = floor($imageheight / $ratio);
+                    // All image dimensions need to be bigger than 15px
+                    // see function imagesize_data_to_internal_form()
+                    $ratiowidth = $ratiowidth < 16 ? 16 : $ratiowidth;
+                    $ratioheight = $ratioheight < 16 ? 16 : $ratioheight;
+
+                    $topoffset = (($configwidth - $ratioheight) / 2);
+                    $src .= '&size=' . $ratiowidth . 'x' . $ratioheight;
+                    $height = $ratioheight;
                 }
                 else {
                     $src .= '&maxwidth=' . $width;
@@ -381,8 +400,11 @@ class PluginBlocktypeGallery extends PluginBlocktype {
                     'link' => $link,
                     'source' => $src,
                     'height' => $height,
+                    'width' => (!empty($ratiowidth) ? $ratiowidth : null),
                     'title' => $image->get('description'),
-                    'slimbox2' => $slimbox2attr
+                    'slimbox2' => $slimbox2attr,
+                    'squaredimensions' => $width,
+                    'squaretop' => (!empty($topoffset) ? $topoffset : null),
                 );
             }
         }
@@ -393,7 +415,6 @@ class PluginBlocktypeGallery extends PluginBlocktype {
         $smarty->assign('images', $images);
         $smarty->assign('showdescription', (!empty($configdata['showdescription'])) ? $configdata['showdescription'] : false);
         $smarty->assign('width', $width);
-        $smarty->assign('captionwidth', (get_config_plugin('blocktype', 'gallery', 'photoframe') ? $width + 8 : $width));
         if (isset($height)) {
             $smarty->assign('height', $height);
         }
@@ -402,7 +423,16 @@ class PluginBlocktypeGallery extends PluginBlocktype {
         }
         $smarty->assign('frame', get_config_plugin('blocktype', 'gallery', 'photoframe'));
         $smarty->assign('copyright', $copyright);
+        if (!empty($configdata['artefactid'])) {
+            $artefact = $instance->get_artefact_instance($configdata['artefactid']);
 
+            require_once(get_config('docroot') . 'artefact/comment/lib.php');
+            require_once(get_config('docroot') . 'lib/view.php');
+            $view = new View($configdata['viewid']);
+            list($commentcount, $comments) = ArtefactTypeComment::get_artefact_comments_for_view($artefact, $view, $instance->get('id'), true, $editing);
+            $smarty->assign('commentcount', $commentcount);
+            $smarty->assign('comments', $comments);
+        }
         return $smarty->fetch('blocktype:gallery:' . $template . '.tpl');
     }
 
@@ -418,15 +448,15 @@ class PluginBlocktypeGallery extends PluginBlocktype {
             'collapsible' => true,
             'elements' => array(
                 'useslimbox2' => array(
-                    'type'         => 'checkbox',
+                    'type'         => 'switchbox',
                     'title'        => get_string('useslimbox2', 'blocktype.file/gallery'),
-                    'description'  => get_string('useslimbox2desc', 'blocktype.file/gallery'),
+                    'description'  => get_string('useslimbox2desc1', 'blocktype.file/gallery'),
                     'defaultvalue' => get_config_plugin('blocktype', 'gallery', 'useslimbox2'),
                 ),
                 'photoframe' => array(
-                    'type'         => 'checkbox',
+                    'type'         => 'switchbox',
                     'title'        => get_string('photoframe', 'blocktype.file/gallery'),
-                    'description'  => get_string('photoframedesc', 'blocktype.file/gallery'),
+                    'description'  => get_string('photoframedesc1', 'blocktype.file/gallery'),
                     'defaultvalue' => get_config_plugin('blocktype', 'gallery', 'photoframe'),
                 ),
                 'previewwidth' => array(
@@ -481,7 +511,7 @@ class PluginBlocktypeGallery extends PluginBlocktype {
 
     }
 
-    public static function save_config_options($form, $values) {
+    public static function save_config_options(Pieform $form, $values) {
         set_config_plugin('blocktype', 'gallery', 'useslimbox2', (int)$values['useslimbox2']);
         set_config_plugin('blocktype', 'gallery', 'photoframe', (int)$values['photoframe']);
         set_config_plugin('blocktype', 'gallery', 'previewwidth', (int)$values['previewwidth']);
@@ -502,7 +532,7 @@ class PluginBlocktypeGallery extends PluginBlocktype {
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         $configdata = $instance->get('configdata');
         safe_require('artefact', 'file');
         $instance->set('artefactplugin', 'file');
@@ -558,7 +588,7 @@ class PluginBlocktypeGallery extends PluginBlocktype {
                 'separator' => '<br>',
             ),
             'showdescription' => array(
-                'type'  => 'checkbox',
+                'type'  => 'switchbox',
                 'title' => get_string('showdescriptions', 'blocktype.file/gallery'),
                 'description' => get_string('showdescriptionsdescription', 'blocktype.file/gallery'),
                 'defaultvalue' => !empty($configdata['showdescription']) ? true : false,
@@ -577,7 +607,7 @@ class PluginBlocktypeGallery extends PluginBlocktype {
         );
     }
 
-    public static function instance_config_validate($form, $values) {
+    public static function instance_config_validate(Pieform $form, $values) {
         global $USER;
 
         if (!empty($values['images'])) {
@@ -706,7 +736,7 @@ class PluginBlocktypeGallery extends PluginBlocktype {
             // Flickr Set (RSS) - for Roy Tanck's widget
             array(
                 'match' => '#.*api.flickr.com.*set=(\d+).*nsid=([a-zA-Z0-9\@]+).*#',
-                'url'   => 'http://api.flickr.com/services/feeds/photoset.gne?set=$1&nsid=$2',
+                'url'   => 'https://api.flickr.com/services/feeds/photoset.gne?set=$1&nsid=$2',
                 'type'  => 'widget',
                 'var1' => '$2',
                 'var2' => '$1',
@@ -714,7 +744,7 @@ class PluginBlocktypeGallery extends PluginBlocktype {
             // Flickr Set (direct link)
             array(
                 'match' => '#.*www.flickr.com/photos/([a-zA-Z0-9\_\-\.\@]+).*/sets/([0-9]+).*#',
-                'url'   => 'http://www.flickr.com/photos/$1/sets/$2/',
+                'url'   => 'https://www.flickr.com/photos/$1/sets/$2/',
                 'type'  => 'flickr',
                 'var1' => '$1',
                 'var2' => '$2',

@@ -35,12 +35,16 @@ $installedtypes = get_records_assoc(
     'name,admin,plugintype,pluginname'
 );
 
-$options = array(
-    'all' => get_string('alltypes', 'activity'),
-);
+$options = array();
+// check if user is an admin in at least one group and if so they can see group admin filter options
+$groupadmin = false;
+$grouproles = $USER->get('grouproles');
+if (array_search('admin', $grouproles) !== false) {
+    $groupadmin = true;
+}
 
-foreach ($installedtypes as &$t) {
-    if (!$t->admin) {
+foreach ($installedtypes as $t) {
+    if (!$t->admin || $USER->get('admin') || ($groupadmin && $t->pluginname == 'forum')) {
         $section = $t->pluginname ? "{$t->plugintype}.{$t->pluginname}" : 'activity';
         $options[$t->name] = get_string('type' . $t->name, $section);
     }
@@ -50,6 +54,10 @@ if ($USER->get('admin')) {
     $options['adminmessages'] = get_string('typeadminmessages', 'activity');
 }
 
+// sort activitytypes now, when they have been translated
+uasort($options, 'strcmp');
+// ... and add the element for 'all types' to the beginning
+$options = array_merge(array('all' => get_string('alltypes', 'activity')), $options);
 $type = param_variable('type', 'all');
 if ($type == '') {
     $type = 'all';
@@ -70,7 +78,7 @@ $activitylist = activitylistin_html($type);
 $star = json_encode($THEME->get_url('images/star.png'));
 $readicon = json_encode($THEME->get_url('images/readusermessage.png'));
 $strread = json_encode(get_string('read', 'activity'));
-
+$strnodelete = json_encode(get_string('nodelete', 'activity'));
 $javascript = <<<JAVASCRIPT
 
 function markread(form, action) {
@@ -78,10 +86,17 @@ function markread(form, action) {
     var e = getElementsByTagAndClassName(null,'tocheck'+action,form);
     var pd = {};
 
+    var havedelete = false;
     for (cb in e) {
         if (e[cb].checked == true) {
             pd[e[cb].name] = 1;
+            havedelete = true;
         }
+    }
+    // if nothing has been seleced for deletion bail out now with error message
+    if (!havedelete && action == 'del') {
+        alert($strnodelete);
+        return;
     }
 
     if (action == 'read') {
@@ -108,12 +123,13 @@ function markread(form, action) {
     });
 }
 
-function showHideMessage(id, table) {
-    var message = $('message-' + table + '-' + id);
-    if (!message) {
+function toggleMessageDisplay(table, id) {
+    var messages = jQuery('#message-' + table + '-' + id);
+    if (messages.length <= 0) {
         return;
     }
-    jQuery(message).parents("tr.unread").removeClass("unread")
+    message = messages[0];
+    messages.parents("tr.unread").removeClass("unread");
     if (hasElementClass(message, 'hidden')) {
         var unread = getFirstElementByTagAndClassName(
             'input', 'tocheckread', message.parentNode.parentNode
@@ -131,10 +147,17 @@ function showHideMessage(id, table) {
                 updateUnreadCount(data);
             });
         }
-        removeElementClass(message, 'hidden');
     }
-    else {
-        addElementClass(message, 'hidden');
+    var rows = messages.parents("tr");
+    if (rows.length > 0) {
+        if (jQuery(rows[0]).find(".messagedisplaylong.hidden").length > 0) {
+            jQuery(rows[0]).find(".messagedisplaylong").removeClass("hidden");
+            jQuery(rows[0]).find(".messagedisplayshort").addClass("hidden");
+        }
+        else {
+            jQuery(rows[0]).find(".messagedisplaylong").addClass("hidden");
+            jQuery(rows[0]).find(".messagedisplayshort").removeClass("hidden");
+        }
     }
 }
 
@@ -171,6 +194,17 @@ var paginatorData = new PaginatorData();
 addLoadEvent(function () {
     paginator = {$activitylist['pagination_js']}
     connect('notifications_type', 'onchange', changeactivitytype);
+});
+
+jQuery(function() {
+    jQuery('#activitylist tr').hover(
+        function() {
+                jQuery(this).addClass('highlight');
+            },
+            function() {
+                jQuery(this).removeClass('highlight');
+        }
+    );
 });
 
 JAVASCRIPT;
@@ -285,15 +319,10 @@ $smarty->assign('INLINEJAVASCRIPT', $javascript);
 
 // Adding the links to out- and inbox
 $smarty->assign('PAGEHEADING', TITLE);
-// Add urls and titles
-$pages = array();
-$pages[0]["url"] = "artefact/multirecipientnotification/inbox.php";
-$pages[0]["title"] = get_string('labelinbox', 'artefact.multirecipientnotification');
-$pages[0]["selected"] = 1;
-$pages[1]["url"] = "artefact/multirecipientnotification/outbox.php";
-$pages[1]["title"] = get_string('labeloutbox1', 'artefact.multirecipientnotification');
+
 // show urls and titles
-$smarty->assign('SUBPAGENAV', $pages);
+define('NOTIFICATION_SUBPAGE', 'inbox');
+$smarty->assign('SUBPAGENAV', PluginArtefactMultirecipientnotification::submenu_items());
 
 $smarty->assign('deleteall', $deleteall);
 $smarty->assign('activitylist', $activitylist);

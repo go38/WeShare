@@ -18,23 +18,25 @@ define('SECTION_PAGE', 'forgotpass');
 require('init.php');
 require_once('pieforms/pieform.php');
 
-if (!session_id()) {
-    session_start();
-}
-
-if (!empty($_SESSION['pwchangerequested'])) {
-    unset($_SESSION['pwchangerequested']);
+if (!empty($SESSION->pwchangerequested)) {
+    unset($SESSION->pwchangerequested);
     die_info(get_string('pwchangerequestsent'));
 }
 
 if (isset($_GET['key'])) {
+    $SESSION->set('forgotpasskey', $_GET['key']);
+    redirect('/forgotpass.php');
+}
+if (isset($SESSION->forgotpasskey)) {
     define('TITLE', get_string('changepassword'));
 
-    if (!$pwrequest = get_record('usr_password_request', 'key', $_GET['key'])) {
+    if (!$pwrequest = get_record('usr_password_request', 'key', $SESSION->forgotpasskey)) {
+        unset($SESSION->forgotpasskey);
         die_info(get_string('nosuchpasswordrequest'));
     }
 
     if (strtotime($pwrequest->expiry) < time()) {
+        unset($SESSION->forgotpasskey);
         die_info(get_string('passwordresetexpired'));
     }
 
@@ -188,7 +190,7 @@ function forgotpass_submit(Pieform $form, $values) {
     unset($user->ignoredisabled);
 
     // Add a marker in the session to say that the user has registered
-    $_SESSION['pwchangerequested'] = true;
+    $SESSION->set('pwchangerequested', true);
 
     redirect('/forgotpass.php');
 }
@@ -199,7 +201,6 @@ function forgotpasschange_validate(Pieform $form, $values) {
     password_validate($form, $values, $user);
 }
 
-
 // TODO:
 //   password_validate to maharalib, use it in places specified, test with a drop/create run
 //   support autofocus => (true|'id'), remove stuff doing autofocus from where it is, focus error fields
@@ -207,6 +208,7 @@ function forgotpasschange_validate(Pieform $form, $values) {
 function forgotpasschange_submit(Pieform $form, $values) {
     global $SESSION, $USER;
 
+    unset($SESSION->forgotpasskey);
     try {
         $user = new User();
         $user->find_by_id($values['user']);
@@ -223,6 +225,10 @@ function forgotpasschange_submit(Pieform $form, $values) {
         ensure_user_account_is_active($user);
 
         $USER->reanimate($user->id, $user->authinstance);
+
+        // Destroy other sessions of the user
+        remove_user_sessions($USER->get('id'));
+
         $SESSION->add_ok_msg(get_string('passwordchangedok'));
         redirect();
         exit;

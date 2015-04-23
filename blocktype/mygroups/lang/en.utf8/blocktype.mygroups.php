@@ -17,7 +17,7 @@ $string['description'] = 'Display a list of the groups you belong to';
 
 $string['sortgroups'] = 'Sort groups';
 $string['earliest'] = 'Earliest joined';
-$string['latest'] = 'Latest joined';
+$string['latest'] = 'Most recently joined';
 $string['alphabetical'] = 'A to Z';
 $string['limitto1'] = 'Maximum number of groups to display';
 $string['limittodesc'] = 'Maximum number of groups to display in the block. Leave empty to show all your groups.';

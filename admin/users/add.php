@@ -83,12 +83,12 @@ $elements = array(
         'rules' => array('required' => true),
     ),
     'staff' => array(
-        'type' => 'checkbox',
+        'type' => 'switchbox',
         'title' => get_string('sitestaff', 'admin'),
         'ignore' => !$USER->get('admin'),
     ),
     'admin' => array(
-        'type' => 'checkbox',
+        'type' => 'switchbox',
         'title' => get_string('siteadmin', 'admin'),
         'ignore' => !$USER->get('admin'),
     ),
@@ -107,7 +107,7 @@ $elements = array(
         'ignore'       => !$authinstancecount,
     ),
     'institutionadmin' => array(
-        'type'         => 'checkbox',
+        'type'         => 'switchbox',
         'title'        => get_string('institutionadministrator','admin'),
         'ignore'       => !$authinstancecount,
     ),
@@ -194,7 +194,7 @@ function adduser_validate(Pieform $form, $values) {
             $form->set_error('username', get_string('usernameinvalidform', 'auth.internal'));
         }
     }
-    if (!$form->get_error('username') && record_exists_select('usr', 'LOWER(username) = ?', strtolower($username))) {
+    if (!$form->get_error('username') && record_exists_select('usr', 'LOWER(username) = ?', array(strtolower($username)))) {
         $form->set_error('username', get_string('usernamealreadytaken', 'auth.internal'));
     }
 

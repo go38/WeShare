@@ -79,6 +79,7 @@ To see and reply to the post online, follow this link:
 
 To unsubscribe from this %s, visit:
 %s";
+$string['forumsettings'] = 'Forum settings';
 $string['forumsuccessfulsubscribe'] = 'Forum subscribed successfully';
 $string['forumsuccessfulunsubscribe'] = 'Forum unsubscribed successfully';
 $string['gotoforums'] = 'Go to forums';
@@ -147,7 +148,7 @@ $string['reportpostsuccess'] = 'Post reported successfully';
 $string['sendnow'] = 'Send message now';
 $string['sendnowdescription'] = 'Send message immediately instead of waiting at least %s minutes for it to be sent.';
 $string['Sticky'] = 'Sticky';
-$string['stickydescription'] = 'Sticky topics are at the top of every page';
+$string['stickydescription'] = 'Sticky topics appear at the top of every page';
 $string['stickytopics'] = 'Sticky topics';
 $string['Subscribe'] = 'Subscribe';
 $string['Subscribed'] = 'Subscribed';
@@ -197,7 +198,7 @@ $string['maxindent'] = 'Maximum indent level';
 $string['maxindentdescription'] = 'Set the maximum indentation level for a topic. This only applies if the indent mode has been set to "Expand to maximum".';
 
 $string['closetopics'] = 'Close new topics';
-$string['closetopicsdescription'] = 'If checked, all new topics in this forum will be closed by default. Only moderators and group administrators can reply to closed topics.';
+$string['closetopicsdescription1'] = 'Close all new topics by default. Only moderators and group administrators can reply to closed topics.';
 
 $string['activetopicsdescription'] = 'Recently updated topics in your groups.';
 

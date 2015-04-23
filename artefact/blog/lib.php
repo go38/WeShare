@@ -68,7 +68,7 @@ class PluginArtefactBlog extends PluginArtefact {
     }
 
     public static function block_advanced_options_element($configdata, $artefacttype) {
-        $strartefacttype = get_string($artefacttype, 'artefact.blog');
+        $strartefacttype = strtolower(get_string($artefacttype, 'artefact.blog'));
         return array(
             'type' => 'fieldset',
             'name' => 'advanced',
@@ -134,6 +134,10 @@ class ArtefactTypeBlog extends ArtefactType {
         if (empty($this->id)) {
             $this->container = 1;
         }
+    }
+
+    public static function is_allowed_in_progressbar() {
+        return false;
     }
 
     /**
@@ -327,6 +331,8 @@ class ArtefactTypeBlog extends ArtefactType {
      * @param array
      */
     public static function new_blog(User $user, array $values) {
+        require_once('embeddedimage.php');
+        db_begin();
         $artefact = new ArtefactTypeBlog();
         $artefact->set('title', $values['title']);
         $artefact->set('description', $values['description']);
@@ -338,6 +344,10 @@ class ArtefactTypeBlog extends ArtefactType {
             $artefact->set('licensorurl', $values['licensorurl']);
         }
         $artefact->commit();
+        $blogid = $artefact->get('id');
+        $newdescription = EmbeddedImage::prepare_embedded_images($artefact->get('description'), 'blog', $blogid);
+        $artefact->set('description', $newdescription);
+        db_commit();
     }
 
     /**
@@ -347,6 +357,7 @@ class ArtefactTypeBlog extends ArtefactType {
      * @param array
      */
     public static function edit_blog(User $user, array $values) {
+        require_once('embeddedimage.php');
         if (empty($values['id']) || !is_numeric($values['id'])) {
             return;
         }
@@ -357,7 +368,8 @@ class ArtefactTypeBlog extends ArtefactType {
         }
 
         $artefact->set('title', $values['title']);
-        $artefact->set('description', $values['description']);
+        $newdescription = EmbeddedImage::prepare_embedded_images($values['description'], 'blog', $values['id']);
+        $artefact->set('description', $newdescription);
         $artefact->set('tags', $values['tags']);
         if (get_config('licensemetadata')) {
             $artefact->set('license', $values['license']);
@@ -523,18 +535,9 @@ class ArtefactTypeBlogPost extends ArtefactType {
      * The post content may now link to different artefacts. See {@link
      * PluginBlocktypeBlogPost::get_artefacts for more information}
      */
-    public function commit() {
-        if (empty($this->dirty)) {
-            return;
-        }
-
-        db_begin();
-        $new = empty($this->id);
-
-        parent::commit();
-
-        $this->dirty = true;
-
+    protected function postcommit_hook($new) {
+        require_once(get_config('docroot') . 'blocktype/lib.php');
+        require_once(get_config('docroot') . 'artefact/blog/blocktype/taggedposts/lib.php');
         $data = (object)array(
             'blogpost'  => $this->get('id'),
             'published' => ($this->get('published') ? 1 : 0)
@@ -547,27 +550,35 @@ class ArtefactTypeBlogPost extends ArtefactType {
             update_record('artefact_blog_blogpost', $data, 'blogpost');
         }
 
-        // We want to get all blockinstances that contain this blog post. That is currently:
+        // We want to get all blockinstances that may contain this blog post. That is currently:
         // 1) All blogpost blocktypes with this post in it
         // 2) All blog blocktypes with this posts's blog in it
-        //
-        // With these, we tell them to rebuild what artefacts they have in them,
-        // since the post content could have changed and now have links to
-        // different artefacts in it
-        $blockinstanceids = (array)get_column_sql('SELECT block
+        // 3) All recentposts blocktypes with this post's blog in it
+        // 4) All taggedposts blocktypes with this post's tags
+        $blocks = (array)get_column_sql('SELECT block
             FROM {view_artefact}
             WHERE artefact = ?
             OR artefact = ?', array($this->get('id'), $this->get('parent')));
-        if ($blockinstanceids) {
-            require_once(get_config('docroot') . 'blocktype/lib.php');
-            foreach ($blockinstanceids as $id) {
+        if (!$blocks) {
+            $blocks = array();
+        }
+
+        // Get all "tagged blog entries" blocks that may contain this block
+        // (we'll just check for a single matching tag here, and let each block
+        // instance further down decide whether or not it matches
+        $tags = $this->get('tags');
+        if ($tags) {
+            $blocks = array_merge($blocks, PluginBlocktypeTaggedposts::find_matching_blocks($tags));
+        }
+
+        // Now rebuild the list of which artefacts these blocks contain
+        // in the view_artefacts table. (This is used for watchlist notifications)
+        if ($blocks) {
+            foreach ($blocks as $id) {
                 $instance = new BlockInstance($id);
                 $instance->rebuild_artefact_list();
             }
         }
-
-        db_commit();
-        $this->dirty = false;
     }
 
     /**
@@ -579,10 +590,11 @@ class ArtefactTypeBlogPost extends ArtefactType {
             return;
         }
 
+        require_once('embeddedimage.php');
         db_begin();
         $this->detach(); // Detach all file attachments
         delete_records('artefact_blog_blogpost', 'blogpost', $this->id);
-
+        EmbeddedImage::delete_embedded_images('blogpost', $this->id);
         parent::delete();
         db_commit();
     }
@@ -619,7 +631,17 @@ class ArtefactTypeBlogPost extends ArtefactType {
     }
 
     public function render_self($options) {
+        global $USER;
+
         $smarty = smarty_core();
+        $smarty->assign('published', $this->get('published'));
+        if (!$this->get('published')) {
+            $notpublishedblogpoststr = get_string('notpublishedblogpost', 'artefact.blog');
+            if ($this->get('owner') == $USER->get('id')) {
+                $notpublishedblogpoststr .= ' <a href="' . get_config('wwwroot') . 'artefact/blog/post.php?id=' . $this->get('id') . '">' . get_string('publishit', 'artefact.blog') . '</a>';
+            }
+            $smarty->assign('notpublishedblogpost', $notpublishedblogpoststr);
+        }
         $artefacturl = get_config('wwwroot') . 'artefact/artefact.php?artefact=' . $this->get('id');
         if (isset($options['viewid'])) {
             $artefacturl .= '&view=' . $options['viewid'];
@@ -639,16 +661,10 @@ class ArtefactTypeBlogPost extends ArtefactType {
         if (isset($options['viewid'])) {
             safe_require('artefact', 'file');
             $postcontent = ArtefactTypeFolder::append_view_url($postcontent, $options['viewid']);
-            if (isset($options['countcomments']) && $this->allowcomments) {
-                safe_require('artefact', 'comment');
-                $empty = array();
-                $ids = array($this->id);
-                $commentcount = ArtefactTypeComment::count_comments($empty, $ids);
-                $smarty->assign('commentcount', $commentcount ? $commentcount[$this->id]->comments : 0);
-            }
         }
         $smarty->assign('artefactdescription', $postcontent);
-        $smarty->assign('artefact', $this);
+        $smarty->assign('artefacttags', $this->get('tags'));
+        $smarty->assign('artefactowner', $this->get('owner'));
         if (!empty($options['details']) and get_config('licensemetadata')) {
             $smarty->assign('license', render_license($this));
         }
@@ -670,6 +686,10 @@ class ArtefactTypeBlogPost extends ArtefactType {
                 }
             }
             $smarty->assign('attachments', $attachments);
+            if (isset($options['blockid'])) {
+                $smarty->assign('blockid', $options['blockid']);
+            }
+            $smarty->assign('postid', $this->get('id'));
         }
         $smarty->assign('postedbyon', get_string('postedbyon', 'artefact.blog',
                                                  display_name($this->owner),
@@ -801,13 +821,6 @@ class ArtefactTypeBlogPost extends ArtefactType {
             }
         }
 
-        // Get comment counts
-        if (!empty($viewoptions['countcomments'])) {
-            safe_require('artefact', 'comment');
-            $viewids = array();
-            $commentcounts = ArtefactTypeComment::count_comments($viewids, array_keys($data));
-        }
-
         foreach ($data as &$post) {
             // Format dates properly
             if (is_null($viewoptions)) {
@@ -818,8 +831,15 @@ class ArtefactTypeBlogPost extends ArtefactType {
             else {
                 $by = $post->author ? display_default_name($post->author) : $post->authorname;
                 $post->postedby = get_string('postedbyon', 'artefact.blog', $by, format_date($post->ctime));
-                if (isset($commentcounts)) {
-                    $post->commentcount = isset($commentcounts[$post->id]) ? $commentcounts[$post->id]->comments : 0;
+                // Get comment counts
+                if (!empty($viewoptions['countcomments'])) {
+                    safe_require('artefact', 'comment');
+                    require_once(get_config('docroot') . 'lib/view.php');
+                    $view = new View($viewoptions['viewid']);
+                    $artefact = artefact_instance_from_id($post->id);
+                    list($commentcount, $comments) = ArtefactTypeComment::get_artefact_comments_for_view($artefact, $view, null, false);
+                    $post->commentcount = $commentcount;
+                    $post->comments = $comments;
                 }
             }
             $post->ctime = format_date($post->ctime, 'strftimedaydatetime');
@@ -990,17 +1010,9 @@ class ArtefactTypeBlogPost extends ArtefactType {
             return false;
         }
 
-        $data = (object)array(
-                'blogpost'  => $this->id,
-                'published' => (int) $newpoststatus
-        );
+        $this->set('published', (int) $newpoststatus);
+        $this->commit();
 
-        if (get_field('artefact_blog_blogpost', 'COUNT(*)', 'blogpost', $this->id)) {
-            update_record('artefact_blog_blogpost', $data, 'blogpost');
-        }
-        else {
-            insert_record('artefact_blog_blogpost', $data);
-        }
         return true;
     }
 

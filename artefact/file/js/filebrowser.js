@@ -331,12 +331,6 @@ function FileBrowser(idprefix, folderid, config, globalconfig) {
             return false;
         });
 
-        // Recalculate the width of config block
-        if ($('artefactchooser-body')) {
-            var width = getElementDimensions(getFirstParentByTagAndClassName($('artefactchooser-body'), 'td', null)).w;
-            updateBlockConfigWidth(getFirstParentByTagAndClassName(self.form, 'div', 'blockinstance'), width);
-        }
-
         return false;
     }
 
@@ -477,20 +471,20 @@ function FileBrowser(idprefix, folderid, config, globalconfig) {
             self.move_list.remove();
         }
 
+        var movefoldercount = $j('#' + self.id + '_filelist a.changefolder').length;
         var ul = $j('<ul>').addClass('file-move-list');
-
         $j('#' + self.id + '_filelist a.changefolder').each(function(i) {
             var title = $j(this);
             var elemid = title.attr('href').replace(/.+folder=/, '');
             if (elemid != moveid) {
                 var displaytitle = title.find('.display-title').html();
                 var link = $j('<a>').attr('href', '#').html(get_string('moveto', displaytitle));
-                link.on('mousedown keydown', function(e) {
-                    if (e.type == 'mousedown' && e.buttons == 0) {
+                link.on('click keydown', function(e) {
+                    if (e.type == 'click' && e.buttons == 0) {
                         // Stops the link being activated when it shouldn't (eg. when setting focus to the list)
                         return false;
                     }
-                    else if (e.type == 'mousedown' || e.keyCode == 32 || e.keyCode == 13) {
+                    else if (e.type == 'click' || e.keyCode == 32 || e.keyCode == 13) {
                         self.setfocus = 'changefolder:' + elemid;
                         self.move_to_folder(moveid, elemid);
                         self.move_list = null;
@@ -499,7 +493,14 @@ function FileBrowser(idprefix, folderid, config, globalconfig) {
                 });
                 ul.append($j('<li>').append(link));
             }
+            else {
+                movefoldercount --;
+            }
         });
+        // When we have no folders, or one folder and we click the folder icon.
+        if (movefoldercount == 0) {
+            return '';
+        }
 
         var cancellink = $j('<a>').attr('href', '#').html(get_string('cancel'));
         cancellink.on('click keydown', function(e) {
@@ -521,11 +522,13 @@ function FileBrowser(idprefix, folderid, config, globalconfig) {
     this.make_icon_keyboard_accessible = function(icon) {
         var self = this;
         var id = icon.id.replace(/.+:/, '');
-        $j(icon).on('mousedown keydown', function(e) {
-            if (e.type == 'mousedown' || e.keyCode == 32 || e.keyCode == 13) {
+        $j(icon).on('click keydown', function(e) {
+            if (e.type == 'click' || e.keyCode == 32 || e.keyCode == 13) {
                 var folderlist = self.create_move_list(icon, id);
-                $j(icon).closest('tr').find('.filename').append(folderlist);
-                folderlist.find('a').first().focus();
+                if (folderlist != '') {
+                    $j(icon).closest('tr').find('.filename').append(folderlist);
+                    folderlist.find('a').first().focus();
+                }
             }
         });
     };
@@ -779,6 +782,11 @@ function FileBrowser(idprefix, folderid, config, globalconfig) {
             addElementClass(self.id + '_empty_selectlist', 'hidden');
         }
         this.update_metadata_to_selected_list();
+        // are we running inside tinymce imagebrowser plugin?
+        if (window.imgbrowserconf_artefactid) {
+            // propagate the click
+            jQuery('#filebrowserupdatetarget').click();
+        }
     }
 
     this.unselect = function (e) {
@@ -911,11 +919,6 @@ function FileBrowser(idprefix, folderid, config, globalconfig) {
                 formSuccess(form, data);
             }
             self.init();
-        }
-        // Recalculate the width of config block
-        if ($('artefactchooser-body')) {
-            var width = getElementDimensions(getFirstParentByTagAndClassName($('artefactchooser-body'), 'table', 'maharatable')).w;
-            updateBlockConfigWidth(getFirstParentByTagAndClassName(self.form, 'div', 'blockinstance'), width);
         }
     }
 

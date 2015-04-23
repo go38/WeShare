@@ -35,24 +35,36 @@ class PluginBlocktypeBlogpost extends PluginBlocktype {
     }
 
     public static function get_categories() {
-        return array('blog');
+        return array('blog' => 11000);
     }
 
     public static function render_instance(BlockInstance $instance, $editing=false) {
         $configdata = $instance->get('configdata');
 
         $result = '';
-        if (!empty($configdata['artefactid'])) {
+        $artefactid = isset($configdata['artefactid']) ? $configdata['artefactid'] : null;
+        if ($artefactid) {
             require_once(get_config('docroot') . 'artefact/lib.php');
-            $blogpost = $instance->get_artefact_instance($configdata['artefactid']);
+            $artefact = $instance->get_artefact_instance($artefactid);
             $configdata['hidetitle'] = true;
             $configdata['countcomments'] = true;
             $configdata['viewid'] = $instance->get('view');
-            $result = $blogpost->render_self($configdata);
+            $configdata['blockid'] = $instance->get('id');
+            $result = $artefact->render_self($configdata);
             $result = $result['html'];
+            require_once(get_config('docroot') . 'artefact/comment/lib.php');
+            require_once(get_config('docroot') . 'lib/view.php');
+            $view = new View($configdata['viewid']);
+            list($commentcount, $comments) = ArtefactTypeComment::get_artefact_comments_for_view($artefact, $view, $instance->get('id'), true, $editing);
         }
 
-        return $result;
+        $smarty = smarty_core();
+        if ($artefactid) {
+            $smarty->assign('commentcount', $commentcount);
+            $smarty->assign('comments', $comments);
+        }
+        $smarty->assign('html', $result);
+        return $smarty->fetch('blocktype:blogpost:blogpost.tpl');
     }
 
     /**
@@ -89,7 +101,7 @@ class PluginBlocktypeBlogpost extends PluginBlocktype {
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         global $USER;
         safe_require('artefact', 'blog');
         $configdata = $instance->get('configdata');
@@ -109,7 +121,12 @@ class PluginBlocktypeBlogpost extends PluginBlocktype {
         // Note: the owner check will have to change when we do group/site
         // blogs
         if (empty($configdata['artefactid']) || $blog->get('owner') == $USER->get('id')) {
-            $elements[] = self::artefactchooser_element((isset($configdata['artefactid'])) ? $configdata['artefactid'] : null);
+            $publishedposts = get_column_sql('
+                SELECT a.id
+                FROM {artefact} a
+                    INNER JOIN {artefact_blog_blogpost} p ON p.blogpost = a.id
+                WHERE p.published = 1 AND a.owner= ?', array($USER->get('id')));
+            $elements[] = self::artefactchooser_element((isset($configdata['artefactid'])) ? $configdata['artefactid'] : null, $publishedposts);
             $elements[] = PluginArtefactBlog::block_advanced_options_element($configdata, 'blogpost');
         }
         else {
@@ -122,17 +139,19 @@ class PluginBlocktypeBlogpost extends PluginBlocktype {
         return $elements;
     }
 
-    public static function artefactchooser_element($default=null) {
+    public static function artefactchooser_element($default=null, $publishedposts=array()) {
         $element = array(
             'name'  => 'artefactid',
             'type'  => 'artefactchooser',
             'title' => get_string('blogpost', 'artefact.blog'),
+            'description' => get_string('choosepublishedblogpostsdescription', 'blocktype.blog/blogpost'),
             'defaultvalue' => $default,
             'blocktype' => 'blogpost',
             'limit'     => 10,
             'selectone' => true,
             'artefacttypes' => array('blogpost'),
             'template'  => 'artefact:blog:artefactchooser-element.tpl',
+            'extraselect' => !empty($publishedposts) ? array(array('fieldname' => 'id', 'type' => 'int', 'values' => $publishedposts)) : null,
         );
         return $element;
     }

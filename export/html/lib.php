@@ -385,15 +385,17 @@ class PluginExportHtml extends PluginExport {
 
             // Include comments
             if ($this->includefeedback) {
-                $feedback = null;
-                $artefact = null;
-                if ($feedback = ArtefactTypeComment::get_comments(0, 0, null, $view, $artefact, true)) {
+                $commentoptions = ArtefactTypeComment::get_comment_options();
+                $commentoptions->view = $view;
+                $commentoptions->limit = 0;
+                $commentoptions->export = true;
+                if ($feedback = ArtefactTypeComment::get_comments($commentoptions)) {
                     $feedback->tablerows = $outputfilter->filter($feedback->tablerows);
                 }
                 $smarty->assign('feedback', $feedback);
             }
 
-            $smarty->assign('view', $outputfilter->filter($view->build_rows()));
+            $smarty->assign('view', $outputfilter->filter($view->build_rows(false, true)));
             $content = $smarty->fetch('export:html:view.tpl');
             if (!file_put_contents("$directory/index.html", $content)) {
                 throw new SystemException("Could not write view page for view $viewid");
@@ -498,7 +500,11 @@ class PluginExportHtml extends PluginExport {
             if (!check_dir_exists($staticdir . $destinationdir)) {
                 $SESSION->add_error_msg(get_string('couldnotcreatestaticdirectory', 'export', $destinationdir));
             }
-            $directoriestocopy[get_config('docroot') . 'artefact/' . $dir] = $staticdir . $destinationdir;
+            foreach ($themestaticdirs as $theme => $themedir) {
+                if (file_exists(get_config('docroot') . 'theme/' . $theme . '/' . $dir)) {
+                    $directoriestocopy[get_config('docroot') . 'theme/' . $theme . '/' . $dir] = $staticdir . $destinationdir;
+                }
+            }
         }
 
         foreach ($directoriestocopy as $from => $to) {

@@ -62,7 +62,7 @@ $string['dimensions'] = 'Dimensions';
 $string['draft'] = 'Draft';
 $string['edit'] = 'Edit';
 $string['editblogpost'] = 'Edit journal entry';
-$string['entriesimportedfromleapexport'] = 'Entries imported from a LEAP export that were not able to be imported elsewhere';
+$string['entriesimportedfromleapexport'] = 'Entries imported from a Leap2A export that were not able to be imported elsewhere';
 $string['errorsavingattachments'] = 'An error occurred while saving journal entry attachments';
 $string['horizontalspace'] = 'Horizontal space';
 $string['insert'] = 'Insert';
@@ -94,6 +94,7 @@ $string['nposts'] = array(
 );
 
 $string['publish'] = 'Publish';
+$string['publishit'] = 'Publish it.';
 $string['unpublish'] = 'Unpublish';
 $string['publishfailed'] = 'An error occurred. Your entry was not published.';
 $string['publishblogpost?'] = 'Are you sure you want to publish this entry?';
@@ -158,3 +159,4 @@ $string['progress_blogpost'] = array(
     'Add 1 entry to a journal',
     'Add %s entries to a journal',
 );
+$string['notpublishedblogpost'] = 'This journal entry has not been published yet.';

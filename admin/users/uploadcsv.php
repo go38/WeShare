@@ -122,6 +122,11 @@ $form = array(
             'collapsed' => true,
             'elements' => general_account_prefs_form_elements($prefs),
         ),
+        'progress_meter_token' => array(
+            'type' => 'hidden',
+            'value' => 'uploaduserscsv',
+            'readonly' => TRUE,
+        ),
         'submit' => array(
             'type' => 'submit',
             'value' => get_string('uploadcsv', 'admin')
@@ -160,6 +165,9 @@ function uploadcsv_validate(Pieform $form, $values) {
     if ($form->has_errors()) {
         return;
     }
+
+    $steps_done = 0;
+    $steps_total = $values['updateusers'] ? 5 : 4;
 
     if ($values['file']['size'] == 0) {
         $form->set_error('file', $form->i18n('rule', 'required', 'required', array()));
@@ -217,15 +225,25 @@ function uploadcsv_validate(Pieform $form, $values) {
         $remoteusers = array();
     }
 
+    $num_lines = count($csvdata->data);
+
     $maxcsvlines = get_config('maxusercsvlines');
-    if ($maxcsvlines && $maxcsvlines < count($csvdata->data)) {
+    if ($maxcsvlines && $maxcsvlines < $num_lines) {
         $form->set_error('file', get_string('uploadcsverrortoomanyusers', 'admin', get_string('nusers', 'mahara', $maxcsvlines)));
         return;
     }
 
+    $existing_usernames = get_records_menu('usr', '', NULL, '', 'LOWER(username) AS username, 1 AS key2');
+    $existing_usr_email_addresses = get_records_menu('usr', '', NULL, '', 'email, 1 AS key2');
+    $existing_internal_email_addresses = get_records_menu('artefact_internal_profile_email', 'verified', 1, '', 'email, 1 AS key2');
+
     foreach ($csvdata->data as $key => $line) {
         // If headers exists, increment i = key + 2 for actual line number
         $i = ($csvusers->get('headerExists')) ? ($key + 2) : ($key + 1);
+
+        if (!($key % 25)) {
+            set_progress_info('uploaduserscsv', $key, $num_lines * $steps_total, get_string('validating', 'admin'));
+        }
 
         // Trim non-breaking spaces -- they get left in place by File_CSV
         foreach ($line as &$field) {
@@ -277,7 +295,7 @@ function uploadcsv_validate(Pieform $form, $values) {
         }
         else if (!$values['updateusers']) {
             // The email address must be new
-            if (record_exists('usr', 'email', $email) || record_exists('artefact_internal_profile_email', 'email', $email, 'verified', 1)) {
+            if (array_key_exists($email, $existing_usr_email_addresses) || array_key_exists($email, $existing_internal_email_addresses)) {
                 $csverrors->add($i, get_string('uploadcsverroremailaddresstaken', 'admin', $i, $email));
             }
         }
@@ -309,7 +327,7 @@ function uploadcsv_validate(Pieform $form, $values) {
             $csverrors->add($i, get_string('uploadcsverroruseralreadyexists', 'admin', $i, $username));
         }
         else {
-            if (!$values['updateusers'] && record_exists_select('usr', 'LOWER(username) = ?', strtolower($username))) {
+            if (!$values['updateusers'] && array_key_exists(strtolower($username), $existing_usernames)) {
                 $csverrors->add($i, get_string('uploadcsverroruseralreadyexists', 'admin', $i, $username));
             }
             $usernames[strtolower($username)] = array(
@@ -330,7 +348,14 @@ function uploadcsv_validate(Pieform $form, $values) {
 
     if ($values['updateusers']) {
 
+        $key = 0;
+
         foreach ($usernames as $lowerusername => $data) {
+
+            if (!($key % 25)) {
+                set_progress_info('uploaduserscsv', $num_lines + $key, $num_lines * $steps_total, get_string('checkingupdates', 'admin'));
+            }
+            $key++;
 
             $line      = $data['lineno'];
             $username  = $data['username'];
@@ -469,7 +494,19 @@ function uploadcsv_submit(Pieform $form, $values) {
         $GLOBALS['CFG']->sendemail = false;
     }
 
+    $key = 0;
+    $steps_total = $values['updateusers'] ? 5 : 4;
+    $steps_done = $steps_total - 3;
+    $num_lines = sizeof($CSVDATA);
+
     foreach ($CSVDATA as $record) {
+
+        if (!($key % 25)) {
+            // This part has three times the weight of the other two steps.
+            set_progress_info('uploaduserscsv', $num_lines * $steps_done + $key * 3, $num_lines * $steps_total, get_string('committingchanges', 'admin'));
+        }
+        $key++;
+
         $user = new StdClass;
         foreach ($FORMAT as $field) {
             if ($field == 'username'  ||
@@ -570,6 +607,9 @@ function uploadcsv_submit(Pieform $form, $values) {
     else {
         $SESSION->add_ok_msg(get_string('numbernewusersadded', 'admin', count($addedusers)));
     }
+
+    set_progress_done('uploaduserscsv');
+
     redirect('/admin/users/uploadcsv.php');
 }
 
@@ -587,6 +627,8 @@ $fields .= "<div class=cl></div></ul>\n";
 $uploadcsvpagedescription = get_string('uploadcsvpagedescription4', 'admin', $fields);
 
 $form = pieform($form);
+
+set_progress_done('uploaduserscsv');
 
 $smarty = smarty(array('adminuploadcsv'));
 $smarty->assign('uploadcsvpagedescription', $uploadcsvpagedescription);

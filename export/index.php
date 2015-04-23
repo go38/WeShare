@@ -15,6 +15,10 @@ require(dirname(dirname(__FILE__)) . '/init.php');
 require_once('view.php');
 require_once('collection.php');
 define('TITLE', get_string('exportyourportfolio', 'export'));
+define('SECTION_PLUGINTYPE', 'core');
+define('SECTION_PLUGINNAME', 'export');
+define('SECTION_PAGE', 'index');
+
 
 $SESSION->set('exportdata', '');
 $SESSION->set('exportfile', '');
@@ -64,7 +68,7 @@ $elements = array(
     ),
 );
 
-if ($viewids = get_column('view', 'id', 'owner', $USER->get('id'), 'type', 'portfolio')) {
+if ($viewids = get_column_sql('SELECT id FROM {view} WHERE owner = ? AND type = ? ORDER BY title', array($USER->get('id'), 'portfolio'))) {
     foreach ($viewids as $viewid) {
         $view = new View($viewid);
         $elements['view_' . $viewid] = array(
@@ -202,7 +206,7 @@ function export_submit(Pieform $form, $values) {
 
 $smarty = smarty(
     $jsfiles,
-    array('<link rel="stylesheet" type="text/css" href="' . get_config('wwwroot') . 'theme/views.css?v=' . get_config('release'). '">'),
+    array('<link rel="stylesheet" type="text/css" href="' . append_version_number(get_config('wwwroot') . 'theme/views.css') . '">'),
     array(),
     array('stylesheets' => array('style/views.css'))
 );

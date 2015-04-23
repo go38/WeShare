@@ -34,14 +34,11 @@ $installedtypes = get_records_assoc(
     'name,admin,plugintype,pluginname'
 );
 
-$options = array(
-    'all' => get_string('alltypes', 'activity'),
-);
-
-foreach ($installedtypes as &$t) {
+$options = array();
+foreach ($installedtypes as $t) {
     // ignore activity type newpost, as each recipients notification appears
     // as a single entry for the poster and thus floods his outbox
-    if ((!$t->admin) && ('newpost' !== $t->name)) {
+    if ((!$t->admin || $USER->get('admin')) && ('newpost' !== $t->name)) {
         $section = $t->pluginname ? "{$t->plugintype}.{$t->pluginname}" : 'activity';
         $options[$t->name] = get_string('type' . $t->name, $section);
     }
@@ -51,6 +48,10 @@ if ($USER->get('admin')) {
     $options['adminmessages'] = get_string('typeadminmessages', 'activity');
 }
 
+// sort activitytypes now, when they have been translated
+uasort($options, 'strcmp');
+// ... and add the element for 'all types' to the beginning
+$options = array_merge(array('all' => get_string('alltypes', 'activity')), $options);
 $type = param_variable('type', 'all');
 if ($type == '') {
     $type = 'all';
@@ -70,7 +71,7 @@ $activitylist = activitylistout_html($type);
 $star = json_encode($THEME->get_url('images/star.png'));
 $readicon = json_encode($THEME->get_url('images/readusermessage.png'));
 $strread = json_encode(get_string('read', 'activity'));
-
+$strnodelete = json_encode(get_string('nodelete', 'activity'));
 $javascript = <<<JAVASCRIPT
 
 function markread(form, action) {
@@ -78,10 +79,17 @@ function markread(form, action) {
     var e = getElementsByTagAndClassName(null,'tocheck'+action,form);
     var pd = {};
 
+    var havedelete = false;
     for (cb in e) {
         if (e[cb].checked == true) {
             pd[e[cb].name] = 1;
+            havedelete = true;
         }
+    }
+    // if nothing has been seleced for deletion bail out now with error message
+    if (!havedelete && action == 'del') {
+        alert($strnodelete);
+        return;
     }
 
     if (action == 'read') {
@@ -108,32 +116,21 @@ function markread(form, action) {
     });
 }
 
-function showHideMessage(id, table) {
-    var message = $('message-' + table + '-' + id);
-    if (!message) {
+function toggleMessageDisplay(table, id) {
+    var messages = jQuery('#message-' + table + '-' + id);
+    if (messages.length <= 0) {
         return;
     }
-    if (hasElementClass(message, 'hidden')) {
-        var unread = getFirstElementByTagAndClassName(
-            'input', 'tocheckread', message.parentNode.parentNode
-        );
-        var unreadicon = getFirstElementByTagAndClassName(
-            'img', 'unreadmessage', message.parentNode.parentNode
-        );
-        if (unread) {
-            var pd = {'readone':id, 'table':table};
-            sendjsonrequest('indexout.json.php', pd, 'GET', function(data) {
-                swapDOM(unread, IMG({'src' : {$star}, 'alt' : {$strread}}));
-                if (unreadicon) {
-                    swapDOM(unreadicon, IMG({'src' : {$readicon}, 'alt' : getNodeAttribute(unreadicon, 'alt') + ' - ' + {$strread}}));
-                };
-                updateUnreadCount(data);
-            });
+    var rows = messages.parents("tr");
+    if (rows.length > 0) {
+        if (jQuery(rows[0]).find(".messagedisplaylong.hidden").length > 0) {
+            jQuery(rows[0]).find(".messagedisplaylong").removeClass("hidden");
+            jQuery(rows[0]).find(".messagedisplayshort").addClass("hidden");
         }
-        removeElementClass(message, 'hidden');
-    }
-    else {
-        addElementClass(message, 'hidden');
+        else {
+            jQuery(rows[0]).find(".messagedisplaylong").addClass("hidden");
+            jQuery(rows[0]).find(".messagedisplayshort").removeClass("hidden");
+        }
     }
 }
 
@@ -170,6 +167,17 @@ var paginatorData = new PaginatorData();
 addLoadEvent(function () {
     paginator = {$activitylist['pagination_js']}
     connect('notifications_type', 'onchange', changeactivitytype);
+});
+
+jQuery(function() {
+    jQuery('#activitylist tr').hover(
+        function() {
+                jQuery(this).addClass('highlight');
+            },
+            function() {
+                jQuery(this).removeClass('highlight');
+        }
+    );
 });
 
 JAVASCRIPT;
@@ -241,15 +249,11 @@ $smarty->assign('INLINEJAVASCRIPT', $javascript);
 
 // Adding the links to out- and inbox
 $smarty->assign('PAGEHEADING', TITLE);
-// Add urls and titles
-$pages = array();
-$pages[0]["url"] = "artefact/multirecipientnotification/inbox.php";
-$pages[0]["title"] = get_string('labelinbox', 'artefact.multirecipientnotification');
-$pages[1]["url"]="artefact/multirecipientnotification/outbox.php";
-$pages[1]["title"] = get_string('labeloutbox1', 'artefact.multirecipientnotification');
-$pages[1]["selected"] = 1;
+
 // show urls and titles
-$smarty->assign('SUBPAGENAV', $pages);
+define('NOTIFICATION_SUBPAGE', 'outbox');
+$smarty->assign('SUBPAGENAV', PluginArtefactMultirecipientnotification::submenu_items());
+
 if (param_variable('search', null)!==null) {
     $smarty->assign('searchtext', param_variable('search'));
     $searchresults = get_message_search(param_variable('search'), null, $type, 0, 9999999, "outbox.php", $USER->get('id'));

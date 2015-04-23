@@ -15,6 +15,7 @@ require(dirname(dirname(__FILE__)) . '/init.php');
 require_once('pieforms/pieform.php');
 require_once('group.php');
 require_once(get_config('libroot') . 'antispam.php');
+require_once('embeddedimage.php');
 
 if ($id = param_integer('id', null)) {
     define('TITLE', get_string('editgroup', 'group'));
@@ -128,7 +129,7 @@ $cancreatecontrolled = $USER->get('admin') || $USER->get('staff')
     || $USER->is_institutional_admin() || $USER->is_institutional_staff();
 
 $elements['open'] = array(
-    'type'         => 'checkbox',
+    'type'         => 'switchbox',
     'title'        => get_string('Open', 'group'),
     'description'  => get_string('opendescription', 'group'),
     'defaultvalue' => $group_data->open,
@@ -136,7 +137,7 @@ $elements['open'] = array(
 );
 if ($cancreatecontrolled || $group_data->controlled) {
     $elements['controlled'] = array(
-        'type'         => 'checkbox',
+        'type'         => 'switchbox',
         'title'        => get_string('Controlled', 'group'),
         'description'  => get_string('controlleddescription', 'group'),
         'defaultvalue' => $group_data->controlled,
@@ -150,7 +151,7 @@ else {
     );
 }
 $elements['request'] = array(
-    'type'         => 'checkbox',
+    'type'         => 'switchbox',
     'title'        => get_string('request', 'group'),
     'description'  => get_string('requestdescription', 'group'),
     'defaultvalue' => !$group_data->open && $group_data->request,
@@ -192,16 +193,16 @@ else {
 }
 
 $elements['invitefriends'] = array(
-    'type'         => 'checkbox',
+    'type'         => 'switchbox',
     'title'        => get_string('friendinvitations', 'group'),
-    'description'  => get_string('invitefriendsdescription', 'group'),
+    'description'  => get_string('invitefriendsdescription1', 'group'),
     'defaultvalue' => $group_data->invitefriends,
 );
 
 $elements['suggestfriends'] = array(
-    'type'         => 'checkbox',
+    'type'         => 'switchbox',
     'title'        => get_string('Recommendations', 'group'),
-    'description'  => get_string('suggestfriendsdescription', 'group'),
+    'description'  => get_string('suggestfriendsdescription1', 'group'),
     'defaultvalue' => $group_data->suggestfriends && ($group_data->open || $group_data->request),
     'disabled'     => !$group_data->open && !$group_data->request,
 );
@@ -223,13 +224,13 @@ $elements['editroles'] = array(
 
 if ($cancreatecontrolled) {
     $elements['submittableto'] = array(
-        'type'         => 'checkbox',
+        'type'         => 'switchbox',
         'title'        => get_string('allowsubmissions', 'group'),
         'description'  => get_string('allowssubmissionsdescription1', 'group'),
         'defaultvalue' => $group_data->submittableto,
     );
     $elements['allowarchives'] = array(
-        'type'         => 'checkbox',
+        'type'         => 'switchbox',
         'title'        => get_string('allowsarchives', 'group'),
         'description'  => get_string('allowsarchivesdescription', 'group'),
         'defaultvalue' => $group_data->allowarchives,
@@ -269,9 +270,9 @@ if ($cancreatecontrolled || !$ignorepublic) {
 }
 
 $elements['public'] = array(
-    'type'         => 'checkbox',
+    'type'         => 'switchbox',
     'title'        => get_string('publiclyviewablegroup', 'group'),
-    'description'  => get_string('publiclyviewablegroupdescription', 'group'),
+    'description'  => get_string('publiclyviewablegroupdescription1', 'group'),
     'defaultvalue' => $group_data->public,
     'help'         => true,
     'ignore'       => $ignorepublic,
@@ -279,22 +280,22 @@ $elements['public'] = array(
 
 if ($cancreatecontrolled) {
     $elements['hidden'] = array(
-        'type'         => 'checkbox',
+        'type'         => 'switchbox',
         'title'        => get_string('hiddengroup', 'group'),
-        'description'  => get_string('hiddengroupdescription', 'group'),
+        'description'  => get_string('hiddengroupdescription1', 'group'),
         'defaultvalue' => $group_data->hidden,
     );
     $elements['hidemembers'] = array(
-        'type'         => 'checkbox',
+        'type'         => 'switchbox',
         'title'        => get_string('hidemembers', 'group'),
         'description'  => get_string('hidemembersdescription', 'group'),
         'defaultvalue' => $group_data->hidemembers || $group_data->hidemembersfrommembers,
         'disabled'     => $group_data->hidemembersfrommembers,
     );
     $elements['hidemembersfrommembers'] = array(
-        'type'         => 'checkbox',
+        'type'         => 'switchbox',
         'title'        => get_string('hidemembersfrommembers', 'group'),
-        'description'  => get_string('hidemembersfrommembersdescription', 'group'),
+        'description'  => get_string('hidemembersfrommembersdescription1', 'group'),
         'defaultvalue' => $group_data->hidemembersfrommembers,
     );
 }
@@ -314,9 +315,9 @@ else {
 }
 
 $elements['groupparticipationreports'] = array(
-    'type'         => 'checkbox',
+    'type'         => 'switchbox',
     'title'        => get_string('groupparticipationreports', 'group'),
-    'description'  => get_string('groupparticipationreportsdesc', 'group'),
+    'description'  => get_string('groupparticipationreportsdesc1', 'group'),
     'defaultvalue' => $group_data->groupparticipationreports,
 );
 
@@ -374,9 +375,9 @@ if (get_config('allowgroupcategories')
 }
 
 $elements['usersautoadded'] = array(
-            'type'         => 'checkbox',
+            'type'         => 'switchbox',
             'title'        => get_string('usersautoadded', 'group'),
-            'description'  => get_string('usersautoaddeddescription', 'group'),
+            'description'  => get_string('usersautoaddeddescription1', 'group'),
             'defaultvalue' => $group_data->usersautoadded,
             'help'         => true,
             'ignore'       => !$USER->get('admin'));
@@ -397,9 +398,9 @@ $elements['feedbacknotify'] = array(
 );
 if ($cancreatecontrolled) {
     $elements['sendnow'] = array(
-        'type'         => 'checkbox',
+        'type'         => 'switchbox',
         'title'        => get_string('allowsendnow', 'group'),
-        'description'  => get_string('allowsendnowdescription', 'group'),
+        'description'  => get_string('allowsendnowdescription1', 'group'),
         'defaultvalue' => $group_data->sendnow
     );
 }
@@ -505,6 +506,8 @@ function editgroup_submit(Pieform $form, $values) {
     }
 
     db_begin();
+
+    $newvalues['description'] = EmbeddedImage::prepare_embedded_images($newvalues['description'], 'group', $group_data->id, $group_data->id);
 
     if ($group_data->id) {
         $newvalues['id'] = $group_data->id;

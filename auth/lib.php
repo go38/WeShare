@@ -390,31 +390,16 @@ function auth_setup () {
         return;
     }
 
-    // Lock the site until core upgrades are done
-    require(get_config('libroot') . 'version.php');
-    $siteclosed    = $config->version > get_config('version');
-    $disablelogin  = $config->disablelogin;
-
-    if (!$siteclosed && get_config('forcelocalupgrades')) {
-        require(get_config('docroot') . 'local/version.php');
-        $siteclosed = $config->version > get_config('localversion');
-    }
-
-    $cfgsiteclosed = get_config('siteclosed');
-    if ($siteclosed && !$cfgsiteclosed || !$siteclosed && $cfgsiteclosed) {
-        // If the admin closed the site manually, open it automatically
-        // when an upgrade is successful.
-        if ($cfgsiteclosed && get_config('siteclosedbyadmin')) {
-            set_config('siteclosedbyadmin', false);
-        }
-        set_config('siteclosed', $siteclosed);
-        set_config('disablelogin', $disablelogin);
-    }
-
     // Check the time that the session is set to log out. If the user does
     // not have a session, this time will be 0.
     $sessionlogouttime = $USER->get('logout_time');
-    if ($sessionlogouttime && isset($_GET['logout'])) {
+
+    // Need to doublecheck that the User's sessionid still has a match the usr_session table
+    // It can disappear if the current user has hacked the real user's account and the real user has
+    // reset the password clearing the session from usr_session.
+    $sessionexists = get_record('usr_session', 'usr', $USER->id, 'session', $USER->get('sessionid'));
+    $parentuser = $USER->get('parentuser');
+    if (($sessionlogouttime && isset($_GET['logout'])) || ($sessionexists === false && $USER->get('sessionid') != '' && empty($parentuser))) {
         // Call the authinstance' logout hook
         $authinstance = $SESSION->get('authinstance');
         if ($authinstance) {
@@ -925,8 +910,15 @@ function auth_check_required_fields() {
             'name'     => 'requiredfields',
             'method'   => 'post',
             'action'   => '',
-            'elements' => $elements
+            'elements' => $elements,
+            'dieaftersubmit' => FALSE,
+            'backoutaftersubmit' => TRUE,
         ));
+    }
+
+    // Has the form been successfully submitted? Back out and let the requested URL continue.
+    if ($form === FALSE) {
+        return;
     }
 
     $smarty = smarty();
@@ -969,7 +961,7 @@ function requiredfields_validate(Pieform $form, $values) {
             if (!AuthInternal::is_username_valid($values['username'])) {
                 $form->set_error('username', get_string('usernameinvalidform', 'auth.internal'));
             }
-            if (!$form->get_error('username') && record_exists_select('usr', 'LOWER(username) = ?', strtolower($values['username']))) {
+            if (!$form->get_error('username') && record_exists_select('usr', 'LOWER(username) = ?', array(strtolower($values['username'])))) {
                 $form->set_error('username', get_string('usernamealreadytaken', 'auth.internal'));
             }
         }
@@ -1095,6 +1087,10 @@ function requiredfields_submit(Pieform $form, $values) {
             $defaultblog->set('title', get_string('defaultblogtitle', 'artefact.blog', display_name($USER, null, true)));
             $defaultblog->commit();
         }
+    }
+
+    if ($form->get_property('backoutaftersubmit')) {
+        return;
     }
 
     redirect();
@@ -1348,7 +1344,7 @@ function get_login_form_js($form) {
     $strcookiesnotenabled    = json_encode(get_string('cookiesnotenabled'));
     $cookiename = get_config('cookieprefix') . 'ctest';
     $js = <<< EOF
-<script type="text/javascript">
+<script type="application/javascript">
 var loginbox = $('loginform_container');
 document.cookie = "$cookiename=1";
 if (document.cookie) {
@@ -1484,7 +1480,7 @@ function login_submit(Pieform $form, $values) {
                 SELECT a.id, a.instancename, a.priority, a.authname, a.institution, i.suspended, i.displayname
                 FROM {institution} i JOIN {auth_instance} a ON a.institution = i.name
                 WHERE a.authname != 'internal'
-                ORDER BY a.institution, a.priority, a.instancename", null);
+                ORDER BY a.institution, a.priority, a.instancename", array());
 
             if ($authinstances == false) {
                 throw new AuthUnknownUserException("\"$username\" is not known");
@@ -1993,7 +1989,34 @@ function password_validate(Pieform $form, $values, $user) {
     }
 
     $suckypasswords = array(
-        'mahara', 'password', $user->username, 'abc123'
+        'mahara', 'password', $user->username, 'abc123', '111111','11111111','112233','121212','123123','123456','1234567','12345678','131313','232323','654321','666666','696969',
+        '777777','7777777','8675309','987654','aaaaaa','abc123','abc123','abcdef','abgrtyu','access','access14','action','albert','alexis','amanda','amateur','andrea','andrew',
+        'angela','angels','animal','anthony','apollo','apples','arsenal','arthur','asdfgh','asdfgh','ashley','asshole','august','austin','badboy','bailey','banana','barney',
+        'baseball','batman','beaver','beavis','bigcock','bigdaddy','bigdick','bigdog','bigtits','birdie','bitches','biteme','blazer','blonde','blondes','blowjob','blowme','bond007',
+        'bonnie','booboo','booger','boomer','boston','brandon','brandy','braves','brazil','bronco','broncos','bulldog','buster','butter','butthead','calvin','camaro','cameron','canada',
+        'captain','carlos','carter','casper','charles','charlie','cheese','chelsea','chester','chicago','chicken','cocacola','coffee','college','compaq','computer','cookie','cooper',
+        'corvette','cowboy','cowboys','crystal','cumming','cumshot','dakota','dallas','daniel','danielle','debbie','dennis','diablo','diamond','doctor','doggie','dolphin','dolphins',
+        'donald','dragon','dreams','driver','eagle1','eagles','edward','einstein','erotic','extreme','falcon','fender','ferrari','firebird','fishing','florida','flower','flyers',
+        'football','forever','freddy','freedom','fucked','fucker','fucking','fuckme','fuckyou','gandalf','gateway','gators','gemini','george','giants','ginger','golden','golfer',
+        'gordon','gregory','guitar','gunner','hammer','hannah','hardcore','harley','heather','helpme','hentai','hockey','hooters','horney','hotdog','hunter','hunting','iceman',
+        'iloveyou','internet','iwantu','jackie','jackson','jaguar','jasmine','jasper','jennifer','jeremy','jessica','johnny','johnson','jordan','joseph','joshua','junior','justin',
+        'killer','knight','ladies','lakers','lauren','leather','legend','letmein','letmein','little','london','lovers','maddog','madison','maggie','magnum','marine','marlboro','martin',
+        'marvin','master','matrix','matthew','maverick','maxwell','melissa','member','mercedes','merlin','michael','michelle','mickey','midnight','miller','mistress','monica','monkey',
+        'monkey','monster','morgan','mother','mountain','muffin','murphy','mustang','naked','nascar','nathan','naughty','ncc1701','newyork','nicholas','nicole','nipple','nipples',
+        'oliver','orange','packers','panther','panties','parker','password','password','password1','password12','password123','patrick','peaches','peanut','pepper','phantom','phoenix',
+        'player','please','pookie','porsche','prince','princess','private','purple','pussies','qazwsx','qwerty','qwertyui','rabbit','rachel','racing','raiders','rainbow','ranger','rangers',
+        'rebecca','redskins','redsox','redwings','richard','robert','rocket','rosebud','runner','rush2112','russia','samantha','sammy','samson','sandra','saturn','scooby','scooter','scorpio',
+        'scorpion','secret','sexsex','shadow','shannon','shaved','sierra','silver','skippy','slayer','smokey','snoopy','soccer','sophie','spanky','sparky','spider','squirt','srinivas',
+        'startrek','starwars','steelers','steven','sticky','stupid','success','suckit','summer','sunshine','superman','surfer','swimming','sydney','taylor','tennis','teresa','tester',
+        'testing','theman','thomas','thunder','thx1138','tiffany','tigers','tigger','tomcat','topgun','toyota','travis','trouble','trustno1','tucker','turtle','twitter','united','vagina',
+        'victor','victoria','viking','voodoo','voyager','walter','warrior','welcome','whatever','william','willie','wilson','winner','winston','winter','wizard','xavier','xxxxxx','xxxxxxxx',
+        'yamaha','yankee','yankees','yellow','zxcvbn','zxcvbnm','zzzzzz',  '1111', '111111', '11111111', '112233', '121212', '123', '123.com', '123123', '1234', '12345', '123456', '1234567',
+        '12345678', '123456789', '1234567890', '1234qwer', '123qwe', '123qweasd', '147147', '1q2w3e', '1q2w3e4r', '1q2w3e4r5t', '1qaz2wsx', '1qazxsw2', '2wsx3edc', '654321', '666666', '888888',
+        '88888888', 'Admin@123', 'P@ssw0rd', 'PASSWORD', 'Passw0rd', 'PlcmSpIp', 'a123456', 'abc123', 'abc@123', 'abcd1234', 'admin', 'admin1', 'admin123', 'admin123456', 'admin@123',
+        'admincpto', 'administrator', 'agata', 'alpine', 'articon', 'bill', 'changeme', 'cisco', 'debug', 'default', 'dream', 'firewall', 'ftp', 'ftpuser', 'goflex', 'guest', 'info', 'karaf',
+        'letmein', 'linux', 'live', 'log', 'marketing', 'master', 'mike', 'monitor', 'oracle', 'p@ssw0rd', 'pass', 'pass123', 'passw0rd', 'password', 'pfsense', 'q1w2e3', 'q1w2e3r4', 'q1w2e3r4t5',
+        'qwe123', 'qwerty', 'r00t', 'raspberry', 'redhat', 'root', 'root123', 'root1234', 'rootpass', 'rootroot', 'server', 'support', 'test', 'test123', 'toor', 'ubnt', 'uploader', 'user',
+        'vyatta', 'welcome', 'zaq12wsx'
     );
 
     if (!$form->get_error('password1') && in_array($values['password1'], $suckypasswords)) {
@@ -2411,7 +2434,7 @@ function auth_register_submit(Pieform $form, $values) {
                 get_string('approvalemailsubject', 'auth.internal', get_config('sitename')),
                 get_string('approvalemailmessagetext', 'auth.internal', $values['firstname'], get_config('sitename'), get_config('sitename')),
                 get_string('approvalemailmessagehtml', 'auth.internal', $values['firstname'], get_config('sitename'), get_config('sitename')));
-            $_SESSION['registeredokawaiting'] = true;
+            $SESSION->set('registeredokawaiting', true);
         }
         else {
             if (isset($values['authtype']) && $values['authtype'] == 'browserid') {
@@ -2424,7 +2447,7 @@ function auth_register_submit(Pieform $form, $values) {
                     get_string('registeredemailmessagehtml', 'auth.internal', $values['firstname'], get_config('sitename'), get_config('wwwroot'), $values['key'], get_config('wwwroot'), $values['key'], get_config('sitename')));
             }
             // Add a marker in the session to say that the user has registered
-            $_SESSION['registered'] = true;
+            $SESSION->set('registered', true);
         }
     }
     catch (EmailException $e) {
@@ -2477,6 +2500,58 @@ class PluginAuth extends Plugin {
      */
     public static function is_usable() {
         return true;
+    }
+
+    /**
+     * This function returns an array of menu items
+     * to be displayed
+     *
+     * See the function find_menu_children() in lib/web.php
+     * for a description of the expected array structure.
+     *
+     * @return array
+     */
+    public static function menu_items() {
+        return array();
+    }
+
+    /**
+     * This function returns an array of admin menu items
+     * to be displayed
+     *
+     * See the function find_menu_children() in lib/web.php
+     * for a description of the expected array structure.
+     *
+     * @return array
+     */
+    public static function admin_menu_items() {
+        return array();
+    }
+
+    /**
+     * This function returns an array of institution menu items
+     * to be displayed
+     *
+     * See the function find_menu_children() in lib/web.php
+     * for a description of the expected array structure.
+     *
+     * @return array
+     */
+    public static function institution_menu_items() {
+        return array();
+    }
+
+    /**
+     * This function returns an array of institution staff menu items
+     * to be displayed
+     *
+     * See the function find_menu_children() in lib/web.php
+     * for a description of the expected array structure.
+     *
+     * @return array
+     */
+    public static function institution_staff_menu_items() {
+        return array();
     }
 
     public static function update_active_flag($event, $user) {
@@ -2597,7 +2672,7 @@ class PluginAuth extends Plugin {
      */
     public static function save_instance_config_options($values, Pieform $form) {
         throw new SystemException('This plugin claims to have instance config but does not define a '
-           . 'submit_instance_config_options() method. Most likely it is still using the get_config_options() '
+           . 'save_instance_config_options() method. Most likely it is still using the save_config_options() '
            . 'method for this purpose. Please ask the developer to upgrade the plugin.');
     }
 }

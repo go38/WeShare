@@ -525,7 +525,7 @@ function kill_children($username, $useragent) {
     ini_set('session.use_cookies', false);
     $sesscache = isset($_SESSION) ? clone($_SESSION) : null;
     $sessidcache = session_id();
-    session_write_close();
+    /* session_write_close(); No longer needed - already closed */
     unset($_SESSION);
 
     foreach($mnetsessions as $mnetsession) {
@@ -867,7 +867,7 @@ function get_service_providers($instance) {
 
             a.name = h.appname";
     try {
-        $results = get_records_sql_assoc($query, array('value' => $instance));
+        $results = get_records_sql_assoc($query, array($instance));
     } catch (SQLException $e) {
         // Table doesn't exist yet
         return array();
@@ -1387,7 +1387,7 @@ class OpenSslRepo {
         $this->keypair = array();
         $records       = null;
 
-        if ($records = get_records_select_menu('config', "field IN ('openssl_keypair', 'openssl_keypair_expires')", 'field', 'field, value')) {
+        if ($records = get_records_select_menu('config', "field IN ('openssl_keypair', 'openssl_keypair_expires')", null, 'field, value')) {
             list($this->keypair['certificate'], $this->keypair['keypair_PEM']) = explode('@@@@@@@@', $records['openssl_keypair']);
             $this->keypair['expires'] = $records['openssl_keypair_expires'];
             if (empty($regenerate) && $this->keypair['expires'] > time()) {
@@ -1485,6 +1485,8 @@ class OpenSslRepo {
         }
 
         if (!$new_key = openssl_pkey_new($config)) {
+            // This behaviour can happen if PHP can't find the openssl.cnf file
+            // See http://php.net/manual/en/openssl.installation.php
             throw new ConfigException(get_string('errorcouldnotgeneratenewsslkey', 'auth'));
         }
 

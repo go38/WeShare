@@ -14,7 +14,7 @@ defined('INTERNAL') || die();
 class PluginBlocktypeEntireresume extends PluginBlocktype {
 
     public static function get_title() {
-        return get_string('title1', 'blocktype.resume/entireresume');
+        return get_string('title', 'blocktype.resume/entireresume');
     }
 
     public static function get_description() {
@@ -22,7 +22,7 @@ class PluginBlocktypeEntireresume extends PluginBlocktype {
     }
 
     public static function get_categories() {
-        return array('internal');
+        return array('internal' => 29000);
     }
 
     public static function render_instance(BlockInstance $instance, $editing=false) {
@@ -42,7 +42,7 @@ class PluginBlocktypeEntireresume extends PluginBlocktype {
                 $rendered = $resumefield->render_self(array('viewid' => $instance->get('view')));
                 $result = $rendered['html'];
                 if (!empty($rendered['javascript'])) {
-                    $result .= '<script type="text/javascript">' . $rendered['javascript'] . '</script>';
+                    $result .= '<script type="application/javascript">' . $rendered['javascript'] . '</script>';
                 }
                 $smarty->assign($artefact->artefacttype, $result);
             }
@@ -57,7 +57,7 @@ class PluginBlocktypeEntireresume extends PluginBlocktype {
         return true;
     }
 
-    public static function instance_config_form() {
+    public static function instance_config_form(BlockInstance $instance) {
         return array();
     }
 

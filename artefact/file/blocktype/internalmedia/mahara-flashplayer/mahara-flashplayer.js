@@ -1336,7 +1336,7 @@ if (typeof jQuery == 'function') {
 			onFail: null,
 			expressInstall: null,
 			w3c: false,
-            cachebusting: false,
+			cachebusting: false,
             wmode: 'transparent'
 	};
 

@@ -12,6 +12,11 @@
 defined ('INTERNAL') || die();
 
 class PluginBlocktypeComment extends SystemBlocktype {
+    public static function should_ajaxify() {
+        // TinyMCE doesn't play well with loading by ajax
+        return false;
+    }
+
     public static function single_only() {
         return true;
     }
@@ -25,7 +30,7 @@ class PluginBlocktypeComment extends SystemBlocktype {
     }
 
     public static function get_categories() {
-        return array("general");
+        return array("general" => 14000);
     }
 
     public static function get_viewtypes() {
@@ -63,7 +68,12 @@ class PluginBlocktypeComment extends SystemBlocktype {
             $addfeedbackpopup = true;
         }
         safe_require('artefact', 'comment');
-        $feedback = ArtefactTypeComment::get_comments($limit, $offset, $showcomment, $instance->get_view());
+        $commentoptions = ArtefactTypeComment::get_comment_options();
+        $commentoptions->limit = $limit;
+        $commentoptions->offset = $offset;
+        $commentoptions->showcomment = $showcomment;
+        $commentoptions->view = $instance->get_view();
+        $feedback = ArtefactTypeComment::get_comments($commentoptions);
         $smarty = smarty_core();
         $smarty->assign('feedback', $feedback);
         if (isset($addfeedbackpopup)) {

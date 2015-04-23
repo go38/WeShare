@@ -13,6 +13,10 @@ defined('INTERNAL') || die();
 
 class PluginBlocktypeWall extends SystemBlocktype {
 
+    public static function should_ajaxify() {
+        return false;
+    }
+
     public static function get_title() {
         return get_string('title', 'blocktype.wall');
     }
@@ -26,7 +30,7 @@ class PluginBlocktypeWall extends SystemBlocktype {
     }
 
     public static function get_categories() {
-        return array('internal');
+        return array('internal' => 28000);
     }
 
     public static function get_viewtypes() {
@@ -91,7 +95,7 @@ class PluginBlocktypeWall extends SystemBlocktype {
 
     }
 
-    public static function validate_config_options($form, $values) {
+    public static function validate_config_options(Pieform $form, $values) {
         if (!is_numeric($values['defaultpostsizelimit'])) {
             $form->set_error('defaultpostsizelimit', get_string('postsizelimitinvalid', 'blocktype.wall'));
         }
@@ -100,7 +104,7 @@ class PluginBlocktypeWall extends SystemBlocktype {
         }
     }
 
-    public static function save_config_options($form, $values) {
+    public static function save_config_options(Pieform $form, $values) {
         set_config_plugin('blocktype', 'wall', 'defaultpostsizelimit', (int)$values['defaultpostsizelimit']);
     }
 
@@ -134,10 +138,9 @@ class PluginBlocktypeWall extends SystemBlocktype {
             'jssuccesscallback' => 'wallpost_success',
             'elements' => array(
                 'text' => array(
-                    'type' => 'textarea',
+                    'type' => 'wysiwyg',
                     'title' => get_string('Post', 'blocktype.wall'),
                     'hiddenlabel' => true,
-                    'description' => bbcode_format_post_message(),
                     'rows' => 3,
                     'cols' => 50,
                     'defaultvalue' => '',
@@ -179,11 +182,16 @@ function wallpost_success(form, data) {
     if ($('wall') && data.posts && data.block) {
         var wall = getFirstElementByTagAndClassName('div', 'wall', 'blockinstance_' + data.block);
         var temp = DIV();
+        var textareaid = 'wallpost_' + data.block + '_text';
         temp.innerHTML = data.posts;
         newposts = getElementsByTagAndClassName('li', 'wallpost', temp);
         replaceChildNodes(wall, newposts);
-        if ($('wallpost_' + data.block + '_text')) {
-            $('wallpost_' + data.block + '_text').value = '';
+        if ($(textareaid)) {
+            $(textareaid).value = '';
+            // Clear TinyMCE
+            if (typeof(tinyMCE) != 'undefined' && typeof(tinyMCE.get(textareaid)) != 'undefined') {
+                tinyMCE.activeEditor.setContent('');
+            }
         }
         formSuccess(form, data);
     }

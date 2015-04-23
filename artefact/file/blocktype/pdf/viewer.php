@@ -20,6 +20,8 @@ require_once(get_config('docroot') . '/artefact/lib.php');
 
 $fileid = param_integer('file');
 $viewid = param_integer('view');
+$editing = param_boolean('editing', false);
+$ingroup = param_boolean('ingroup', false);
 
 if (!artefact_in_view($fileid, $viewid)) {
     throw new AccessDeniedException('');
@@ -34,7 +36,18 @@ if (!($file instanceof ArtefactTypeFile)) {
     throw new NotFoundException();
 }
 
+$urlbase = get_config('wwwroot');
+if (get_config('cleanurls') && get_config('cleanurlusersubdomains') && !$editing && !$ingroup) {
+    $view = new View($viewid);
+    $viewauthor = new User();
+    $viewauthor->find_by_id($view->get('owner'));
+    $viewauthorurlid = $viewauthor->get('urlid');
+    if ($urlallowed = !is_null($viewauthorurlid) && strlen($viewauthorurlid)) {
+        $urlbase = profile_url($viewauthor) . '/';
+    }
+}
+
 $smarty = smarty();
-$smarty->assign('url', get_config('wwwroot') . 'artefact/file/download.php?file='.$fileid.'&view='.$viewid);
+$smarty->assign('url', $urlbase . 'artefact/file/download.php?file='.$fileid.'&view='.$viewid);
 $smarty->assign('title', $file->get('title'));
 $smarty->display('blocktype:pdf:pdf.tpl');

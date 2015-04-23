@@ -100,11 +100,12 @@ $string['previewimagegenerationfailed'] = 'Sorry, there was a problem generating
 
 $string['artefactnotfoundmaybedeleted'] = "Artefact with id %s not found (maybe it has been deleted already?)";
 $string['artefactnotfound'] = 'Artefact with id %s not found';
+$string['artefactsnotfound'] = 'No artefact(s) found with the id(s): %s';
 $string['artefactnotinview'] = 'Artefact %s not in page %s';
 $string['artefactonlyviewableinview'] = 'Artefacts of this type are only viewable within a page.';
 $string['notartefactowner'] = 'You do not own this artefact.';
 
-$string['blockinstancednotfound'] = 'Block instance with id %s not found.';
+$string['blockinstancenotfound'] = 'Block instance with id %s not found.';
 $string['interactioninstancenotfound'] = 'Activity instance with id %s not found.';
 
 $string['invalidviewaction'] = 'Invalid page control action: %s';

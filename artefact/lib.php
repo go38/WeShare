@@ -169,6 +169,45 @@ abstract class PluginArtefact extends Plugin implements IPluginArtefact {
     public static function right_nav_menu_items() {
         return array();
     }
+
+    /**
+     * This function returns an array of admin menu items
+     * to be displayed
+     *
+     * See the function find_menu_children() in lib/web.php
+     * for a description of the expected array structure.
+     *
+     * @return array
+     */
+    public static function admin_menu_items() {
+        return array();
+    }
+
+    /**
+     * This function returns an array of institution menu items
+     * to be displayed
+     *
+     * See the function find_menu_children() in lib/web.php
+     * for a description of the expected array structure.
+     *
+     * @return array
+     */
+    public static function institution_menu_items() {
+        return array();
+    }
+
+    /**
+     * This function returns an array of institution staff menu items
+     * to be displayed
+     *
+     * See the function find_menu_children() in lib/web.php
+     * for a description of the expected array structure.
+     *
+     * @return array
+     */
+    public static function institution_staff_menu_items() {
+        return array();
+    }
 }
 
 /**
@@ -257,10 +296,15 @@ abstract class ArtefactType implements IArtefactType {
      * If an id is supplied, will query the database
      * to build up the basic information about the object.
      * If an id is not supplied, we just create an empty
-     * artefact, ready to be filled up
-     * @param int $id artefact.id
+     * artefact, ready to be filled up.
+     * If the $new parameter is true, we can skip the query
+     * because we know the artefact is new.
+     *
+     * @param int   $id     artefact.id
+     * @param mixed $data   optional data supplied for artefact
+     * @param bool  $new
      */
-    public function __construct($id=0, $data=null) {
+    public function __construct($id=0, $data=null, $new = FALSE) {
         if (!empty($id)) {
             if (empty($data)) {
                 if (!$data = get_record('artefact','id',$id)) {
@@ -600,7 +644,7 @@ abstract class ArtefactType implements IArtefactType {
             }
         }
 
-        artefact_watchlist_notification(array($this->id));
+        $this->postcommit_hook($is_new);
 
         handle_event('saveartefact', $this);
 
@@ -608,6 +652,18 @@ abstract class ArtefactType implements IArtefactType {
         $this->deleted = false;
 
         db_commit();
+    }
+
+    /**
+     * A hook method called immediately after the basic data is save in the commit() method,
+     * but before the DB transaction is closed and before the saveartefact event is triggered.
+     *
+     * Child classes may use this to alter data or add data into additional tables so that
+     * it's present when the saveartefact event is called.
+     *
+     * @param boolean $new True if the artefact has just been created
+     */
+    protected function postcommit_hook($new) {
     }
 
     /**
@@ -768,6 +824,9 @@ abstract class ArtefactType implements IArtefactType {
         delete_records_select('artefact_access_usr', "artefact IN $idstr");
         execute_sql("UPDATE {usr} SET profileicon = NULL WHERE profileicon IN $idstr");
         execute_sql("UPDATE {institution} SET logo = NULL WHERE logo IN $idstr");
+
+        // Delete any references to files embedded in textboxes
+        delete_records_select('artefact_file_embedded', "fileid IN $idstr");
 
         delete_records_select('artefact', "id IN $idstr");
 
@@ -1092,6 +1151,21 @@ abstract class ArtefactType implements IArtefactType {
         return array();
     }
 
+/**
+ * Returns a list of embedded image artefact ids
+ * This function is called when copying a view
+ *
+ * @return array
+ */
+    public function embed_id_list() {
+        if ($this->can_have_attachments()) {
+            if ($list = get_column('artefact_file_embedded', 'fileid', 'resourceid', $this->get('id'))) {
+                return $list;
+            }
+        }
+        return array();
+    }
+
     public function attachment_id_list_with_item($itemid) {
         // If artefact attachment table has 'item' column utilised.
         if ($this->can_have_attachments()) {
@@ -1117,7 +1191,7 @@ abstract class ArtefactType implements IArtefactType {
             FROM {artefact_attachment} aa
                 INNER JOIN {artefact} a ON aa.attachment = a.id
                 LEFT JOIN {artefact_file_files} f ON a.id = f.artefact
-            WHERE aa.artefact IN (' . join(', ', array_map('intval', $artefactids)) . ')', '');
+            WHERE aa.artefact IN (' . join(', ', array_map('intval', $artefactids)) . ')', array());
         if (!$attachments) {
             return array();
         }
@@ -1551,6 +1625,34 @@ function artefact_can_render_to($type, $format) {
 }
 
 /**
+ * Get artefact instances from ids
+ * @param array of int $ids of the artefacts
+ *
+ * @result mixed    Either the artefact object or false if plugin has gone.
+ */
+function artefact_instances_from_ids($ids) {
+    $result = array();
+
+    if (empty($ids)) {
+        return $result;
+    }
+
+    $sql = 'SELECT a.*, i.plugin
+            FROM {artefact} a
+            JOIN {artefact_installed_type} i ON a.artefacttype = i.name
+            WHERE a.id IN (' . join(',', $ids) . ')';
+    if (!$data = get_records_sql_array($sql, NULL)) {
+        throw new ArtefactNotFoundException(get_string('artefactsnotfound', 'mahara', implode(', ', $ids)));
+    }
+    foreach ($data as $item) {
+        $classname = generate_artefact_class_name($item->artefacttype);
+        safe_require('artefact', $item->plugin);
+        $result[$item->id] = new $classname($item->id, $item);
+    }
+    return $result;
+}
+
+/**
  * Get artefact instance from id
  * @param int $id of the artefact
  * @param int $deleting If we are wanting to delete the artefact we need
@@ -1666,26 +1768,30 @@ function artefact_watchlist_notification($artefactids) {
     // responding to the event saveartefact
 }
 
-function artefact_get_descendants($new) {
-    $seen = array();
-    if (!empty($new)) {
-        $new = array_combine($new, $new);
+/**
+ * Returns the id of descendant artefacts of the given artefacts
+ * @param array $ids: IDs of ancestral artefacts
+ * @return array
+ */
+function artefact_get_descendants(array $ids) {
+    if (empty($ids)) {
+        return array();
     }
-    while (!empty($new)) {
-        $seen = $seen + $new;
-        $children = get_column_sql('
-            SELECT id
+    if ($aids = get_column_sql('
+            SELECT DISTINCT id
             FROM {artefact}
-            WHERE parent IN (' . implode(',', array_map('intval', $new)) . ') AND id NOT IN (' . implode(',', array_map('intval', $seen)) . ')', array());
-        if ($children) {
-            $new = array_diff($children, $seen);
-            $new = array_combine($new, $new);
-        }
-        else {
-            $new = array();
-        }
+            WHERE ' . join(' OR ', array_map(
+                function($id) {
+                    return 'path LIKE ' . db_quote('%/' . db_like_escape($id) . '/%');
+                }
+                , $ids)) . '
+            ORDER BY id'
+        )) {
+        return array_merge($ids, array_values($aids));
     }
-    return array_values($seen);
+    else {
+        return $ids;
+    }
 }
 
 function artefact_owner_sql($userid=null, $groupid=null, $institution=null) {
@@ -1997,32 +2103,4 @@ function artefact_get_progressbar_metaartefacts($plugin, $onlythese = false) {
         }
     }
     return $results;
-}
-
-/**
- * Given a set of items as an associative array of id/parentid pairs, and an
- * item, returns an array of the item's descendants (including the item)
- *
- * @param array $items Associative array
- *                     (e.g. array(['itemid'] => 'parentid', ['itemid2'] = 'parentid2'))
- * @param integer $itemid ID of the item to build the path for
- *
- * @return An array of IDs, from the first parent right back to the item
- */
-function artefact_get_lineage($items, $itemid, $pathsofar = array()) {
-    // Protection against bad items list and circular references.
-    if (!is_array($items) || in_array($itemid, $pathsofar)) {
-        return $pathsofar;
-    }
-
-    // Add this item to the list.
-    array_unshift($pathsofar, $itemid);
-    if (!isset($items[$itemid]) || empty($items[$itemid])) {
-        // Finished when an item has no parent.
-        return $pathsofar;
-    }
-    else {
-        // Keep going.
-        return artefact_get_lineage($items, $items[$itemid], $pathsofar);
-    }
 }

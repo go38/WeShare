@@ -22,7 +22,7 @@ class PluginBlocktypeResumefield extends PluginBlocktype {
     }
 
     public static function get_categories() {
-        return array('internal');
+        return array('internal' => 30000);
     }
 
      /**
@@ -50,7 +50,7 @@ class PluginBlocktypeResumefield extends PluginBlocktype {
             $rendered = $resumefield->render_self($configdata);
             $result = $rendered['html'];
             if (!empty($rendered['javascript'])) {
-                $result .= '<script type="text/javascript">' . $rendered['javascript'] . '</script>';
+                $result .= '<script type="application/javascript">' . $rendered['javascript'] . '</script>';
             }
             return $result;
         }
@@ -61,7 +61,7 @@ class PluginBlocktypeResumefield extends PluginBlocktype {
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         $configdata = $instance->get('configdata');
 
         $form = array();

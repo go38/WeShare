@@ -242,15 +242,17 @@ abstract class PluginExport extends Plugin implements IPluginExport {
 
         // Get the list of artefacts to export
         if ($artefacts == self::EXPORT_ALL_ARTEFACTS) {
-            $tmpartefacts = get_column_sql('SELECT id
-                FROM {artefact}
-                WHERE "owner" = ?
-            UNION
-                SELECT artefact
-                FROM {view_artefact}
+            $query = 'SELECT id FROM {artefact} WHERE "owner" = ?';
+            $args = array($userid);
+            if (sizeof($tmpviews)) {
+                $query .= 'UNION
+                    SELECT artefact
+                    FROM {view_artefact}
                 WHERE "view" IN (SELECT id FROM {view} WHERE "owner" = ?)
-                ORDER BY id', array($userid, $userid));
-            $this->artefactexportmode = $artefacts;
+                    ORDER BY id';
+                $args[] = $userid;
+                $this->artefactexportmode = $tempartefacts = get_column_sql($query, $args);
+            }
         }
         else {
             if ($tmpviews) {
@@ -279,16 +281,29 @@ abstract class PluginExport extends Plugin implements IPluginExport {
             }
         }
         $typestoplugins = get_records_assoc('artefact_installed_type');
+        $ids_to_get = array();
+        foreach ($tmpartefacts as $a) {
+            if ($a instanceof ArtefactType) {
+                continue;
+            }
+            else if (is_object($a) && isset($a->id)) {
+                $ids_to_get[] = $a->id;
+            }
+            else if (is_numeric($a)) {
+                $ids_to_get[] = $a;
+            }
+        }
+        $artefacts = artefact_instances_from_ids($ids_to_get);
         foreach ($tmpartefacts as $a) {
             $artefact = null;
             if ($a instanceof ArtefactType) {
                 $artefact = $a;
             }
             else if (is_object($a) && isset($a->id)) {
-                $artefact = artefact_instance_from_id($a->id);
+                $artefact = $artefacts[$a->id];
             }
             else if (is_numeric($a)) {
-                $artefact = artefact_instance_from_id($a);
+                $artefact = $artefacts[$a];
             }
             if (is_null($artefact)) {
                 throw new ParamOutOfRangeException("Invalid artefact $a");
@@ -309,14 +324,19 @@ abstract class PluginExport extends Plugin implements IPluginExport {
         }
 
         $this->collections = array();
-        $collections = get_records_sql_assoc('
-            SELECT * FROM {collection} WHERE id IN (
-                SELECT collection
-                FROM {collection_view}
-                WHERE view IN (' . join(',', array_keys($this->views)) . ')
-            )',
-            array()
-        );
+        if ($views === -1) {
+            $collections = FALSE;
+        }
+        else {
+            $collections = get_records_sql_assoc('
+                    SELECT * FROM {collection} WHERE id IN (
+                        SELECT collection
+                        FROM {collection_view}
+                        WHERE view IN (' . join(',', array_keys($this->views)) . ')
+                        )',
+                    array());
+        }
+
         if ($collections) {
             require_once('collection.php');
             foreach ($collections as &$c) {
@@ -378,10 +398,11 @@ abstract class PluginExport extends Plugin implements IPluginExport {
     }
 
     /**
-     * Artefact plugins can specify additional artefacts required for view export
+     * Returns embedded artefacts in view description and
+     * additional artefacts required for view export from artefact plugins
      */
     protected function get_view_extra_artefacts() {
-        $extra = array();
+        $extra = View::get_embedded_artefacts(array_keys($this->views));
         $plugins = plugins_installed('artefact');
         foreach ($plugins as &$plugin) {
             safe_require('artefact', $plugin->name);
@@ -643,8 +664,7 @@ function export_process_queue($id = false) {
             // Now set up the export submission directories
             $submissiondir = get_config('dataroot')
             . 'submission/'
-            . $row->usr  . '/'
-            . $exporter->get('exporttime') .  '/';
+            . $row->usr  . '/';
             if (!check_dir_exists($submissiondir)) {
                 $errors[] = get_string('submissiondirnotwritable', 'export', $submissiondir);
             }

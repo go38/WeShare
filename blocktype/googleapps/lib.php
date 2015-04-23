@@ -25,7 +25,7 @@ class PluginBlocktypeGoogleApps extends SystemBlocktype {
     }
 
     public static function get_categories() {
-        return array('external');
+        return array('external' => 36000);
     }
 
     public static function render_instance(BlockInstance $instance, $editing=false) {
@@ -64,7 +64,7 @@ class PluginBlocktypeGoogleApps extends SystemBlocktype {
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         $configdata = $instance->get('configdata');
 
         return array(
@@ -207,6 +207,14 @@ class PluginBlocktypeGoogleApps extends SystemBlocktype {
             array(
                 'match' => '#.*docs.google.com/([a-zA-Z0-9\_\-\.\/]*)document/d/([a-zA-Z0-9\_\-]+).*#',
                 'url'   => $httpstr . '://docs.google.com/$1document/d/$2/pub?embedded=true',
+                'type'  => 'iframe',
+            ),
+            // docs.google.com/spreadsheets - Google document (updated on Mar 2015)
+            // $1 - domain, e.g. /a/domainname/
+            // $2 - id, key, etc. of the spreadsheet
+            array(
+                'match' => '#.*docs.google.com/([a-zA-Z0-9\_\-\.\/]*)spreadsheets/d/([a-zA-Z0-9\_\-]+).*#',
+                'url'   => $httpstr . '://docs.google.com/$1spreadsheets/d/$2/pub?embedded=true',
                 'type'  => 'iframe',
             ),
             // docs.google.com - Google spreadsheet document (updated on Mar 2013)

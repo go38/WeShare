@@ -35,7 +35,7 @@ class PluginBlocktypeFolder extends PluginBlocktype {
     }
 
     public static function get_categories() {
-        return array('fileimagevideo');
+        return array('fileimagevideo' => 4000);
     }
 
     public static function render_instance(BlockInstance $instance, $editing=false) {
@@ -47,13 +47,24 @@ class PluginBlocktypeFolder extends PluginBlocktype {
         // This can be either an image or profileicon. They both implement
         // render_self
         $result = '';
-        if (isset($configdata['artefactid'])) {
-            $folder = $instance->get_artefact_instance($configdata['artefactid']);
-            $result = $folder->render_self($configdata);
+        $artefactid = isset($configdata['artefactid']) ? $configdata['artefactid'] : null;
+        if ($artefactid) {
+            $artefact = $instance->get_artefact_instance($artefactid);
+            $result = $artefact->render_self($configdata);
             $result = $result['html'];
-        }
 
-        return $result;
+            require_once(get_config('docroot') . 'artefact/comment/lib.php');
+            require_once(get_config('docroot') . 'lib/view.php');
+            $view = new View($configdata['viewid']);
+            list($commentcount, $comments) = ArtefactTypeComment::get_artefact_comments_for_view($artefact, $view, $instance->get('id'), true, $editing);
+        }
+        $smarty = smarty_core();
+        if ($artefactid) {
+            $smarty->assign('commentcount', $commentcount);
+            $smarty->assign('comments', $comments);
+        }
+        $smarty->assign('html', $result);
+        return $smarty->fetch('blocktype:folder:folder.tpl');
     }
 
     public static function has_config() {
@@ -83,9 +94,9 @@ class PluginBlocktypeFolder extends PluginBlocktype {
             'legend' => get_string('zipdownloadheading', 'artefact.file'),
             'elements' => array(
                 'folderdownloadzip' => array(
-                    'type' => 'checkbox',
+                    'type' => 'switchbox',
                     'title' => get_string('downloadfolderzip', 'artefact.file'),
-                    'description' => get_string('downloadfolderzipdescription1', 'artefact.file'),
+                    'description' => get_string('downloadfolderzipdescription2', 'artefact.file'),
                     'defaultvalue' => get_config_plugin('blocktype', 'folder', 'folderdownloadzip'),
                 ),
             ),
@@ -95,7 +106,7 @@ class PluginBlocktypeFolder extends PluginBlocktype {
         );
     }
 
-    public static function save_config_options($form, $values) {
+    public static function save_config_options(Pieform $form, $values) {
         set_config_plugin('blocktype', 'folder', 'sortorder', $values['sortorder']);
         set_config_plugin('blocktype', 'folder', 'folderdownloadzip', $values['folderdownloadzip']);
     }
@@ -110,7 +121,7 @@ class PluginBlocktypeFolder extends PluginBlocktype {
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         $configdata = $instance->get('configdata');
         safe_require('artefact', 'file');
         $instance->set('artefactplugin', 'file');

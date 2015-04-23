@@ -33,7 +33,7 @@ class HtmlExportInternal extends HtmlExportArtefactPlugin {
                 $smarty->assign('breadcrumbs', array(array('text' => 'Profile page', 'path' => 'profilepage.html')));
                 $view = $this->exporter->get('user')->get_profile_view();
                 $outputfilter = new HtmlExportOutputFilter('../../', $this->exporter);
-                $smarty->assign('view', $outputfilter->filter($view->build_rows()));
+                $smarty->assign('view', $outputfilter->filter($view->build_rows(false, true)));
 
                 $content = $smarty->fetch('export:html/internal:profilepage.tpl');
                 if (!file_put_contents($this->fileroot . 'profilepage.html', $content)) {
@@ -83,10 +83,12 @@ class HtmlExportInternal extends HtmlExportArtefactPlugin {
             $rendered = $artefact->render_self(array('link' => true));
             $profiles[] = array('label' => $artefact->get('description'), 'link' => $rendered['html']);
         }
-        $sections[$this->get_category_for_artefacttype($artefact->get('artefacttype'))][$artefact->get('artefacttype')] = array(
-            'html' => $profiles,
-            'weight' => $elementlistlookup[$artefact->get('artefacttype')],
-        );
+        if (!empty($profiles)) {
+            $sections[$this->get_category_for_artefacttype($artefact->get('artefacttype'))][$artefact->get('artefacttype')] = array(
+                'html' => $profiles,
+                'weight' => $elementlistlookup[$artefact->get('artefacttype')],
+            );
+        }
 
         // Sort the data and then drop the weighting information
         foreach ($sections as &$section) {

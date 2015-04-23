@@ -209,6 +209,7 @@ if ($institution || $add) {
 
     if (!$add) {
         $data = get_record('institution', 'name', $institution);
+        $data->commentsortorder = get_config_institution($institution, 'commentsortorder');
         $lockedprofilefields = (array) get_column('institution_locked_profile_field', 'profilefield', 'name', $institution);
 
         // TODO: Find a better way to work around Smarty's minimal looping logic
@@ -246,6 +247,7 @@ if ($institution || $add) {
         $data->licensedefault = '';
         $data->dropdownmenu = get_config('dropdownmenu') ? 1 : 0;
         $data->skins = get_config('skins') ? 1 : 0;
+        $data->commentsortorder = 'earliest';
         $lockedprofilefields = array();
 
         $authtypes = auth_get_available_auth_types();
@@ -333,16 +335,16 @@ if ($institution || $add) {
 
     if (!get_config('usersuniquebyusername')) {
         $elements['registerallowed'] = array(
-            'type'         => 'checkbox',
+            'type'         => 'switchbox',
             'title'        => get_string('registrationallowed', 'admin'),
-            'description'  => get_string('registrationalloweddescription3', 'admin'),
+            'description'  => get_string('registrationalloweddescription4', 'admin'),
             'defaultvalue' => $data->registerallowed,
             'help'   => true,
         );
         $elements['registerconfirm'] = array(
-            'type'         => 'checkbox',
+            'type'         => 'switchbox',
             'title'        => get_string('registrationconfirm', 'admin'),
-            'description'  => get_string('registrationconfirmdescription1', 'admin'),
+            'description'  => get_string('registrationconfirmdescription2', 'admin'),
             'disabled'     => get_config('requireregistrationconfirm') == true,
             'defaultvalue' => $data->registerconfirm,
         );
@@ -376,25 +378,28 @@ if ($institution || $add) {
             'options' => array_merge(array('sitedefault' => get_string('sitedefault', 'admin') . ' (' . $languages[get_config('lang')] . ')'), $languages),
             'ignore' => (count($languages) < 2),
         );
+    }
 
-        $elements['logo'] = array(
-            'type'        => 'file',
-            'title'       => get_string('Logo', 'admin'),
-            'description' => get_string('logodescription', 'admin'),
-            'maxfilesize' => get_max_upload_size(false),
+    $elements['logo'] = array(
+        'type'        => 'file',
+        'title'       => get_string('Logo', 'admin'),
+        'description' => get_string('logodescription', 'admin'),
+        'maxfilesize' => get_max_upload_size(false),
+    );
+    if (!empty($data->logo)) {
+        $logourl = get_config('wwwroot') . 'thumb.php?type=logobyid&id=' . $data->logo;
+        $elements['logohtml'] = array(
+            'type'        => 'html',
+            'value'       => '<img src="' . $logourl . '" alt="' . get_string('Logo', 'admin') . '">',
         );
-        if (!empty($data->logo)) {
-            $logourl = get_config('wwwroot') . 'thumb.php?type=logobyid&id=' . $data->logo;
-            $elements['logohtml'] = array(
-                'type'        => 'html',
-                'value'       => '<img src="' . $logourl . '" alt="' . get_string('Logo', 'admin') . '">',
-            );
-            $elements['deletelogo'] = array(
-                'type'        => 'checkbox',
-                'title'       => get_string('deletelogo', 'admin'),
-                'description' => get_string('deletelogodescription', 'admin'),
-            );
-        }
+        $elements['deletelogo'] = array(
+            'type'        => 'switchbox',
+            'switchtext'  => 'yesno',
+            'title'       => get_string('deletelogo', 'admin'),
+            'description' => get_string('deletelogodescription1', 'admin'),
+        );
+    }
+    if (empty($data->name) || $data->name != 'mahara') {
         if (!empty($data->style)) {
             $customtheme = get_records_menu('style_property', 'style', $data->style, '', 'field,value');
         }
@@ -421,15 +426,15 @@ if ($institution || $add) {
             );
         }
         $elements['customthemefs']['elements']['resetcustom'] = array(
-            'type'         => 'checkbox',
+            'type'         => 'switchbox',
             'class'        => 'nojs-hidden-inline',
             'title'        => get_string('resetcolours', 'admin'),
-            'description'  => get_string('resetcoloursdesc', 'admin'),
+            'description'  => get_string('resetcoloursdesc1', 'admin'),
         );
         $elements['dropdownmenu'] = array(
-            'type'         => 'checkbox',
+            'type'         => 'switchbox',
             'title'        => get_string('dropdownmenu', 'admin'),
-            'description'  => get_string('dropdownmenudescriptioninstitution','admin'),
+            'description'  => get_string('dropdownmenudescriptioninstitution1','admin'),
             'defaultvalue' => $data->dropdownmenu,
             'help'         => true,
         );
@@ -437,12 +442,22 @@ if ($institution || $add) {
     // The skins checkbox should be shown for the default institution
     if (get_config('skins')) {
         $elements['skins'] = array(
-            'type' => 'checkbox',
+            'type' => 'switchbox',
             'title' => get_string('skins', 'admin'),
-            'description' => get_string('skinsinstitutiondescription', 'admin'),
+            'description' => get_string('skinsinstitutiondescription1', 'admin'),
             'defaultvalue' => $data->skins,
         );
     }
+    $elements['commentsortorder'] = array(
+        'type' => 'select',
+        'title' => get_string('commentsortorder', 'admin'),
+        'description' => get_string('commentsortorderdescription', 'admin'),
+        'defaultvalue' => $data->commentsortorder,
+        'options' => array('earliest' => get_string('earliest'),
+                           'latest' => get_string('latest'),
+                          ),
+        'help' => true,
+    );
     // Some more fields that are hidden from the default institution
     if (empty($data->name) || $data->name != 'mahara') {
         $elements['showonlineusers'] = array(
@@ -456,9 +471,9 @@ if ($institution || $add) {
         );
         if (get_config('licensemetadata')) {
             $elements['licensemandatory'] = array(
-                'type'         => 'checkbox',
+                'type'         => 'switchbox',
                 'title'        => get_string('licensemandatory', 'admin'),
-                'description'  => get_string('licensemandatorydescription','admin'),
+                'description'  => get_string('licensemandatorydescription1','admin'),
                 'defaultvalue' => $data->licensemandatory,
             );
             $elements['licensedefault'] = license_form_el_basic(null, true);
@@ -476,9 +491,9 @@ if ($institution || $add) {
                'defaultvalue' => !empty($data->defaultquota) ? $data->defaultquota : get_config_plugin('artefact', 'file', 'defaultquota'),
             );
             $elements['updateuserquotas'] = array(
+                'type'         => 'switchbox',
                 'title'        => get_string('updateuserquotas', 'artefact.file'),
-                'description'  => get_string('updateinstitutionuserquotasdesc', 'admin'),
-                'type'         => 'checkbox',
+                'description'  => get_string('updateinstitutionuserquotasdesc1', 'admin'),
             );
         }
         else {
@@ -491,9 +506,9 @@ if ($institution || $add) {
         }
 
         $elements['allowinstitutionpublicviews'] = array(
-            'type'         => 'checkbox',
+            'type'         => 'switchbox',
             'title'        => get_string('allowinstitutionpublicviews', 'admin'),
-            'description'  => get_string('allowinstitutionpublicviewsdescription','admin'),
+            'description'  => get_string('allowinstitutionpublicviewsdescription1','admin'),
             'defaultvalue' => get_config('allowpublicviews') && $data->allowinstitutionpublicviews,
             'disabled'     => get_config('allowpublicviews') == false,
             'help'         => true,
@@ -524,12 +539,12 @@ if ($institution || $add) {
     if ($institution != 'mahara') {
         $elements['lockedfields']['elements']['description'] = array(
             'type' => 'html',
-            'value' => get_string('disabledlockedfieldhelp', 'admin', get_field('institution', 'displayname', 'name', 'mahara')),
+            'value' => get_string('disabledlockedfieldhelp1', 'admin', get_field('institution', 'displayname', 'name', 'mahara')),
         );
     }
     foreach (ArtefactTypeProfile::get_all_fields() as $field => $type) {
         $elements['lockedfields']['elements'][$field] = array(
-            'type' => 'checkbox',
+            'type' => 'switchbox',
             'title' => get_string($field, 'artefact.internal'),
             'defaultvalue' => in_array($field, $lockedprofilefields) || ($institution != 'mahara' && in_array($field, $sitelockedfields)),
             'disabled' => $institution != 'mahara' && in_array($field, $sitelockedfields)
@@ -719,9 +734,12 @@ function institution_submit(Pieform $form, $values) {
         }
     }
 
-    $newinstitution->theme                        = (empty($values['theme']) || $values['theme'] == 'sitedefault') ? null : $values['theme'];
-    $newinstitution->dropdownmenu                 = (!empty($values['dropdownmenu'])) ? 1 : 0;
+    $newinstitution->theme                 = (empty($values['theme']) || $values['theme'] == 'sitedefault') ? null : $values['theme'];
+    $newinstitution->dropdownmenu          = (!empty($values['dropdownmenu'])) ? 1 : 0;
     $newinstitution->skins                 = (!empty($values['skins'])) ? 1 : 0;
+    require_once(get_config('docroot') . 'artefact/comment/lib.php');
+    $commentoptions = ArtefactTypeComment::get_comment_options();
+    $newinstitution->commentsortorder      = (empty($values['commentsortorder'])) ? $commentoptions->sort : $values['commentsortorder'];
 
     if ($newinstitution->theme == 'custom') {
         if (!empty($oldinstitution->style)) {
@@ -993,6 +1011,19 @@ if ($institution && $institution != 'mahara') {
                 $SESSION->add_error_msg(get_string('errorwhilesuspending', 'admin'));
             }
             else {
+                // Need to logout any users that are using this institution's authinstance.
+                if ($loggedin = get_records_sql_array("SELECT ui.usr FROM {usr_institution} ui
+                    JOIN {usr} u ON u.id = ui.usr
+                    JOIN {auth_instance} ai ON ai.id = u.authinstance
+                    JOIN {usr_session} us ON us.usr = u.id
+                    WHERE ui.institution = ?
+                    AND ai.institution = ?", array($values['i'], $values['i']))) {
+                    foreach ($loggedin as $user) {
+                        $loggedinarray[] = $user->usr;
+                    }
+                    delete_records_sql("DELETE FROM {usr_session} WHERE usr IN (" . join(',', $loggedinarray) . ")");
+                    $SESSION->add_ok_msg(get_string('institutionlogoutusers', 'admin', count($loggedin)));
+                }
                 set_field('institution', 'suspended', 1, 'name', $values['i']);
                 $SESSION->add_ok_msg(get_string('institutionsuspended', 'admin'));
             }

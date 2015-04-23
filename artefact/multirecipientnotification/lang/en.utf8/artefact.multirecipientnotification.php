@@ -12,6 +12,8 @@
 defined('INTERNAL') || die();
 
 $string['sendmessageto']        = 'Send message';
+$string['composemessage']       = 'Compose';
+$string['composemessagedesc']   = 'Create a new message';
 $string['titlesubject']         = 'Subject';
 $string['titlerecipient']       = 'Recipients';
 $string['replysubjectprefix']   = 'Re:';
@@ -28,14 +30,17 @@ $string['fromuser']             = 'From';
 $string['touser']               = 'To';
 
 // Notification Inbox URL Text
-$string['returnurltext']        = 'Reply';
-$string['replyurltext']         = 'Reply all';
+$string['reply']                = 'Reply';
+$string['replyall']             = 'Reply all';
 $string['linkindicator']        = '»';
 
 $string['labeloutbox1']          = 'Sent';
+$string['outboxdesc']         = 'Messages sent to other users';
 $string['labelinbox']           = 'Inbox';
+$string['inboxdesc1']          = 'Messages received from the system and other users';
 
 $string['nothingtorender']      = '';
+$string['replybuttonplaceholder'] = '...';
 
 $string['selectallread'] = 'All unread notifications';
 $string['selectalldelete'] = 'All notifications for deletion';

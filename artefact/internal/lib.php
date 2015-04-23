@@ -398,15 +398,17 @@ class ArtefactTypeProfile extends ArtefactType {
     /**
      * overriding this because profile fields
      * are unique in that except for email, you only get ONE
-     * so if we don't get an id, we still need to go look for it
+     * so if we don't get an id, we still need to go look for it.
+     * On the other hand, if our caller knows the artefact is new,
+     * we can skip the query.
      */
-    public function __construct($id=0, $data=null) {
+    public function __construct($id=0, $data=null, $new = FALSE) {
         $type = $this->get_artefact_type();
         if (!empty($id) || $type == 'email' || $type == 'socialprofile') {
             return parent::__construct($id, $data);
         }
         if (!empty($data['owner'])) {
-            if ($a = get_record('artefact', 'artefacttype', $type, 'owner', $data['owner'])) {
+            if (!$new && $a = get_record('artefact', 'artefacttype', $type, 'owner', $data['owner'])) {
                 return parent::__construct($a->id, $a);
             }
             else {
@@ -897,6 +899,38 @@ class ArtefactTypeHtml extends ArtefactType {
 
     public static function is_allowed_in_progressbar() {
         return false;
+    }
+
+    public function update_artefact_references(&$view, &$template, &$artefactcopies, $oldid) {
+        parent::update_artefact_references($view, $template, $artefactcopies, $oldid);
+        // 1. Attach copies of the files that were attached to the old note.
+        if (isset($artefactcopies[$oldid]->oldattachments)) {
+            foreach ($artefactcopies[$oldid]->oldattachments as $a) {
+                if (isset($artefactcopies[$a])) {
+                    $this->attach($artefactcopies[$a]->newid);
+                }
+            }
+        }
+        // 2. Update embedded images in the note and db
+        $regexp = array();
+        $replacetext = array();
+        if (!empty($artefactcopies[$oldid]->oldembeds)) {
+            foreach ($artefactcopies[$oldid]->oldembeds as $a) {
+                if (isset($artefactcopies[$a])) {
+                    // Change the old image id to the new one
+                    $regexp[] = '#<img([^>]+)src="' . get_config('wwwroot') . 'artefact/file/download.php\?file=' . $a . '&embedded=1([^"]+)"#';
+                    $replacetext[] = '<img$1src="' . get_config('wwwroot') . 'artefact/file/download.php?file=' . $artefactcopies[$a]->newid . '&embedded=1"';
+                }
+            }
+            require_once('embeddedimage.php');
+            $newdescription = EmbeddedImage::prepare_embedded_images(
+                    preg_replace($regexp, $replacetext, $this->get('description')),
+                    'textbox',
+                    $this->get('id'),
+                    $view->get('group')
+                );
+            $this->set('description', $newdescription);
+        }
     }
 }
 

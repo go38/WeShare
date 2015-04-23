@@ -22,7 +22,7 @@ class PluginBlocktypePlans extends PluginBlocktype {
     }
 
     public static function get_categories() {
-        return array('general');
+        return array('general' => 22000);
     }
 
      /**
@@ -82,6 +82,7 @@ class PluginBlocktypePlans extends PluginBlocktype {
                     . '&view=' . $instance->get('view');
                 $tasks['pagination'] = '<a href="' . $artefacturl . '">' . get_string('alltasks', 'artefact.plans') . '</a>';
             }
+            $smarty->assign('description', $plan->get('description'));
             $smarty->assign('owner', $plan->get('owner'));
             $smarty->assign('tags', $plan->get('tags'));
             $smarty->assign('tasks', $tasks);
@@ -98,7 +99,7 @@ class PluginBlocktypePlans extends PluginBlocktype {
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         $instance->set('artefactplugin', 'plans');
         $configdata = $instance->get('configdata');
 

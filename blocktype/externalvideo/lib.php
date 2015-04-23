@@ -45,7 +45,7 @@ class PluginBlocktypeExternalvideo extends SystemBlocktype {
     }
 
     public static function get_categories() {
-        return array('external');
+        return array('external' => 35000);
     }
 
     private static function load_media_sources() {
@@ -167,7 +167,7 @@ class PluginBlocktypeExternalvideo extends SystemBlocktype {
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         $configdata = $instance->get('configdata');
 
         return array(
@@ -214,8 +214,11 @@ class PluginBlocktypeExternalvideo extends SystemBlocktype {
         $content = trim($values['videoid']);
 
         if (!filter_var($content, FILTER_VALIDATE_URL)) {
-            // Not a valid url, so assume it's embed code, and let it go through
-            // to htmlpurifier.
+            // Not a valid url, so assume it's embed code so check that it's within a tag
+            if (!preg_match('/^\<.*\>$/sm', $content)) {
+                $form->set_error('videoid', get_string('invalidurlorembed', 'blocktype.externalvideo'), false);
+            }
+            // And if so let it go through to htmlpurifier.
             return;
         }
 

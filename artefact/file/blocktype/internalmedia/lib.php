@@ -22,7 +22,7 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
     }
 
     public static function get_categories() {
-        return array('fileimagevideo');
+        return array('fileimagevideo' => 7000);
     }
 
     public static function has_config() {
@@ -37,13 +37,14 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
 
     public static function render_instance(BlockInstance $instance, $editing=false) {
         $configdata = $instance->get('configdata');
-
-        if (empty($configdata['artefactid'])) {
+        $viewid = $instance->get('view');
+        $artefactid = isset($configdata['artefactid']) ? $configdata['artefactid'] : null;
+        if (empty($artefactid)) {
             return '';
         }
         $result = self::get_js_source();
         require_once(get_config('docroot') . 'artefact/lib.php');
-        $artefact = $instance->get_artefact_instance($configdata['artefactid']);
+        $artefact = $instance->get_artefact_instance($artefactid);
         $defaultwidth = get_config_plugin('blocktype', 'internalmedia', 'width') ?
                 get_config_plugin('blocktype', 'internalmedia', 'width') : 300;
         $defaultheight = get_config_plugin('blocktype', 'internalmedia', 'height') ?
@@ -57,21 +58,34 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
         }
         $callbacks = self::get_all_filetype_players();
         $result .= '<div class="mediaplayer-container center"><div class="mediaplayer">' . call_static_method('PluginBlocktypeInternalmedia', $callbacks[$mimetypefiletypes[$mimetype]], $artefact, $instance, $width, $height) . '</div></div>';
-        return $result;
+
+        if ($artefactid) {
+            require_once(get_config('docroot') . 'artefact/comment/lib.php');
+            require_once(get_config('docroot') . 'lib/view.php');
+            $view = new View($viewid);
+            list($commentcount, $comments) = ArtefactTypeComment::get_artefact_comments_for_view($artefact, $view, $instance->get('id'), true, $editing);
+        }
+        $smarty = smarty_core();
+        if ($artefactid) {
+            $smarty->assign('commentcount', $commentcount);
+            $smarty->assign('comments', $comments);
+        }
+        $smarty->assign('html', $result);
+        return $smarty->fetch('blocktype:internalmedia:internalmedia.tpl');
     }
 
     public static function has_instance_config() {
         return true;
     }
 
-    public static function get_instance_config_javascript() {
+    public static function get_instance_config_javascript(BlockInstance $instance) {
         $result = self::get_js_source(true);
         if (!empty($result)) {
             return $result;
         }
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         $configdata = $instance->get('configdata');
         safe_require('artefact', 'file');
         $instance->set('artefactplugin', 'file');
@@ -125,7 +139,7 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
         return $artefact;
     }
 
-    public static function save_config_options($form, $values) {
+    public static function save_config_options(Pieform $form, $values) {
         $enabledtypes = array();
         foreach ($values as $type => $enabled) {
             if (!in_array($type, self::get_all_filetypes())) {
@@ -148,7 +162,7 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
 
         foreach (self::get_all_filetypes() as $filetype) {
             $filetypes[$filetype] = array(
-                'type'  => 'checkbox',
+                'type'  => 'switchbox',
                 'title' => get_string($filetype, 'artefact.file'),
                 'defaultvalue' => in_array($filetype, $currenttypes),
             );
@@ -157,7 +171,7 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
         $options = array_merge(
             array(
                 'description' => array(
-                    'value' => get_string('configdesc', 'blocktype.file/internalmedia'),
+                    'value' => get_string('configdesc1', 'blocktype.file/internalmedia'),
                 ),
             ),
             $filetypes
@@ -206,6 +220,14 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
                 foreach ($mimetypes as &$m) {
                     $m = $m->description;
                 }
+                // Hack to allow .wmv and .wma files to also use the .asf mimetype as well
+                // See http://en.wikipedia.org/wiki/Advanced_Systems_Format
+                if (in_array('wmv', $data)) {
+                    $mimetypes['video/x-ms-asf'] = 'wmv';
+                }
+                if (in_array('wma', $data)) {
+                    $mimetypes['video/x-ms-asf'] = 'wma';
+                }
                 return $mimetypes;
             }
         }
@@ -242,12 +264,15 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
         $count++;
         $id = 'blocktype_internalmedia_flash_' . time() . $count;
         $url = self::get_download_link($artefact, $block);
-        $params = array('play' => 'true');
+        $params = array('play' => 'true',
+                        'allowscriptaccess' => 'never',
+                        'allownetworking' => 'never'
+                       );
         $html =  '<a href="' . $url . '">' . hsc($artefact->get('title')) . '</a><br>
                <span class="blocktype_internalmedia_mp3" id="' . $id . '">('
                . get_string('flashanimation', 'blocktype.file/internalmedia') . ')</span>
-                <script type="text/javascript">
-                    var so = new SWFObject("' . $url . '","player","' . $width . '","' . ($height + 20). '","7");
+                <script type="application/javascript">
+                    var so = new SWFObject("' . $url . '&embedded=1","player","' . $width . '","' . ($height + 20). '","7");
                     so.addParam("allowfullscreen","false");
                     so.addVariable("displayheight"," ' . $height . '");
                     so.addVariable("type", "swf");
@@ -298,7 +323,7 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
         $html =  '<a href="' . $url . '">' . hsc($artefact->get('title')) . '</a><br>
                <span class="blocktype_internalmedia_mp3" id="' . $id . '" style="display:block;width:'.$width.'px;height:'.$height.'px;"></span>
                <span id="' . $id . '_h">' . get_string('flashanimation', 'blocktype.file/internalmedia') . '</span>
-               <script type="text/javascript">
+               <script type="application/javascript">
                flowplayer("'.$id.'", "'.$playerurl.'", {
                    clip:  {
                        url: "'.$escapedurl.'",
@@ -338,7 +363,7 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
 
         return '<a href="' . $url . '">' . hsc($artefact->get('title')) . '</a><br>'
     . '<span class="blocktype_internalmedia_real">
-    <script type="text/javascript">
+    <script type="application/javascript">
     //<![CDATA[
     document.write(\'<object classid="clsid:CFCDAA03-8BE4-11cf-B84B-0020AFBBCCFA" width="240" height="180">\\
       <param name="src" value="' . $url . '">\\
@@ -361,7 +386,7 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
 
     public static function wmp_player($artefact, $block, $width, $height) {
 
-        $url = hsc(self::get_download_link($artefact, $block, true));
+        $url = hsc(self::get_download_link($artefact, $block));
 
         $size = 'width="' . $width . '" height="' . $height . '"';
         $autosize = 'false';
@@ -437,10 +462,9 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
     </object></span>';
     }
 
-    private static function get_download_link(ArtefactTypeFile $artefact, BlockInstance $instance, $wmp=false) {
+    private static function get_download_link(ArtefactTypeFile $artefact, BlockInstance $instance) {
         return get_config('wwwroot') . 'artefact/file/download.php?file='
-            . $artefact->get('id') . '&view=' . $instance->get('view')
-            . ($wmp ? '&download=1' : '');
+            . $artefact->get('id') . '&view=' . $instance->get('view');
     }
 
     private static function get_js_source($asarray = false) {
@@ -454,7 +478,7 @@ class PluginBlocktypeInternalmedia extends PluginBlocktype {
                          );
         }
         return '<script src="'.get_config('wwwroot').'artefact/file/blocktype/internalmedia/mahara-flashplayer/mahara-flashplayer.js"></script>
-             <script src="' . get_config('wwwroot') . 'artefact/file/blocktype/internalmedia/swfobject.js" type="text/javascript"></script>';
+             <script src="' . get_config('wwwroot') . 'artefact/file/blocktype/internalmedia/swfobject.js" type="application/javascript"></script>';
     }
 
     public static function default_copy_type() {

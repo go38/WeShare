@@ -25,15 +25,7 @@
     // Whether the browser is IE - needed for some hacks
     ViewManager.isOldIE = $.browser.msie && $.browser.version < 9.0;
     ViewManager.contentEditorWidth = 145;
-    ViewManager.isMobile = config['handheld_device'] || (navigator.userAgent.match(/iPhone/i))
-                           || (navigator.userAgent.match(/iPod/i))
-                           || (navigator.userAgent.match(/iPad/i))
-                           || (navigator.platform.toLowerCase().indexOf("win") !== -1 && navigator.userAgent.toLowerCase().indexOf("touch") !== -1)
-                           || (navigator.platform.toLowerCase().indexOf("win") !== -1 && navigator.userAgent.indexOf("ARM") !== -1);
-    // Whether the brower is iPhone, IPad, IPod, Windows 8 Tablet or using Windows RT
-    if (ViewManager.isMobile) {
-        ViewManager.contentEditorWidth = 175;
-    }
+
     //Public Methods
     ////////////////
     ViewManager.addCSSRules = function() {
@@ -93,49 +85,6 @@
         viewThemeSelect = $('#viewtheme-select');
         viewsLoading = $('#views-loading');
 
-        if (ViewManager.isMobile) {
-            // Unhide the radio button if the browser is iPhone, IPad or IPod
-            $('#editcontent-sidebar').addClass('withradio');
-            $('#page').addClass('withradio');
-            $('#content-editor input.blocktype-radio').each(function() {
-                $(this).show();
-            });
-            $('#accordion a.nonjs').each(function() {
-                $(this).hide();
-            });
-            $('#accordion div.withjs').each(function() {
-                $(this).show();
-            });
-            $('#accordion *').css('zoom', '1');
-            $('#main-column-container .tabswrap ul li a').css('float', 'left'); // fix li elements not floating left by floating anchors
-        }
-        else {
-            // Hide 'new block here' buttons
-            $('#bottom-pane div.add-button').each(function() {
-                $(this).remove();
-            });
-
-            // Hide controls in each block instance that are not needed
-            $('#bottom-pane input.movebutton').each(function() {
-                $(this).remove();
-            });
-
-            // Hide radio buttons for moving block types into place
-            $('#content-editor input.blocktype-radio').each(function() {
-                $(this).hide();
-            });
-
-            // Remove the a href links that are needed for when js is turned off
-            $('#accordion a.nonjs').each(function() {
-                $(this).hide();
-            });
-
-            // Display the divs that are needed when js is turned on
-            $('#accordion div.withjs').each(function() {
-                $(this).show();
-            });
-        }
-
         $('#accordion').accordion({
             icons: false,
             heightStyle: 'content',
@@ -157,23 +106,6 @@
                         $(category).html(data.data);
                         makeNewBlocksDraggable();
                         showColumnBackgroundsOnSort();
-                        // Unhide the radio button if the browser is iPhone, IPad or IPod
-                        if (ViewManager.isMobile) {
-                            // Unhide the radio button if the browser is iPhone, IPad or IPod
-                            $('#editcontent-sidebar').addClass('withradio');
-                            $('#page').addClass('withradio');
-                            $('#content-editor input.blocktype-radio').each(function() {
-                                $(this).show();
-                            });
-                            $('#accordion a.nonjs').each(function() {
-                                $(this).hide();
-                            });
-                            $('#accordion div.withjs').each(function() {
-                                $(this).show();
-                            });
-                            $('#accordion *').css('zoom', '1');
-                            $('#main-column-container .tabswrap ul li a').css('float', 'left'); // fix li elements not floating left by floating anchors
-                        }
                         checkEditAreaHeight();
                     });
                     return false;
@@ -230,13 +162,14 @@
         $(viewsLoading).remove();
 
         $(bottomPane).show();
+
     } // init
 
     function checkEditAreaHeight() {
         // to make sure the 'floating' panel when opened is not longer than
         // the 'containing' div
         var editwrapper = $('#editcontent-sidebar-wrapper');
-        var editwrapperheight = (parseInt(editwrapper.css('height')) + parseInt(editwrapper.css('padding-top')) + parseInt(editwrapper.css('padding-bottom')));
+        var editwrapperheight = (parseInt(editwrapper.css('height'), 10) + parseInt(editwrapper.css('padding-top'), 10) + parseInt(editwrapper.css('padding-bottom'), 10));
         if ($('#main-column').height() < editwrapperheight) {
             var windowWidth = windowWide();
             if (windowWidth) {
@@ -420,7 +353,8 @@
             });
 
             $(this).find('.blocktypelink').off('mouseup keydown'); // remove old event handlers
-            $(this).find('.blocktypelink').on('mouseup keydown', function(e) {
+            $(this).find('.blocktypelink').on('click keydown', function(e) {
+
                 // Add a block when click left button or press 'Space bar' or 'Enter' key
                 if (isHit(e) && $('#addblock').is(':hidden')) {
                     startAddBlock($(this));
@@ -458,7 +392,6 @@
         });
         addblockdialog.find('h2.title').text(get_string('addblock', element.text()));
         computeColumnInputs(addblockdialog);
-        setDialogPosition(addblockdialog);
 
         $('body').append($('<div>').attr('id', 'overlay'));
 
@@ -518,7 +451,7 @@
         $(this).closest('.cellchooser').find('.active').removeClass('active');
         $(this).parent().addClass('active');
         var position = $(this).val().split('-');
-        var element = $('#column-container > .row').eq(parseInt(position[0]) - 1).find('.column').eq(parseInt(position[1]) - 1);
+        var element = $('#column-container > .row').eq(parseInt(position[0], 10) - 1).find('.column').eq(parseInt(position[1], 10) - 1);
         var options = [get_string('blockordertop')];
         element.find('.column-content .blockinstance .blockinstance-header').each(function() {
             options.push(get_string('blockorderafter', $(this).find('h2.title').html()));
@@ -776,8 +709,6 @@
             });
             addblockdialog.find('h2.title').text(get_string('moveblock'));
 
-            setDialogPosition(addblockdialog);
-
             $('body').append($('<div>').attr('id', 'overlay'));
 
             addblockdialog.find('.deletebutton').focus();
@@ -876,19 +807,6 @@
                     }
                 });
             }
-        }
-        // Unhide the radio button if the browser is iPhone, IPad or IPod
-        else if (ViewManager.isMobile && self.topPane) {
-            forEach(getElementsByTagAndClassName('input', 'blocktype-radio', 'top-pane'), function(i) {
-                    setNodeAttribute(i, 'style', 'display:inline');
-                });
-            // Hide radio buttons for moving block types into place
-            $('#top-pane input.blocktype-radio').each(function() {
-                $(this).hide();
-            });
-        }
-        else {
-            parentNode = bottomPane;
         }
 
         $('input.addcolumn', parentNode).each(function() {
@@ -1000,7 +918,6 @@
      */
     function setupPositionBlockDialog() {
         $('body').append($('#addblock'));
-        $('#addblock').css('width', 500);
 
         $('#addblock .cancel, #addblock .deletebutton').on('mousedown keydown', function(e) {
             if (isHit(e)) {
@@ -1285,12 +1202,11 @@
         newblock.find('.blockinstance-header').html(title);
         newblock.find('.blockinstance-content').html(content);
         $('body').append(newblock);
+        $('body').addClass('dialog_visible');
 
         var blockinstanceId = temp.find('.blockinstance').attr('id');
         blockinstanceId = blockinstanceId.substr(0, blockinstanceId.length - '_configure'.length);
         blockinstanceId = blockinstanceId.substr(blockinstanceId.lastIndexOf('_') + 1);
-
-        setDialogPosition(newblock);
 
         var deletebutton = newblock.find('input.deletebutton');
         deletebutton.unbind().attr('name', 'action_removeblockinstance_id_' + blockinstanceId);
@@ -1323,7 +1239,14 @@
             // configblock.javascript might use MochiKit so $ must have its default value
             eval(configblock.javascript);
         })(getElement);
-
+        if (configblock.pieformcss) {
+            for (var i = 0; i < configblock.pieformcss.length; i++) {
+                var id = $(configblock.pieformcss[i]).attr('id');
+                if ($("#" + id).length == 0) {
+                    $('head').append(configblock.pieformcss[i]);
+                }
+            }
+        }
         // Lock focus to the newly opened dialog
         newblock.find('.deletebutton').focus();
         keytabbinginadialog(newblock, newblock.find('.deletebutton'), newblock.find('.cancel'));
@@ -1336,47 +1259,8 @@
             $('div.configure').each( function() {
                 $(this).addClass('hidden');
             });
+            $('body').removeClass('dialog_visible');
         }, 1);
-    }
-
-    /*
-     * Moves the given dialog so that it's centered on the screen
-     */
-    function setDialogPosition(block) {
-        var style = {
-            'position': 'absolute',
-            'z-index': 1
-        };
-
-        var d = {
-            'w': block.width(),
-            'h': block.height()
-        }
-        var vpdim = {
-            'w': $(window).width(),
-            'h': $(window).height()
-        }
-
-        var h = Math.max(d.h, 200);
-        var w = Math.max(d.w, 625);
-        if (config.blockeditormaxwidth && block.find('textarea.wysiwyg').length) {
-            w = vpdim.w - 80;
-            style.height = h + 'px';
-        }
-
-        var tborder = parseFloat(block.css('border-top-width'));
-        var tpadding = parseFloat(block.css('padding-top'));
-        var newtop = getViewportPosition().y + Math.max((vpdim.h - h) / 2 - tborder - tpadding, 5);
-        style.top = newtop + 'px';
-
-        var lborder = parseFloat(block.css('border-left-width'));
-        var lpadding = parseFloat(block.css('padding-left'));
-        style.left = ((vpdim.w - w) / 2 - lborder - lpadding) + 'px';
-        style.width = w + 'px';
-
-        for (var prop in style) {
-            block.css(prop, style[prop]);
-        }
     }
 
     function swapNodes(a, b) {
@@ -1490,19 +1374,3 @@ function blockConfigError(form, data) {
         return;
     }
 }
-
-function updateBlockConfigWidth(configblock, width) {
-    var vpdim = getViewportDimensions();
-    var w = Math.max(width, 625);
-    var style = {
-        'position': 'absolute',
-        'z-index': 1
-    };
-    var lborder = parseFloat(getStyle(configblock, 'border-left-width'));
-    var lpadding = parseFloat(getStyle(configblock, 'padding-left'));
-    style.left = ((vpdim.w - w) / 2 - lborder - lpadding) + 'px';
-    style.width = w + 'px';
-
-    setStyle(configblock, style);
-}
-

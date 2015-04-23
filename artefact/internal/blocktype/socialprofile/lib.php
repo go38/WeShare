@@ -23,7 +23,7 @@ class PluginBlocktypeSocialprofile extends PluginBlocktype {
     }
 
     public static function get_categories() {
-        return array('internal');
+        return array('internal' => 27000);
     }
 
     public static function render_instance(BlockInstance $instance, $editing=false) {
@@ -73,7 +73,7 @@ class PluginBlocktypeSocialprofile extends PluginBlocktype {
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         $configdata = $instance->get('configdata');
 
         $form = array();

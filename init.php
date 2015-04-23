@@ -11,8 +11,12 @@
 
 defined('INTERNAL') || die();
 
+if (defined('CLI') && php_sapi_name() != 'cli') {
+    die();
+}
+
 $CFG = new StdClass;
-$CFG->docroot = dirname(__FILE__) . '/';
+$CFG->docroot = dirname(__FILE__) . DIRECTORY_SEPARATOR;
 //array containing site options from database that are overrided by $CFG
 $OVERRIDDEN = array();
 
@@ -21,17 +25,9 @@ if (!empty($_SERVER['MAHARA_LIBDIR'])) {
     $CFG->libroot = $_SERVER['MAHARA_LIBDIR'];
 }
 else {
-    $CFG->libroot = dirname(__FILE__) . '/lib/';
+    $CFG->libroot = dirname(__FILE__) . DIRECTORY_SEPARATOR . 'lib' . DIRECTORY_SEPARATOR;
 }
 set_include_path($CFG->libroot . PATH_SEPARATOR . $CFG->libroot . 'pear/' . PATH_SEPARATOR . get_include_path());
-
-// Ensure that, by default, the response is not cached
-header('Cache-Control: private, must-revalidate, pre-check=0, post-check=0, max-age=0');
-header('Expires: '. gmdate('D, d M Y H:i:s', 507686400) .' GMT');
-header('Pragma: no-cache');
-
-// Prevent clickjacking through iframe tags
-header('X-Frame-Options: SAMEORIGIN');
 
 // Set up error handling
 require('errors.php');
@@ -71,16 +67,6 @@ $CFG = (object)array_merge((array)$cfg, (array)$CFG);
 require_once('config-defaults.php');
 $CFG = (object)array_merge((array)$cfg, (array)$CFG);
 
-// Fix up paths in $CFG
-foreach (array('docroot', 'dataroot') as $path) {
-    $CFG->{$path} = (substr($CFG->{$path}, -1) != '/') ? $CFG->{$path} . '/' : $CFG->{$path};
-}
-
-// Set default configs that are dependent on the docroot and dataroot
-if (empty($CFG->sessionpath)) {
-    $CFG->sessionpath = $CFG->dataroot . 'sessions';
-}
-
 // xmldb stuff
 $CFG->xmldbdisablenextprevchecking = true;
 $CFG->xmldbdisablecommentchecking = true;
@@ -91,12 +77,82 @@ if (empty($CFG->directorypermissions)) {
 }
 $CFG->filepermissions = $CFG->directorypermissions & 0666;
 
+if (defined('BEHAT_SITE_RUNNING')) {
+    // We already switched to behat test site previously.
+
+}
+else if (!empty($CFG->behat_wwwroot) ||empty($CFG->behat_dataroot) || !empty($CFG->behat_dbprefix)) {
+    // The behat is configured on this server, we need to find out if this is the behat test
+    // site based on the URL used for access.
+    require_once($CFG->docroot . '/testing/frameworks/behat/lib.php');
+    if (behat_is_test_site()) {
+        // Checking the integrity of the provided $CFG->behat_* vars and the
+        // selected wwwroot to prevent conflicts with production and phpunit environments.
+        behat_check_config_vars();
+
+        // Check that the directory does not contains other things.
+        if (!file_exists("$CFG->behat_dataroot/behattestdir.txt")) {
+            if ($dh = opendir($CFG->behat_dataroot)) {
+                while (($file = readdir($dh)) !== false) {
+                    if ($file === 'behat' || $file === '.' || $file === '..' || $file === '.DS_Store') {
+                        continue;
+                    }
+                    behat_error(BEHAT_EXITCODE_CONFIG, '$CFG->behat_dataroot directory is not empty, ensure this is the directory where you want to install behat test dataroot');
+                }
+                closedir($dh);
+                unset($dh);
+                unset($file);
+            }
+
+            if (defined('BEHAT_UTIL')) {
+                // Now we create dataroot directory structure for behat tests.
+                testing_initdataroot($CFG->behat_dataroot, 'behat');
+            } else {
+                behat_error(BEHAT_EXITCODE_INSTALL);
+            }
+        }
+
+        if (!defined('BEHAT_UTIL') && !defined('BEHAT_TEST')) {
+            // Somebody tries to access test site directly, tell them if not enabled.
+            if (!file_exists($CFG->behat_dataroot . '/behat/test_environment_enabled.txt')) {
+                behat_error(BEHAT_EXITCODE_CONFIG, 'Behat is configured but not enabled on this test site.');
+            }
+        }
+
+        // Constant used to inform that the behat test site is being used,
+        // this includes all the processes executed by the behat CLI command like
+        // the site reset, the steps executed by the browser drivers when simulating
+        // a user session and a real session when browsing manually to $CFG->behat_wwwroot
+        // like the browser driver does automatically.
+        // Different from BEHAT_TEST as only this last one can perform CLI
+        // actions like reset the site or use data generators.
+        define('BEHAT_SITE_RUNNING', true);
+
+        // Clean extra config.php settings.
+        //behat_clean_init_config();
+
+        // Now we can begin switching $CFG->X for $CFG->behat_X.
+        $CFG->wwwroot = $CFG->behat_wwwroot;
+        $CFG->dbprefix = $CFG->behat_dbprefix;
+        $CFG->dataroot = $CFG->behat_dataroot;
+    }
+}
+
+// Fix up paths in $CFG
+foreach (array('docroot', 'dataroot') as $path) {
+    $CFG->{$path} = (substr($CFG->{$path}, -1) != DIRECTORY_SEPARATOR) ? $CFG->{$path} . DIRECTORY_SEPARATOR : $CFG->{$path};
+}
+
+// Set default configs that are dependent on the docroot and dataroot
+if (empty($CFG->sessionpath)) {
+    $CFG->sessionpath = $CFG->dataroot . 'sessions';
+}
+
 // Now that we've loaded the configs, we can override the default error settings
 // from errors.php
 $errorlevel = $CFG->error_reporting;
 error_reporting($errorlevel);
 set_error_handler('error', $errorlevel);
-
 // core libraries
 require('mahara.php');
 ensure_sanity();
@@ -121,7 +177,7 @@ try {
 
     // Transform $CFG->dbtype into the name of the ADODB driver we will use
     if (is_postgres()) {
-        $CFG->dbtype = 'postgres7';
+        $CFG->dbtype = 'postgres';
     }
     else if (is_mysql()) {
         // If they have mysqli, use it. Otherwise, fall back to the older "mysql" extension.
@@ -138,7 +194,7 @@ try {
         $CFG->dbhost = '';
     }
     // The ADODB connection function doesn't have a separate port argument, but the
-    // postgres7, mysql, and mysqli drivers all support a $this->dbport field.
+    // postgres, mysql, and mysqli drivers all support a $this->dbport field.
     if (!empty($CFG->dbport)) {
         $db->port = $CFG->dbport;
     }
@@ -317,7 +373,35 @@ if (!get_config('productionmode')) {
     $CFG->nocache             = true;
 }
 
-header('Content-type: text/html; charset=UTF-8');
+if (get_config('installed')) {
+    // Check whether core upgrades need to be done. If so, "close" the site
+    // from logins
+    require(get_config('libroot') . 'version.php');
+    $upgradeavailable = $config->version > get_config('version');
+    $disablelogin  = $config->disablelogin;
+    $cfgsiteclosed = get_config('siteclosed');
+    if ($upgradeavailable != $cfgsiteclosed) {
+        set_config('siteclosed', $upgradeavailable);
+        set_config('disablelogin', $disablelogin);
+    }
+}
+
+// If we're in the middle of an upgrade, quit the cron now.
+$siteclosedforupgrade = get_config('siteclosed');
+if ($siteclosedforupgrade && defined('CRON')) {
+    exit("Site closed for upgrade.\n");
+}
+
+if (!defined('CLI')) {
+    header('Content-type: text/html; charset=UTF-8');
+    // Ensure that, by default, the response is not cached
+    header('Cache-Control: private, must-revalidate, pre-check=0, post-check=0, max-age=0');
+    header('Expires: '. gmdate('D, d M Y H:i:s', 507686400) .' GMT');
+    header('Pragma: no-cache');
+
+    // Prevent clickjacking through iframe tags
+    header('X-Frame-Options: SAMEORIGIN');
+}
 
 // Only do authentication once we know the page theme, so that the login form
 // can have the correct theming.
@@ -338,14 +422,6 @@ try {
     $SESSION->add_error_msg($exception->getMessage());
 }
 
-// The installer does its own auth_setup checking, because some upgrades may
-// break logging in and so need to allow no logins.
-// Command-line scripts obviously have no logged-in user.
-if (!defined('INSTALLER') && !defined('CLI')) {
-    auth_setup();
-}
-
-$siteclosedforupgrade = get_config('siteclosed');
 if ($siteclosedforupgrade && $USER->admin) {
     if (get_config('disablelogin')) {
         $USER->logout();
@@ -353,6 +429,13 @@ if ($siteclosedforupgrade && $USER->admin) {
     else if (!defined('INSTALLER')) {
         redirect('/admin/upgrade.php');
     }
+}
+
+// The installer does its own auth_setup checking, because some upgrades may
+// break logging in and so need to allow no logins.
+// Command-line scripts obviously have no logged-in user.
+if (!defined('INSTALLER') && !defined('CLI') && !defined('CRON')) {
+    auth_setup();
 }
 
 $siteclosed = $siteclosedforupgrade || get_config('siteclosedbyadmin');
@@ -370,7 +453,8 @@ if (!get_config('installed')) {
     ensure_install_sanity();
 
     $scriptfilename = str_replace('\\', '/', $_SERVER['SCRIPT_FILENAME']);
-    if (false === strpos($scriptfilename, 'admin/index.php')
+    if (!defined('CLI')
+    && false === strpos($scriptfilename, 'admin/index.php')
     && false === strpos($scriptfilename, 'admin/upgrade.php')
     && false === strpos($scriptfilename, 'admin/upgrade.json.php')
     && false === strpos($scriptfilename, 'admin/cli/install.php')
@@ -387,19 +471,24 @@ if (defined('JSON') && !defined('NOSESSKEY')) {
         json_reply('global', get_string('invalidsesskey'), 1);
     }
 }
-
+$mobile_detection_done = $SESSION->get('mobile_detection');
 // Device detection
-if (get_config('installed') && get_account_preference($USER->get('id'), 'devicedetection')) {
-    require_once(get_config('libroot') . 'mobile_detect/Mobile_Detect.php');
-    $detect = new Mobile_Detect();
-    $SESSION->set('handheld_device', $detect->isMobile());
-    $SESSION->set('mobile', $detect->isTablet() ? false : $detect->isMobile());
-    $SESSION->set('tablet', $detect->isTablet());
-}
-else {
-    $SESSION->set('handheld_device', false);
-    $SESSION->set('mobile', false);
-    $SESSION->set('tablet', false);
+if (!$mobile_detection_done) {
+    if (get_config('installed') && get_account_preference($USER->get('id'), 'devicedetection')) {
+        require_once(get_config('libroot') . 'mobile_detect/Mobile_Detect.php');
+        $detect = new Mobile_Detect();
+        $isMobile = $detect->isMobile();
+        $isTablet = $detect->isTablet();
+        $SESSION->set('handheld_device', $isMobile);
+        $SESSION->set('mobile', $isTablet ? false : $isMobile);
+        $SESSION->set('tablet', $isTablet);
+    }
+    else {
+        $SESSION->set('handheld_device', false);
+        $SESSION->set('mobile', false);
+        $SESSION->set('tablet', false);
+    }
+    $SESSION->set('mobile_detection', true);
 }
 
 // Run modules bootstrap code.

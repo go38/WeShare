@@ -14,21 +14,18 @@ define('PUBLIC', 1);
 require(dirname(dirname(dirname(__FILE__))) . '/init.php');
 safe_require('artefact', 'file');
 require_once('file.php');
+require_once('embeddedimage.php');
 
 $fileid = param_integer('file');
+$groupid = param_integer('group', 0);
 $viewid = param_integer('view', null);
 $postid = param_integer('post', null);
+$isembedded = param_integer('embedded', 0);
 $size   = get_imagesize_parameters();
-$forcedl = param_boolean('download');
 
 $options = array();
-if ($forcedl) {
+if (empty($isembedded)) {
     $options['forcedownload'] = true;
-}
-else {
-    $options['downloadurl'] = get_config('wwwroot')
-        . substr($_SERVER['REQUEST_URI'], strpos($_SERVER['REQUEST_URI'], 'artefact/file/download.php'))
-        . '&download=1';
 }
 
 if ($viewid && $fileid) {
@@ -36,7 +33,13 @@ if ($viewid && $fileid) {
     $ancestors = $file->get_item_ancestors();
     $artefactok = false;
 
-    if (artefact_in_view($file, $viewid)) {
+    // Check if the artefact is embedded in the page description
+    $resourceid = param_integer('description', null);
+    if ($resourceid && $file instanceof ArtefactTypeImage) {
+        $artefactok = EmbeddedImage::can_see_embedded_image($fileid, 'description', $resourceid);
+    }
+
+    if (!$artefactok && artefact_in_view($file, $viewid)) {
         $artefactok = true;
     }
     // Check to see if the artefact has a parent that is allowed to be in this view.
@@ -51,6 +54,15 @@ if ($viewid && $fileid) {
         }
     }
 
+    // If the view is a group view check that the $USER can view it
+    $author = $file->get('author');
+    $group = $file->get('group');
+    if (!empty($author) && !empty($group)) {
+        if ($USER->can_view_artefact($file)) {
+            $artefactok = true;
+        }
+    }
+
     // The user may be trying to download a file that's not in the view, but which has
     // been attached to public feedback on the view
     if ($commentid = param_integer('comment', null)) {
@@ -60,6 +72,12 @@ if ($viewid && $fileid) {
         safe_require('artefact', 'comment');
         $comment = new ArtefactTypeComment($commentid);
         if (!$comment->viewable_in($viewid)) {
+            throw new AccessDeniedException('');
+        }
+    }
+    else if ($artefactok == false && $isembedded && $file instanceof ArtefactTypeImage) {
+        // Check if the image is embedded in some text somewhere.
+        if (!check_is_embedded_image_visible($fileid, null, array('comment'))) {
             throw new AccessDeniedException('');
         }
     }
@@ -102,14 +120,39 @@ else {
 
             if (!$USER->can_view_artefact($file)) {
 
-                // Check for images sitting in visible forum posts
-                $visibleinpost = false;
-                if ($postid && $file instanceof ArtefactTypeImage) {
-                    safe_require('interaction', 'forum');
-                    $visibleinpost = PluginInteractionForum::can_see_attached_file($file, $postid);
+                $imagevisible = false;
+
+                // Check for resume elements in pages
+                $resumelements = array('resumecoverletter','resumeinterest','personalgoal','academicgoal','careergoal','personalskill','academicskill','workskill','profileintrotext');
+                foreach ($resumelements as $element) {
+                    $resourceid = param_integer($element, null);
+                    if ($resourceid && $file instanceof ArtefactTypeImage) {
+                        $imagevisible = EmbeddedImage::can_see_embedded_image($fileid, $element, $resourceid);
+                    }
+                    if ($imagevisible) {
+                        break;
+                    }
                 }
 
-                if (!$visibleinpost) {
+                // Check for images sitting in visible forum posts
+                if (!$imagevisible && $postid && $file instanceof ArtefactTypeImage) {
+                    safe_require('interaction', 'forum');
+                    $imagevisible = PluginInteractionForum::can_see_attached_file($file, $postid);
+                }
+
+                if (!$imagevisible && $groupid) {
+                    // check for public embedded image
+                    if (!group_user_access($groupid)){
+                        throw new AccessDeniedException(get_string('accessdenied', 'error'));
+                    }
+                    $imagevisible = EmbeddedImage::can_see_embedded_image($fileid, 'group', $groupid);
+                }
+
+                if (!$imagevisible && $isembedded && $file instanceof ArtefactTypeImage) {
+                    $imagevisible = check_is_embedded_image_visible($fileid);
+                }
+
+                if (!$imagevisible) {
                     throw new AccessDeniedException(get_string('accessdenied', 'error'));
                 }
             }
@@ -124,3 +167,44 @@ if ($contenttype = $file->override_content_type()) {
 }
 $options['owner'] = $file->get('owner');
 serve_file($path, $title, $file->get('filetype'), $options);
+
+/**
+ * Check if the image is embedded in an artefact of type:
+ *     comment, annotation, annotationfeedback, blog, textbox, editnote, text.
+ * Please check first that the fileid is of type ArtefactTypeImage and that the download
+ * is called with the embedded flag set.
+ *
+ * @param int $fileid the id of the file to check.
+ * @param array $includeresourcetypes an array of extra artefact types to include in the check.
+ * @param array $excluderesourcetypes an array of artefact types to exclude from the check.
+ * @return boolean TRUE the image is visible; FALSE the image is not visible.
+ */
+function check_is_embedded_image_visible($fileid, $includeresourcetypes = null, $excluderesourcetypes = null) {
+    $isvisible = false;
+    // Check for resource types a file may be embeded in.
+    $resourcetypes = array(
+        'comment', 'annotation', 'annotationfeedback', 'blog', 'textbox', 'editnote', 'text',
+    );
+    if (!empty($includeresourcetypes)) {
+        if (!is_array($includeresourcetypes)) {
+            $includeresourcetypes = array($includeresourcetypes);
+        }
+        $resourcetypes = array_merge($defaultresourcetypes, $includeresourcetypes);
+    }
+    if (!empty($excluderesourcetypes)) {
+        if (!is_array($excluderesourcetypes)) {
+            $excluderesourcetypes = array($excluderesourcetypes);
+        }
+        $resourcetypes = array_diff($resourcetypes, $excluderesourcetypes);
+    }
+    foreach ($resourcetypes as $resourcetype) {
+        $resourceid = param_integer($resourcetype, null);
+        if ($resourceid) {
+            $isvisible = EmbeddedImage::can_see_embedded_image($fileid, $resourcetype, $resourceid);
+        }
+        if ($isvisible) {
+            break;
+        }
+    }
+    return $isvisible;
+}

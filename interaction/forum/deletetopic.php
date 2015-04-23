@@ -20,6 +20,7 @@ safe_require('interaction' ,'forum');
 require_once('group.php');
 require_once('pieforms/pieform.php');
 require_once(get_config('docroot') . 'interaction/lib.php');
+require_once('embeddedimage.php');
 
 $topicid = param_integer('id');
 $returnto = param_alpha('returnto', 'topic');
@@ -91,7 +92,7 @@ function deletetopic_submit(Pieform $form, $values) {
             WHERE fp.topic = ?
             AND fp.parent IS NULL
             AND o.resolvedby IS NULL
-            AND o.resolvedtime IS NULL", $topicid);
+            AND o.resolvedtime IS NULL", array($topicid));
 
     if ($objectionable !== false) {
         // Trigger activity.
@@ -109,6 +110,7 @@ function deletetopic_submit(Pieform $form, $values) {
         array('deleted' => 1),
         array('id' => $topicid)
     );
+    EmbeddedImage::delete_embedded_images('topic', $topicid);
     // mark relevant posts as deleted
     update_record(
         'interaction_forum_post',

@@ -12,6 +12,9 @@ define('INTERNAL', 1);
 require(dirname(dirname(dirname(__FILE__))) . '/init.php');
 safe_require('artefact', 'internal');
 require_once('view.php');
+define('SECTION_PLUGINTYPE', 'artefact');
+define('SECTION_PLUGINNAME', 'internal');
+define('SECTION_PAGE', 'notes');
 define('TITLE', get_string('Notes', 'artefact.internal'));
 
 $offset  = param_integer('offset', 0);
@@ -231,9 +234,11 @@ function deletenote_form($id, $notedata) {
 
 function deletenote_submit(Pieform $form, array $values) {
     global $SESSION, $data, $baseurl;
+    require_once('embeddedimage.php');
     $id = $data[$values['delete']]->id;
     $note = new ArtefactTypeHtml($id);
     $note->delete();
+    EmbeddedImage::delete_embedded_images('editnote', $id);
     $SESSION->add_ok_msg(get_string('notedeleted', 'artefact.internal'));
     redirect($baseurl);
 }

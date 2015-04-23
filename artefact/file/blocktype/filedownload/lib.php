@@ -22,7 +22,7 @@ class PluginBlocktypeFiledownload extends PluginBlocktype {
     }
 
     public static function get_categories() {
-        return array('fileimagevideo');
+        return array('fileimagevideo' => 3000);
     }
 
     public static function render_instance(BlockInstance $instance, $editing=false) {
@@ -77,7 +77,7 @@ class PluginBlocktypeFiledownload extends PluginBlocktype {
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         $configdata = $instance->get('configdata');
         safe_require('artefact', 'file');
         $instance->set('artefactplugin', 'file');

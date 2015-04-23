@@ -437,8 +437,7 @@ class PluginArtefactFile extends PluginArtefact {
 
         if ($userid !== null) {
             $userdata = get_user($userid);
-
-            $userdata->quotausedpercent = ($userdata->quotaused + $filesize ) / $userdata->quota * 100;
+            $userdata->quotausedpercent = empty($userdata->quota) ? 0 : (($userdata->quotaused + $filesize ) / $userdata->quota) * 100;
             $overlimit = false;
             if ($quotanotifylimit <= $userdata->quotausedpercent) {
                 $overlimit = true;
@@ -457,7 +456,7 @@ class PluginArtefactFile extends PluginArtefact {
         else if ($group !== null) {
             $groupdata = get_record('group', 'id', $group);
 
-            $groupdata->quotausedpercent = ($groupdata->quotaused + $filesize ) / $groupdata->quota * 100;
+            $groupdata->quotausedpercent = empty($groupdata->quota) ? 0 : (($groupdata->quotaused + $filesize ) / $groupdata->quota) * 100;
             $overlimit = false;
             if ($quotanotifylimit <= $groupdata->quotausedpercent) {
                 $overlimit = true;
@@ -1466,8 +1465,8 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
                 ),
                 'updateuserquotas' => array(
                     'title'        => get_string('updateuserquotas', 'artefact.file'),
-                    'description'  => get_string('updateuserquotasdesc', 'artefact.file'),
-                    'type'         => 'checkbox',
+                    'description'  => get_string('updateuserquotasdesc1', 'artefact.file'),
+                    'type'         => 'switchbox',
                 )
             ),
             'collapsible' => true,
@@ -1480,7 +1479,7 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
             $maxquota = 1024 * 1024 * 1024;
         }
         $elements['userquotafieldset']['elements']['maxquotaenabled'] = array(
-            'type'         => 'checkbox',
+            'type'         => 'switchbox',
             'title'        => get_string('maxquotaenabled', 'artefact.file'),
             'description'  => get_string('maxquotadescription', 'artefact.file'),
             'defaultvalue' => $maxquotaenabled,
@@ -1503,18 +1502,18 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
             )
         );
         $elements['userquotafieldset']['elements']['quotanotifyadmin'] = array(
-            'type'          => 'checkbox',
+            'type'          => 'switchbox',
             'title'         => get_string('quotanotifyadmin1', 'artefact.file'),
-            'description'   => get_string('quotanotifyadmindescr1', 'artefact.file'),
+            'description'   => get_string('quotanotifyadmindescr2', 'artefact.file'),
             'defaultvalue'  => get_config_plugin('artefact', 'file', 'quotanotifyadmin'),
         );
 
         $override = get_config_plugin('artefact', 'file', 'institutionaloverride');
         $elements['userquotafieldset']['elements']['institutionaloverride'] = array(
-            'type'         => 'checkbox',
+            'type'         => 'switchbox',
             'title'        => get_string('institutionoverride1', 'artefact.file'),
             'defaultvalue' => $override,
-            'description'  => get_string('institutionoverridedescription', 'artefact.file')
+            'description'  => get_string('institutionoverridedescription1', 'artefact.file')
         );
 
         $defaultgroupquota = get_config_plugin('artefact', 'file', 'defaultgroupquota');
@@ -1535,8 +1534,8 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
                 ),
                 'updategroupquotas' => array(
                     'title'        => get_string('updategroupquotas', 'artefact.file'),
-                    'description'  => get_string('updategroupquotasdesc', 'artefact.file'),
-                    'type'         => 'checkbox',
+                    'description'  => get_string('updategroupquotasdesc1', 'artefact.file'),
+                    'type'         => 'switchbox',
                 )
             ),
             'collapsible' => true,
@@ -1556,7 +1555,7 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
                 ),
                 'uploadagreement' => array(
                     'title'        => get_string('requireagreement', 'artefact.file'),
-                    'type'         => 'checkbox',
+                    'type'         => 'switchbox',
                     'defaultvalue' => $uploadagreement,
                 ),
                 'defaultagreement' => array(
@@ -1566,7 +1565,7 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
                 ),
                 'usecustomagreement' => array(
                     'title'        => get_string('usecustomagreement', 'artefact.file'),
-                    'type'         => 'checkbox',
+                    'type'         => 'switchbox',
                     'defaultvalue' => $usecustomagreement,
                 ),
                 'customagreement' => array(
@@ -1604,16 +1603,16 @@ class ArtefactTypeFile extends ArtefactTypeFileBase {
                     'value' => get_string('resizeonuploaddescription', 'artefact.file'),
                 ),
                 'resizeonuploadenable' => array(
-                    'type'         => 'checkbox',
+                    'type'         => 'switchbox',
                     'title'        => get_string('resizeonuploadenable1', 'artefact.file'),
                     'defaultvalue' => $resizeonuploadenable,
-                    'description'  => get_string('resizeonuploadenabledescription1', 'artefact.file'),
+                    'description'  => get_string('resizeonuploadenabledescription2', 'artefact.file'),
                 ),
                 'resizeonuploaduseroption' => array(
-                    'title'        => get_string('resizeonuploaduseroption1', 'artefact.file'),
-                    'type'         => 'checkbox',
+                    'title'        => get_string('resizeonuploaduseroption2', 'artefact.file'),
+                    'type'         => 'switchbox',
                     'defaultvalue' => $resizeonuploaduseroption,
-                    'description'  => get_string('resizeonuploaduseroptiondescription1', 'artefact.file'),
+                    'description'  => get_string('resizeonuploaduseroptiondescription2', 'artefact.file'),
                 ),
                 'resizeonuploadmaxwidth' => array(
                      'type' => 'text',
@@ -2781,6 +2780,7 @@ class ArtefactTypeVideo extends ArtefactTypeFile {
                 'quicktime' => 'quicktime',
                 'sgi_movie' => 'sgi_movie',
                 'mp4_video' => 'mp4_video',
+                'asf'       => 'wmv',
             );
         }
         return $descriptions;
@@ -2834,7 +2834,8 @@ class ArtefactTypeAudio extends ArtefactTypeFile {
                 'ra',
                 'au',
                 'aiff',
-                'm3u'
+                'm3u',
+                'asf',
             );
         }
         return $descriptions;

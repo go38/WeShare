@@ -26,7 +26,7 @@ class PluginBlocktypeWatchlist extends SystemBlocktype {
     }
 
     public static function get_categories() {
-        return array('general');
+        return array('general' => 25000);
     }
 
     public static function get_viewtypes() {
@@ -72,7 +72,7 @@ class PluginBlocktypeWatchlist extends SystemBlocktype {
         return true;
     }
 
-    public static function instance_config_form($instance) {
+    public static function instance_config_form(BlockInstance $instance) {
         $configdata = $instance->get('configdata');
 
         return array(
@@ -98,4 +98,7 @@ class PluginBlocktypeWatchlist extends SystemBlocktype {
         return $view->get('owner') != null;
     }
 
+    public static function should_ajaxify() {
+        return true;
+    }
 }
