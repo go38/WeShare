@@ -55,7 +55,11 @@ function serve_file($path, $filename, $mimetype, $options=array()) {
     $lastmodified = filemtime($path);
     $filesize     = filesize($path);
 
-    if ($mimetype == 'text/html' || $mimetype == 'text/xml' || $mimetype == 'application/xhtml+xml' || $mimetype == 'image/svg+xml') {
+    if ($mimetype == 'text/html'
+        || $mimetype == 'text/xml'
+        || $mimetype == 'application/xml'
+        || $mimetype == 'application/xhtml+xml'
+        || $mimetype == 'image/svg+xml') {
         if (isset($options['downloadurl']) && $filesize < 1024 * 1024) {
             display_cleaned_html(file_get_contents($path), $filename, $options);
             exit;
@@ -875,4 +879,52 @@ function file_cleanup_old_cached_files() {
             }
         }
     }
+}
+
+/**
+ * Create a directory and make sure it is writable.
+ *
+ * @private
+ * @param string $dir  the full path of the directory to be created
+ * @param bool $exceptiononerror throw exception if error encountered
+ * @return string|false Returns full path to directory if successful, false if not; may throw exception
+ */
+function make_writable_directory($dir, $exceptiononerror = true) {
+    global $CFG;
+
+    if (file_exists($dir) && !is_dir($dir)) {
+        if ($exceptiononerror) {
+            throw new SystemException($dir . ' directory can not be created, file with the same name already exists.');
+        }
+        else {
+            return false;
+        }
+    }
+
+    if (!file_exists($dir)) {
+        if (!mkdir($dir, $CFG->directorypermissions, true)) {
+            clearstatcache();
+            // There might be a race condition when creating directory.
+            if (!is_dir($dir)) {
+                if ($exceptiononerror) {
+                    throw new SystemException($dir . ' can not be created, check permissions.');
+                }
+                else {
+                    debugging('Can not create directory: ' . $dir, DEBUG_DEVELOPER);
+                    return false;
+                }
+            }
+        }
+    }
+
+    if (!is_writable($dir)) {
+        if ($exceptiononerror) {
+            throw new SystemException($dir . ' is not writable, check permissions.');
+        }
+        else {
+            return false;
+        }
+    }
+
+    return $dir;
 }

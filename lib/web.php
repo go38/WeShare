@@ -81,7 +81,7 @@ function smarty($javascript = array(), $headers = array(), $pagestrings = array(
             $wwwrootparts = parse_url($wwwroot);
             if ($wwwrootparts['host'] != $requesthost) {
                 $fakewwwroot = $wwwrootparts['scheme'] . '://' . $requesthost . '/';
-                $headers[] = '<script type="text/javascript">var fakewwwroot = ' . json_encode($fakewwwroot) . ';</script>';
+                $headers[] = '<script type="application/javascript">var fakewwwroot = ' . json_encode($fakewwwroot) . ';</script>';
             }
         }
     }
@@ -107,7 +107,7 @@ function smarty($javascript = array(), $headers = array(), $pagestrings = array(
     // Make jQuery accessible with $j (Mochikit has $)
     $javascript_array[] = $jsroot . 'jquery/jquery.js';
     $javascript_array[] = $jsroot . 'jquery/deprecated_jquery.js';
-    $headers[] = '<script type="text/javascript">$j=jQuery;</script>';
+    $headers[] = '<script type="application/javascript">$j=jQuery;</script>';
 
     // TinyMCE must be included first for some reason we're not sure about
     //
@@ -121,6 +121,7 @@ function smarty($javascript = array(), $headers = array(), $pagestrings = array(
             if (($key = array_search('tinymce', $check)) !== false || ($key = array_search('tinytinymce', $check)) !== false) {
                 if (!$found_tinymce) {
                     $found_tinymce = $check[$key];
+                    $javascript_array[] = $wwwroot . 'artefact/file/js/filebrowser.js';
                     $javascript_array[] = $jsroot . 'tinymce/tinymce.js';
                     $stylesheets = array_merge($stylesheets, array_reverse(array_values($THEME->get_url('style/tinymceskin.css', true))));
                     $content_css = json_encode($THEME->get_url('style/tinymce.css'));
@@ -144,18 +145,19 @@ function smarty($javascript = array(), $headers = array(), $pagestrings = array(
                     $aspellpath = get_config('pathtoaspell');
                     if ($aspellpath && file_exists($aspellpath) && is_executable($aspellpath)) {
                         $spellchecker = ',spellchecker';
+                        $spellchecker_toolbar = '| spellchecker';
                         $spellchecker_config = "gecko_spellcheck : false, spellchecker_rpc_url : \"{$jsroot}tinymce/plugins/spellchecker/rpc.php\",";
                     }
                     else {
-                        $spellchecker = '';
+                        $spellchecker = $spellchecker_toolbar = '';
                         $spellchecker_config = 'gecko_spellcheck : true,';
                     }
 
                     $toolbar = array(
                         null,
-                        '"toolbar_toggle | formatselect | bold italic | bullist numlist | link unlink | image | undo redo"',
+                        '"toolbar_toggle | formatselect | bold italic | bullist numlist | link unlink | imagebrowser | undo redo"',
                         '"underline strikethrough subscript superscript | alignleft aligncenter alignright alignjustify | outdent indent | forecolor backcolor | ltr rtl | fullscreen"',
-                        '"fontselect | fontsizeselect | emoticons nonbreaking charmap | spellchecker | table | removeformat pastetext | code"',
+                        '"fontselect | fontsizeselect | emoticons nonbreaking charmap ' . $spellchecker_toolbar . ' | table | removeformat pastetext | code"',
                     );
 
                     // For right-to-left langs, reverse button order & align controls right.
@@ -169,7 +171,7 @@ function smarty($javascript = array(), $headers = array(), $pagestrings = array(
                     if ($check[$key] == 'tinymce') {
                         $tinymceconfig = <<<EOF
     theme: "modern",
-    plugins: "tooltoggle,textcolor,link,image,table,emoticons,spellchecker,paste,code,fullscreen,directionality,searchreplace,nonbreaking,charmap",
+    plugins: "tooltoggle,textcolor,link,imagebrowser,table,emoticons{$spellchecker},paste,code,fullscreen,directionality,searchreplace,nonbreaking,charmap",
     toolbar1: {$toolbar[1]},
     toolbar2: {$toolbar[2]},
     toolbar3: {$toolbar[3]},
@@ -189,7 +191,7 @@ EOF;
                     }
 
                     $headers[] = <<<EOF
-<script type="text/javascript">
+<script type="application/javascript">
 tinyMCE.init({
     {$tinymceconfig}
     schema: 'html4',
@@ -214,6 +216,37 @@ tinyMCE.init({
         {$extrasetup}
     }
 });
+
+function imageBrowserConfigSuccess(form, data) {
+    // handle updates to file browser
+    // final form submission handled by tinymce plugin
+    if (data.formelementsuccess) {
+        eval(data.formelementsuccess + '(form, data)');
+        return;
+    }
+}
+
+function imageBrowserConfigError(form, data) {
+    if (data.formelementerror) {
+        eval(data.formelementerror + '(form, data)');
+        return;
+    }
+}
+
+function updateBlockConfigWidth(configblock, width) {
+    var vpdim = getViewportDimensions();
+    var w = Math.max(width, 500);
+    var style = {
+        'position': 'absolute',
+        'z-index': 1
+    };
+    var lborder = parseFloat(getStyle(configblock, 'border-left-width'));
+    var lpadding = parseFloat(getStyle(configblock, 'padding-left'));
+    style.left = ((vpdim.w - w) / 2 - lborder - lpadding) + 'px';
+    style.width = w + 'px';
+    setStyle(configblock, style);
+}
+
 function custom_urlconvert (u, n, e) {
     // Don't convert the url on the skype status buttons.
     if (u.indexOf('skype:') == 0) {
@@ -313,13 +346,30 @@ EOF;
         else if (stripos($jsfile, 'http://') === false && stripos($jsfile, 'https://') === false) {
             // A local .js file with a fully specified path
             $javascript_array[] = $wwwroot . $jsfile;
-            // If $jsfile is from a plugin (i.e. plugintype/pluginname/js/foo.js)
-            // Then get js strings from static function jsstrings in plugintype/pluginname/lib.php
+            // If $jsfile is from a plugin or plugin's block, i.e.:
+            // - plugintype/pluginname/js/foo.js
+            // - plugintype/pluginname/blocktype/pluginname/js/foo.js
+            // Then get js strings from static function jsstrings in:
+            // - plugintype/pluginname/lib.php, or
+            // - plugintype/pluginname/blocktype/pluginname/lib.php
             $bits = explode('/', $jsfile);
-            if (count($bits) == 4) {
-                safe_require($bits[0], $bits[1]);
-                $pluginclass = generate_class_name($bits[0], $bits[1]);
-                $name = substr($bits[3], 0, strpos($bits[3], '.js'));
+            $pluginname = false;
+            $plugintype = false;
+            $jsfilename = false;
+            if (count($bits) == 4 && $bits[2] == 'js' && in_array($bits[0], plugin_types())) {
+                $plugintype = $bits[0];
+                $pluginname = $bits[1];
+                $jsfilename = $bits[3];
+            }
+            if (count($bits) == 6 && $bits[0] == 'artefact' && $bits[2] == 'blocktype' && $bits[4] == 'js') {
+                $plugintype = 'blocktype';
+                $pluginname = $bits[3];
+                $jsfilename = $bits[5];
+            }
+            if ($pluginname) {
+                safe_require($plugintype, $pluginname);
+                $pluginclass = generate_class_name($plugintype, $pluginname);
+                $name = substr($jsfilename, 0, strpos($jsfilename, '.js'));
                 if (is_callable(array($pluginclass, 'jsstrings'))) {
                     $tempstrings = call_static_method($pluginclass, 'jsstrings', $name);
                     foreach ($tempstrings as $section => $tags) {
@@ -332,7 +382,7 @@ EOF;
                     $tempstrings = call_static_method($pluginclass, 'jshelp', $name);
                     foreach ($tempstrings as $section => $tags) {
                         foreach ($tags as $tag) {
-                            $strings[$tag . '.help'] = get_help_icon($bits[0], $bits[1], null, null,
+                            $strings[$tag . '.help'] = get_help_icon($plugintype, $pluginname, null, null,
                                                                      null, $tag);
                         }
                     }
@@ -368,7 +418,7 @@ EOF;
         }
     }
 
-    $stringjs = '<script type="text/javascript">';
+    $stringjs = '<script type="application/javascript">';
     $stringjs .= 'var strings = ' . json_encode($strings) . ';';
     $stringjs .= "\nfunction plural(n) { return " . get_raw_string('pluralrule', 'langconfig') . "; }\n";
     $stringjs .= '</script>';
@@ -467,7 +517,7 @@ EOF;
     }
     $smarty->assign('sitename', $sitename);
     $sitelogo = $THEME->header_logo();
-    $sitelogo = $sitelogo . ((strpos($sitelogo, '?') === false) ? '?' : '&') . 'v=' . get_config('release');
+    $sitelogo = append_version_number($sitelogo);
     $smarty->assign('sitelogo', $sitelogo);
     $smarty->assign('sitelogo4facebook', $THEME->facebook_logo());
     $smarty->assign('sitedescription4facebook', get_string('facebookdescription', 'mahara'));
@@ -537,6 +587,8 @@ EOF;
     $javascript_array = append_version_number($javascript_array);
     $smarty->assign_by_ref('JAVASCRIPT', $javascript_array);
     $smarty->assign('RELEASE', get_config('release'));
+    $smarty->assign('SERIES', get_config('series'));
+    $smarty->assign('CACHEVERSION', get_config('cacheversion'));
     $siteclosedforupgrade = get_config('siteclosed');
     if ($siteclosedforupgrade && get_config('disablelogin')) {
         $smarty->assign('SITECLOSED', 'logindisabled');
@@ -643,7 +695,9 @@ EOF;
             );
         }
 
-        if (!$USER->is_logged_in() && !(get_config('siteclosed') && get_config('disablelogin'))) {
+        $isloginblockvisible = !$USER->is_logged_in() && !(get_config('siteclosed') && get_config('disablelogin'))
+                && get_config('showloginsideblock');
+        if ($isloginblockvisible) {
             $sideblocks[] = array(
                 'name'   => 'login',
                 'weight' => -10,
@@ -863,27 +917,37 @@ class Theme {
      * Given a theme name, reads in all config and sets fields on this object
      */
     private function init_theme($themename, $themedata) {
-        $this->basename = $themename;
 
-        $themeconfigfile = get_config('docroot') . 'theme/' . $this->basename . '/themeconfig.php';
-        if (!is_readable($themeconfigfile)) {
+        // A little anonymous function to retrieve *only* the $theme variable from
+        // the themeconfig.php file
+        $getthemeconfig = function($themename) {
+            $themeconfigfile = get_config('docroot') . 'theme/' . $themename . '/themeconfig.php';
+            if (is_readable($themeconfigfile)) {
+                require( get_config('docroot') . 'theme/' . $themename . '/themeconfig.php' );
+                return $theme;
+            }
+            else {
+                return false;
+            }
+        };
+
+        $themeconfig = $getthemeconfig($themename);
+
+        if (!$themeconfig) {
             // We can safely assume that the default theme is installed, users
             // should never be able to remove it
-            $this->basename = 'default';
-            $themeconfigfile = get_config('docroot') . 'theme/default/themeconfig.php';
+            $themename ='default';
+            $themeconfig = $getthemeconfig($themename);
         }
 
-        require($themeconfigfile);
+        $this->basename = $themename;
 
-        foreach (get_object_vars($theme) as $key => $value) {
+        foreach (get_object_vars($themeconfig) as $key => $value) {
             $this->$key = $value;
         }
 
         if (!isset($this->displayname)) {
             $this->displayname = $this->basename;
-        }
-        if (!isset($theme->parent) || !$theme->parent) {
-            $theme->parent = 'raw';
         }
 
         // Local theme overrides come first
@@ -893,21 +957,37 @@ class Theme {
         $this->templatedirs[] = get_config('docroot') . 'theme/' . $this->basename . '/templates/';
         $this->inheritance[]  = $this->basename;
 
+        // 'raw' is the default parent theme
+        // (If a theme has no parent, it should set $themeconfig->parent = false)
+        if (!isset($themeconfig->parent)) {
+            $themeconfig->parent = 'raw';
+        }
+        $currentthemename = $this->basename;
+        while ($themeconfig->parent !== false) {
+            // Now go through the theme hierarchy assigning variables from the
+            // parent themes
+            $parentthemename = $themeconfig->parent;
+            $parentthemeconfig = $getthemeconfig($parentthemename);
 
-        // Now go through the theme hierarchy assigning variables from the
-        // parent themes
-        $currenttheme = $this->basename;
-        while ($currenttheme != 'raw') {
-            $currenttheme = isset($theme->parent) ? $theme->parent : 'raw';
-            $parentconfigfile = get_config('docroot') . 'theme/' . $currenttheme . '/themeconfig.php';
-            require($parentconfigfile);
-            foreach (get_object_vars($theme) as $key => $value) {
+            // If the parent theme is missing, short-circuit to the "raw" theme
+            if (!$parentthemeconfig) {
+                log_warn("Theme \"{$currentthemename}\" has missing parent theme \"{$parentthemename}\".");
+                $parentthemename = 'raw';
+                $parentthemeconfig = $getthemeconfig($parentthemename);
+            }
+            $currentthemename = $parentthemename;
+            $themeconfig = $parentthemeconfig;
+
+            foreach (get_object_vars($themeconfig) as $key => $value) {
                 if (!isset($this->$key) || !$this->$key) {
                     $this->$key = $value;
                 }
             }
-            $this->templatedirs[] = get_config('docroot') . 'theme/' . $currenttheme . '/templates/';
-            $this->inheritance[]  = $currenttheme;
+            $this->templatedirs[] = get_config('docroot') . 'theme/' . $currentthemename . '/templates/';
+            $this->inheritance[]  = $currentthemename;
+            if (!isset($themeconfig->parent)) {
+                $themeconfig->parent = 'raw';
+            }
         }
 
         if (!empty($themedata->headerlogo)) {
@@ -1005,8 +1085,9 @@ class Theme {
     }
 
     /**
-     * Displaying of the header logo
+     * Displaying of the header logo of an institution
      * If $name is specified the site-logo-[$name].png will be returned
+     * The site logo will be returned if no institution logo is found and $name is not specified
      */
     public function header_logo($name = false) {
         if (!empty($this->headerlogo)) {
@@ -1014,6 +1095,17 @@ class Theme {
         }
         else if ($name) {
             return $this->get_url('images/site-logo-' . $name . '.png');
+        }
+        else {
+            try {
+                $sitelogoid = get_field('institution', 'logo', 'name', 'mahara');
+                if ($sitelogoid) {
+                    return get_config('wwwroot') . 'thumb.php?type=logobyid&id=' . $sitelogoid;
+                }
+            }
+            catch (SQLException $e) {
+                // Probably the site hasn't been installed or upgraded yet.
+            }
         }
         return $this->get_url('images/site-logo.png');
     }
@@ -1642,7 +1734,7 @@ function set_cookie($name, $value='', $expires=0, $access=false) {
     // If Cookie Consent is enabled with cc_necessary cookie set to 'yes'
     // or Cookie Consent is not enabled
     if (empty($_COOKIE['cc_necessary']) || (isset($_COOKIE['cc_necessary']) && $_COOKIE['cc_necessary'] == 'yes')) {
-        setcookie($name, $value, $expires, $url['path'], $domain, false, true);
+        setcookie($name, $value, $expires, $url['path'], $domain, is_https(), true);
     }
 
     if ($access) {  // View access cookies may be needed on this request
@@ -1929,7 +2021,7 @@ function getoptions_country() {
 function get_help_icon($plugintype, $pluginname, $form, $element, $page='', $section='') {
     global $THEME;
 
-    return ' <span class="help"><a href="" onclick="'.
+    return ' <span class="help"><a href="" title="' . get_string('Helpicon') . '" onclick="'.
         hsc(
             'contextualHelp(' . json_encode($form) . ',' .
             json_encode($element) . ',' . json_encode($plugintype) . ',' .
@@ -1952,7 +2044,7 @@ function pieform_get_help(Pieform $form, $element) {
  * @return bool
  */
 function in_admin_section() {
-    return defined('ADMIN') || defined('INSTITUTIONALADMIN') || defined('STAFF') || defined('INSTITUTIONALSTAFF');
+    return defined('ADMIN') || defined('INSTITUTIONALADMIN') || defined('STAFF') || defined('INSTITUTIONALSTAFF') || defined('INADMINMENU');
 }
 
 /**
@@ -2301,6 +2393,19 @@ function admin_nav() {
            'weight' => 76,
         );
     }
+
+    // enable plugins to augment the admin menu structure
+    foreach (array('artefact', 'interaction', 'module', 'auth') as $plugintype) {
+        if ($plugins = plugins_installed($plugintype)) {
+            foreach ($plugins as &$plugin) {
+                if (safe_require_plugin($plugintype, $plugin->name)) {
+                    $plugin_menu = call_static_method(generate_class_name($plugintype,$plugin->name), 'admin_menu_items');
+                    $menu = array_merge($menu, $plugin_menu);
+                }
+            }
+        }
+    }
+
     return $menu;
 }
 
@@ -2475,8 +2580,19 @@ function institutional_admin_nav() {
         );
     };
 
-    return $ret;
+    // enable plugins to augment the institution admin menu structure
+    foreach (array('artefact', 'interaction', 'module', 'auth') as $plugintype) {
+        if ($plugins = plugins_installed($plugintype)) {
+            foreach ($plugins as &$plugin) {
+                if (safe_require_plugin($plugintype, $plugin->name)) {
+                    $plugin_menu = call_static_method(generate_class_name($plugintype,$plugin->name), 'institution_menu_items');
+                    $ret = array_merge($ret, $plugin_menu);
+                }
+            }
+        }
+    }
 
+    return $ret;
 }
 
 /**
@@ -2488,7 +2604,7 @@ function institutional_admin_nav() {
  * @return a data structure containing the staff navigation
  */
 function staff_nav() {
-    return array(
+    $menu = array(
         'usersearch' => array(
             'path'   => 'usersearch',
             'url'    => 'admin/users/search.php',
@@ -2511,6 +2627,20 @@ function staff_nav() {
             'accesskey' => 'i',
         ),
     );
+
+    // enable plugins to augment the institution staff menu structure
+    foreach (array('artefact', 'interaction', 'module', 'auth') as $plugintype) {
+        if ($plugins = plugins_installed($plugintype)) {
+            foreach ($plugins as &$plugin) {
+                if (safe_require_plugin($plugintype, $plugin->name)) {
+                    $plugin_menu = call_static_method(generate_class_name($plugintype,$plugin->name), 'institution_staff_menu_items');
+                    $menu = array_merge($menu, $plugin_menu);
+                }
+            }
+        }
+    }
+
+    return $menu;
 }
 
 /**
@@ -2555,7 +2685,7 @@ function mahara_standard_nav() {
 
     $menu = array(
         'home' => array(
-            'path' => '',
+            'path' => 'home',
             'url' => '',
             'title' => get_string('dashboard', 'view'),
             'weight' => 10,
@@ -2691,7 +2821,7 @@ function main_nav() {
     $menu = array_filter($menu, create_function('$a', 'return empty($a["ignore"]);'));
 
     // enable plugins to augment the menu structure
-    foreach (array('artefact', 'interaction', 'module') as $plugintype) {
+    foreach (array('artefact', 'interaction', 'module', 'auth') as $plugintype) {
         if ($plugins = plugins_installed($plugintype)) {
             foreach ($plugins as &$plugin) {
                 if (safe_require_plugin($plugintype, $plugin->name)) {
@@ -2732,6 +2862,7 @@ function right_nav() {
             'alt' => get_string('inbox'),
             'count' => $unread,
             'countclass' => 'unreadmessagecount',
+            'linkid' => 'mail',
             'weight' => 20,
         ),
         'settings/account' => array(
@@ -2752,10 +2883,11 @@ function right_nav() {
     foreach (array('artefact', 'interaction', 'module') as $plugintype) {
         if ($plugins = plugins_installed($plugintype)) {
             foreach ($plugins as &$plugin) {
-                safe_require($plugintype, $plugin->name);
-                $plugin_nav_menu = call_static_method(generate_class_name($plugintype, $plugin->name),
-                    'right_nav_menu_items');
-                $menu = array_merge($menu, $plugin_nav_menu);
+                if (safe_require_plugin($plugintype, $plugin->name)) {
+                    $plugin_nav_menu = call_static_method(generate_class_name($plugintype, $plugin->name),
+                        'right_nav_menu_items');
+                    $menu = array_merge($menu, $plugin_nav_menu);
+                }
             }
         }
     }
@@ -2822,6 +2954,7 @@ function footer_menu($all=false) {
  *
  * The keys of each menu node are as follows:
  *   path: Where the link sits in the menu. E.g. 'myporfolio/myplugin'
+ *   parent: (optional) The parent path - use if tertiary level menu
  *   url:  The URL to the page, relative to wwwroot. E.g. 'artefact/myplugin/'
  *   title: Translated text to use for the text of the link. E.g. get_string('myplugin', 'artefact.myplugin')
  *   weight: Where in the menu the item should be inserted. Larger number are to the right.
@@ -2838,7 +2971,8 @@ function find_menu_children(&$menu, $path) {
     foreach ($menu as $key => $item) {
         $item['selected'] = defined('MENUITEM')
             && ($item['path'] == MENUITEM
-                || ($item['path'] . '/' == substr(MENUITEM, 0, strlen($item['path'])+1)));
+                || ($item['path'] . '/' == substr(MENUITEM, 0, strlen($item['path'])+1))
+                || (!empty($item['parent']) && $item['parent'] == MENUITEM));
         if (
             ($path == '' && $item['path'] == '') ||
             ($item['path'] != '' && substr($item['path'], 0, strlen($path)) == $path && !preg_match('%/%', substr($item['path'], strlen($path) + 1)))) {
@@ -3193,39 +3327,6 @@ function has_page_help() {
 //
 
 /**
- * Converts bbcodes in the given text to HTML. Also auto-links URLs.
- *
- * @param string $text The text to parse
- * @return string
- */
-function parse_bbcode($text) {
-    require_once('stringparser_bbcode/stringparser_bbcode.class.php');
-
-    $bbcode = new StringParser_BBCode();
-    $bbcode->setGlobalCaseSensitive(false);
-    $bbcode->setRootParagraphHandling(true);
-
-    // Convert all newlines to a common form
-    $bbcode->addFilter(STRINGPARSER_FILTER_PRE, create_function('$a', 'return preg_replace("/\015\012|015\012/", "\n", $a);'));
-
-    $bbcode->addParser(array('block', 'inline'), 'format_whitespace');
-    $bbcode->addParser(array('block', 'inline'), 'autolink_text');
-
-    // The bbcodes themselves
-    $bbcode->addCode('b', 'simple_replace', null, array ('start_tag' => '<strong>', 'end_tag' => '</strong>'),
-                          'inline', array('listitem', 'block', 'inline', 'link'), array());
-    $bbcode->addCode ('i', 'simple_replace', null, array ('start_tag' => '<em>', 'end_tag' => '</em>'),
-                          'inline', array('listitem', 'block', 'inline', 'link'), array());
-    $bbcode->addCode ('url', 'usecontent?', 'bbcode_url', array('usecontent_param' => 'default'),
-                          'link', array('listitem', 'block', 'inline'), array('link'));
-    $bbcode->addCode ('img', 'usecontent', 'bbcode_img', array(),
-                      'image', array ('listitem', 'block', 'inline', 'link'), array());
-
-    $text = $bbcode->parse($text);
-    return $text;
-}
-
-/**
  * Given some plain text, adds the appropriate HTML to it to make it appear in
  * an HTML document with the same formatting
  *
@@ -3428,126 +3529,6 @@ function html2text($html, $fragment=true) {
     $h2t = new HtmltoText($html, get_config('wwwroot'));
     return $h2t->text();
 }
-
-/**
- * Given some text, locates URLs in it and converts them to HTML
- *
- * @param string $text The text to locate URLs in
- * @return string
- *
- * {@internal{Note, it's perhaps unreasonably expected that the input to this
- * function is HTML escaped already. Especially because it's expected that
- * there are no <a href="...">s in there. This works for now because the bbcode
- * parser breaks things out into tokens, but this function might need reworking
- * to be more useful in other places.}}
- */
-function autolink_text($text) {
-    $text = preg_replace(
-        '#(^|.)(https?://\S+)#me',
-        "_autolink_text_helper('$2', '$1')",
-        $text
-    );
-    return $text;
-}
-
-/**
- * Helps autolink_text by providing the HTML to link up URLs found.
- *
- * Intelligently decides what parts of the matched URL should be linked up, to
- * get around issues where URLs are surrounded by brackets or have trailing
- * punctuation on them
- *
- * @param string $potentialurl     The URL to check. It should already have been run through hsc()
- * @param string $leadingcharacter The character (if any) before the URL. Used
- *                                 to check for URLs surrounded by brackets
- */
-function _autolink_text_helper($potentialurl, $leadingcharacter) {
-    static $brackets = array('(' => ')', '{' => '}', '[' => ']', "'" => "'");
-    $trailingcharacter = substr($potentialurl, -1);
-    $startofurl = substr($potentialurl, 0, -1);
-
-    // Attempt to intelligently handle several annoyances that happen with URL
-    // auto linking. We don't want to link up brackets if the URL is enclosed
-    // in them. We also don't want to link up punctuation after URLs
-    if (in_array($leadingcharacter, array_keys($brackets)) &&
-        in_array($trailingcharacter, $brackets)) {
-        // The URL was surrounded by brackets
-        return $leadingcharacter . '<a href="' . $startofurl . '">' . $startofurl . '</a>' . $trailingcharacter;
-    }
-    else {
-        foreach($brackets as $opener => $closer) {
-            if ($trailingcharacter == $closer &&
-                false === strpos($startofurl, $opener)) {
-                // The URL ended in a bracket and didn't contain one
-                // Note that we can't just use this clause without using the clause
-                // about URLs surrounded by brackets, because otherwise we won't catch
-                // URLs with balanced brackets in them like http://url/?(foo)&bar=1
-                return $leadingcharacter . '<a href="' . $startofurl . '">' . $startofurl . '</a>' . $trailingcharacter;
-            }
-        }
-
-        // Check for trailing punctuation
-        if (in_array($trailingcharacter, array('.', ',', '!', '?'))) {
-            return $leadingcharacter . '<a href="' . $startofurl . '">' . $startofurl . '</a>' . $trailingcharacter;
-        }
-        else {
-            return $leadingcharacter . '<a href="' . $potentialurl . '">' . $potentialurl . '</a>';
-        }
-    }
-
-    // Execution should never get here
-    return $potentialurl;
-}
-
-/**
- * Callback for StringParser_BBCode to handle [url] and [link] bbcode
- */
-function bbcode_url($action, $attributes, $content, $params, $node_object) {
-    if (!isset ($attributes['default'])) {
-        $url = $content;
-        $text = hsc($content);
-    }
-    else {
-        $url = $attributes['default'];
-        $text = $content;
-    }
-    if ($action == 'validate') {
-        $valid_protos = array('http://', 'https://', 'ftp://');
-        foreach ($valid_protos as $proto) {
-            if (substr($url, 0, strlen($proto)) == $proto) {
-                return true;
-            }
-        }
-        return false;
-    }
-    return '<a href="' . hsc($url) . '">' . $text . '</a>';
-}
-
-/**
- * Callback for StringParser_BBCode to handle [img] bbcode
- */
-function bbcode_img($action, $attributes, $content, $params, $node_object) {
-    if ($action == 'validate') {
-        $valid_protos = array('http://', 'https://');
-        foreach ($valid_protos as $proto) {
-            if (substr($content, 0, strlen($proto)) == $proto) {
-                return true;
-            }
-        }
-        return false;
-    }
-    return '<img src="' . hsc($content) . '" alt="">';
-}
-
-/**
- * Returns a message that can be used as help text for BBCode
- *
- * @return string
- */
-function bbcode_format_post_message() {
-    return get_string('formatpostbbcode', 'mahara', '<a href="" onclick="contextualHelp(\'\',\'\',\'core\',\'site\',null,\'bbcode\',this); return false;">', '</a>');
-}
-
 
 /**
  * Displays purified html on a page with an explanatory message.
@@ -3970,6 +3951,7 @@ function mahara_http_request($config, $quiet=false) {
     $ch = curl_init();
 
     // standard curl_setopt stuff; configs passed to the function can override these
+    curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
     curl_setopt($ch, CURLOPT_TIMEOUT, 60);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     if (!ini_get('open_basedir')) {
@@ -4034,6 +4016,7 @@ function mahara_shorturl_request($url, $quiet=false) {
     $ch = curl_init($url);
 
     // standard curl_setopt stuff; configs passed to the function can override these
+    curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
     curl_setopt($ch, CURLOPT_TIMEOUT, 60);
     curl_setopt($ch, CURLOPT_HEADER, true);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -4130,7 +4113,13 @@ function sanitize_url($url) {
             return '';
         }
     }
-    if (!in_array($parsedurl['scheme'], array('https', 'http', 'ftp', 'mailto'))) {
+    // Make sure the URL starts with a valid protocol (or "//", indicating that it's protocol-relative)
+    if (
+            !(
+                    in_array($parsedurl['scheme'], array('https', 'http', 'ftp', 'mailto'))
+                    || preg_match('#^//[a-zA-Z0-9]#', $url) === 1
+            )
+    ) {
         return '';
     }
     if (!filter_var($url, FILTER_VALIDATE_URL)) {
@@ -4246,20 +4235,20 @@ function append_version_number($urls) {
         $formattedurls = array();
         foreach ($urls as $url) {
             if (preg_match('/\?/',$url)) {
-                $url .= '&v=' . get_config('release');
+                $url .= '&v=' . get_config('cacheversion');
             }
             else {
-                $url .= '?v=' . get_config('release');
+                $url .= '?v=' . get_config('cacheversion');
             }
             $formattedurls[] = $url;
         }
         return $formattedurls;
     }
     if (preg_match('/\?/',$urls)) {
-        $urls .= '&v=' . get_config('release');
+        $urls .= '&v=' . get_config('cacheversion');
     }
     else {
-        $urls .= '?v=' . get_config('release');
+        $urls .= '?v=' . get_config('cacheversion');
     }
     return $urls;
 }
@@ -4317,4 +4306,40 @@ function can_use_skins($userid = null, $managesiteskin=false, $issiteview=false)
         }
     }
     return false;
+}
+
+/**
+ * Display image icon based on name
+ *
+ * @param string $type  Type of icon image to show
+ * @param string $id    Optional id to add to the image
+ *
+ * @return string    An <img> tag of the icon we want
+ */
+function display_icon($type, $id = false) {
+    global $THEME;
+
+    switch ($type) {
+        case 'on':
+        case 'yes':
+        case 'success':
+        case 'true':
+        case 'enabled':
+            $image = 'success.png';
+            break;
+        case 'off':
+        case 'no':
+        case 'fail':
+        case 'false':
+        case 'disabled':
+            $image = 'fail.png';
+            break;
+    }
+    $imageurl = $THEME->get_url('images/' . $image);
+    $html = '<img src="' . $imageurl . '" class="displayicon" alt="' . get_string($type) . '"';
+    if ($id) {
+        $html .= ' id="' . $id . '"';
+    }
+    $html .= '>';
+    return $html;
 }

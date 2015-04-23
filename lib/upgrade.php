@@ -58,6 +58,11 @@ function check_upgrades($name=null) {
         catch (Exception $e) {
             $coreversion = 0;
         }
+        $core = new stdClass();
+        $core->to = $config->version;
+        $core->torelease = $config->release;
+        $core->toseries = $config->series;
+        $toupgrade['core'] = $core;
         if (empty($coreversion)) {
             if (is_mysql()) { // Show a more informative error message if using mysql with skip-innodb
                 // In MySQL 5.6.x, we run the command 'SHOW ENGINES' to check if InnoDB is enabled or not
@@ -76,11 +81,7 @@ function check_upgrades($name=null) {
                     throw new ConfigSanityException("Mahara requires InnoDB tables.  Please ensure InnoDB tables are enabled in your MySQL server.");
                 }
             }
-            $core = new StdClass;
             $core->install = true;
-            $core->to = $config->version;
-            $core->torelease = $config->release;
-            $toupgrade['core'] = $core;
             $installing = true;
         }
         else if ($config->version > $coreversion) {
@@ -91,13 +92,14 @@ function check_upgrades($name=null) {
                                           . "($config->minupgraderelease) first "
                                           . " (you have $coreversion ($corerelease)");
             }
-            $core = new StdClass;
+            $toupgradecount ++;
             $core->upgrade = true;
             $core->from = $coreversion;
             $core->fromrelease = $corerelease;
-            $core->to = $config->version;
-            $core->torelease = $config->release;
-            $toupgrade['core'] = $core;
+        }
+        else {
+            // Core doesn't need to be upgraded. Remove it from the list!
+            unset($toupgrade['core']);
         }
     }
 
@@ -119,6 +121,7 @@ function check_upgrades($name=null) {
         require(get_config('docroot') . 'local/version.php');
 
         if ($config->version > $localversion) {
+            $toupgradecount ++;
             $toupgrade['local'] = (object) array(
                 'upgrade'     => true,
                 'from'        => $localversion,
@@ -270,7 +273,7 @@ function check_upgrades($name=null) {
                                           . " ($config->minupgraderelease) first "
                                           . " (you have $pluginversion ($pluginrelease))");
             }
-            $toupgradecount ++;
+            $toupgradecount++;
             $plugininfo = new StdClass;
             $plugininfo->upgrade = true;
             $plugininfo->from = $pluginversion;
@@ -358,6 +361,8 @@ function upgrade_core($upgrade) {
 
     set_config('version', $upgrade->to);
     set_config('release', $upgrade->torelease);
+    set_config('series', $upgrade->toseries);
+    bump_cache_version();
 
     if (!empty($upgrade->install)) {
         core_postinst();
@@ -382,6 +387,7 @@ function upgrade_local($upgrade) {
 
     set_config('localversion', $upgrade->to);
     set_config('localrelease', $upgrade->torelease);
+    bump_cache_version();
 
     db_commit();
     return true;
@@ -458,6 +464,7 @@ function upgrade_plugin($upgrade) {
     else {
         update_record($installtable, $installed, 'name');
     }
+    bump_cache_version();
 
     // postinst stuff...
     safe_require($plugintype, $pluginname);
@@ -535,12 +542,7 @@ function upgrade_plugin($upgrade) {
                     'plugintype' => $plugintype,
                     'pluginname' => $pluginname,
                 );
-                // Work around the fact that insert_record cached the columns that
-                // _were_ in the activity_type table before it was upgraded
-                global $INSERTRECORD_NOCACHE;
-                $INSERTRECORD_NOCACHE = true;
                 ensure_record_exists('activity_type', $where, $activity);
-                unset($INSERTRECORD_NOCACHE);
             }
         }
     }
@@ -814,11 +816,7 @@ function core_install_lastcoredata_defaults() {
     // if we're installing, set up the block categories here and then poll the plugins.
     // if we're upgrading this happens somewhere else.  This is because of dependency issues around
     // the order of installation stuff.
-
     install_blocktype_extras();
-
-    // also install the new watchlist notification
-    install_watchlist_notification();
 }
 
 function core_install_firstcoredata_defaults() {
@@ -845,10 +843,13 @@ function core_install_firstcoredata_defaults() {
     set_config('homepageinfo', 1);
     set_config('showonlineuserssideblock', 1);
     set_config('footerlinks', serialize(array('privacystatement', 'about', 'contactus')));
-    set_config('searchusernames', 1);
+    set_config('nousernames', 0);
     set_config('onlineuserssideblockmaxusers', 10);
     set_config('loggedinprofileviewaccess', 1);
     set_config('dropdownmenu', 0);
+    // Set this to a random starting number to make minor version slightly harder to detect
+    set_config('cacheversion', rand(1000, 9999));
+    set_config('watchlistnotification_delay', 20);
 
     // install the applications
     $app = new StdClass;
@@ -883,6 +884,7 @@ function core_install_firstcoredata_defaults() {
         'saveview',
         'deleteview',
         'blockinstancecommit',
+        'deleteblockinstance',
         'addfriend',
         'removefriend',
         'addfriendrequest',
@@ -906,6 +908,22 @@ function core_install_firstcoredata_defaults() {
         array(
             'event'        => 'createuser',
             'callfunction' => 'add_user_to_autoadd_groups',
+        ),
+        array(
+            'event'         => 'blockinstancecommit',
+            'callfunction'  => 'watchlist_record_changes',
+        ),
+        array(
+            'event'         => 'deleteblockinstance',
+            'callfunction'  => 'watchlist_block_deleted',
+        ),
+        array(
+            'event'         => 'saveartefact',
+            'callfunction'  => 'watchlist_record_changes',
+        ),
+        array(
+            'event'         => 'saveview',
+            'callfunction'  => 'watchlist_record_changes',
         ),
     );
 
@@ -964,6 +982,7 @@ function core_install_firstcoredata_defaults() {
         'cron_institution_data_daily'               => array('51', '23', '*', '*', '*'),
         'check_imap_for_bounces'                    => array('*', '*', '*', '*', '*'),
         'cron_event_log_expire'                     => array('7', '23', '*', '*', '*'),
+        'watchlist_process_notifications'           => array('*', '*', '*', '*', '*'),
     );
     foreach ($cronjobs as $callfunction => $times) {
         $cron = new StdClass;
@@ -1102,7 +1121,7 @@ function sort_upgrades($k1, $k2) {
 /** blocktype categories the system exports (including artefact categories)
 */
 function get_blocktype_categories() {
-    return array('fileimagevideo', 'blog', 'general', 'internal', 'resume', 'external');
+    return array('shortcut', 'fileimagevideo', 'blog', 'general', 'internal', 'resume', 'external');
 }
 
 function install_blocktype_categories_for_plugin($blocktype) {
@@ -1112,11 +1131,22 @@ function install_blocktype_categories_for_plugin($blocktype) {
     db_begin();
     delete_records('blocktype_installed_category', 'blocktype', $blocktype);
     if ($cats = call_static_method(generate_class_name('blocktype', $blocktype), 'get_categories')) {
-        foreach ($cats as $cat) {
+        foreach ($cats as $k=>$v) {
+            if (is_string($k) && is_int($v)) {
+                // New block with name => sortorder array.
+                $cat = $k;
+                $sortorder = $v;
+            }
+            else {
+                // Legacy block with just categories, no sortorders. Give it the default sortorder.
+                $cat = $v;
+                $sortorder = PluginBlocktype::$DEFAULT_SORTORDER;
+            }
             if (in_array($cat, $catsinstalled)) {
                 insert_record('blocktype_installed_category', (object)array(
                     'blocktype' => $blocktype,
-                    'category' => $cat
+                    'category' => $cat,
+                    'sortorder' => $sortorder,
                 ));
             }
         }
@@ -1338,11 +1368,15 @@ function update_safe_iframe_regex() {
         // in future we may need to be more clever.  Admins who know
         // what they're doing, and need something fancy, can always
         // override this in config.php.
-        foreach ($prefixes as $r) {
+        foreach ($prefixes as $key => $r) {
             if (!preg_match('/^[a-zA-Z0-9\/\._-]+$/', $r)) {
                 throw new SystemException('Invalid site passed to update_safe_iframe_regex');
             }
+            if (substr($r, -1) == '/') {
+                $prefixes[$key] = substr($r, 0, -1) . '($|[/?#])';
+            }
         }
+
         // Allowed iframe URLs should be one of the partial URIs in iframe_source,
         // prefaced by http:// or https:// or just // (which is a protocol-relative URL)
         $iframeregexp = '%^(http:|https:|)//(' . str_replace('.', '\.', implode('|', $prefixes)) . ')%';
@@ -1515,61 +1549,12 @@ function site_warnings() {
     return $warnings;
 }
 
-function install_watchlist_notification() {
-        if (!record_exists('config', 'field', 'watchlistnotification_delay')) {
-            set_config('watchlistnotification_delay', 20);
-        }
 
-        if (!table_exists(new XMLDBTable('watchlist_queue'))) {
-            $table = new XMLDBTable('watchlist_queue');
-            $table->addFieldInfo('id', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
-            $table->addFieldInfo('usr', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL);
-            $table->addFieldInfo('block', XMLDB_TYPE_INTEGER, 10, null, false);
-            $table->addFieldInfo('view', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL);
-            $table->addFieldInfo('changed_on', XMLDB_TYPE_DATETIME,  null, null, XMLDB_NOTNULL);
-            $table->addKeyInfo('viewfk', XMLDB_KEY_FOREIGN, array('view'), 'view', array('id'));
-            $table->addKeyInfo('blockfk', XMLDB_KEY_FOREIGN, array('block'), 'block_instance', array('id'));
-            $table->addKeyInfo('usrfk', XMLDB_KEY_FOREIGN, array('usr'), 'usr', array('id'));
-            $table->addKeyInfo('primary', XMLDB_KEY_PRIMARY, array('id'));
-            create_table($table);
-        }
-
-        // new event type: delete blockinstance
-        $e = new StdClass;
-        $e->name = 'deleteblockinstance';
-        ensure_record_exists('event_type', $e, $e);
-
-        // install the core event subscriptions
-        $subs = array(
-            array(
-                'event'         => 'blockinstancecommit',
-                'callfunction'  => 'watchlist_record_changes',
-            ),
-            array(
-                'event'         => 'deleteblockinstance',
-                'callfunction'  => 'watchlist_block_deleted',
-            ),
-            array(
-                'event'         => 'saveartefact',
-                'callfunction'  => 'watchlist_record_changes',
-            ),
-            array(
-                'event'         => 'saveview',
-                'callfunction'  => 'watchlist_record_changes',
-            ),
-        );
-
-        foreach ($subs as $sub) {
-            ensure_record_exists('event_subscription', (object)$sub, (object)$sub);
-        }
-
-        // install the cronjobs...
-        $cron = new StdClass;
-        $cron->callfunction = 'watchlist_process_notifications';
-        $cron->minute       = '*';
-        $cron->hour         = '*';
-        $cron->day          = '*';
-        $cron->month        = '*';
-        $cron->dayofweek    = '*';
-        ensure_record_exists('cron', $cron, $cron);
+/**
+ * Increment the cache version number.
+ * This is an arbitrary number that we append to the end of static content to make sure the user
+ * refreshes it when we update the site.
+ */
+function bump_cache_version() {
+    set_config('cacheversion', get_config('cacheversion') + 1);
 }

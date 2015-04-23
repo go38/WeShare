@@ -1,4 +1,5 @@
 <head>
+    <meta name="generator" content="Mahara {$SERIES} (https://mahara.org)" />
     <meta http-equiv="Content-type" content="text/html; charset=UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=8; IE=9; IE=10" />
     <meta property="og:title" content="{$PAGETITLE}" />
@@ -6,7 +7,7 @@
     <meta property="og:image" content="{$sitelogo4facebook}" />
     {if isset($PAGEAUTHOR)}<meta name="author" content="{$PAGEAUTHOR}">{/if}
     <title>{$PAGETITLE}</title>
-    <script type="text/javascript">
+    <script type="application/javascript">
     var config = {literal}{{/literal}
         'theme': {$THEMELIST|safe},
         'sesskey' : '{$SESSKEY}',
@@ -20,22 +21,22 @@
     </script>
     {$STRINGJS|safe}
 {foreach from=$JAVASCRIPT item=script}
-    <script type="text/javascript" src="{$script}"></script>
+    <script type="application/javascript" src="{$script}"></script>
 {/foreach}
 {foreach from=$HEADERS item=header}
     {$header|safe}
 {/foreach}
 {if isset($INLINEJAVASCRIPT)}
-    <script type="text/javascript">
+    <script type="application/javascript">
 {$INLINEJAVASCRIPT|safe}
     </script>
 {/if}
 {foreach from=$STYLESHEETLIST item=cssurl}
     <link rel="stylesheet" type="text/css" href="{$cssurl}">
 {/foreach}
-    <link rel="stylesheet" type="text/css" href="{theme_url filename='style/print.css'}?v={$RELEASE}" media="print">
-    <script type="text/javascript" src="{$WWWROOT}js/css.js?v={$RELEASE}"></script>
-    <link rel="shortcut icon" href="{$WWWROOT}favicon.ico?v={$RELEASE}" type="image/vnd.microsoft.icon">
+    <link rel="stylesheet" type="text/css" href="{theme_url filename='style/print.css'}?v={$CACHEVERSION}" media="print">
+    <script type="application/javascript" src="{$WWWROOT}js/css.js?v={$CACHEVERSION}"></script>
+    <link rel="shortcut icon" href="{$WWWROOT}favicon.ico?v={$CACHEVERSION}" type="image/vnd.microsoft.icon">
     <link rel="image_src" href="{$sitelogo}">
 {if $ADDITIONALHTMLHEAD}{$ADDITIONALHTMLHEAD|safe}{/if}
 {if $COOKIECONSENTCODE}{$COOKIECONSENTCODE|safe}{/if}

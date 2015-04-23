@@ -204,7 +204,7 @@ function expected_account_preferences() {
                  'groupsideblockmaxgroups' => '',
                  'groupsideblocksortby' => 'alphabetical',
                  'hiderealname'   => 0,
-                 'multipleblogs' => 0,
+                 'multipleblogs' => get_config('defaultmultipleblogs'),
                  'showhomeinfo' => 1,
                  'showprogressbar' => 1,
                  'mobileuploadtoken' => '',
@@ -213,6 +213,7 @@ function expected_account_preferences() {
                  'devicedetection' => 1,
                  'licensedefault' => '',
                  'viewsperpage' => 20,
+                 'orderpagesby' => 'atoz',
                  );
 }
 
@@ -233,7 +234,7 @@ function general_account_prefs_form_elements($prefs) {
         'help' => true
     );
     $elements['wysiwyg'] = array(
-        'type' => 'checkbox',
+        'type' => 'switchbox',
         'defaultvalue' => (get_config('wysiwyg')) ? get_config('wysiwyg') == 'enable' : $prefs->wysiwyg,
         'title' => get_string('wysiwygdescr', 'account'),
         'help' => true,
@@ -251,7 +252,7 @@ function general_account_prefs_form_elements($prefs) {
         }
     }
     $elements['maildisabled'] = array(
-        'type' => 'checkbox',
+        'type' => 'switchbox',
         'defaultvalue' => $prefs->maildisabled,
         'title' => get_string('disableemail', 'account'),
         'help' => true,
@@ -336,16 +337,16 @@ function general_account_prefs_form_elements($prefs) {
     );
 
     $elements['addremovecolumns'] = array(
-        'type' => 'checkbox',
+        'type' => 'switchbox',
         'defaultvalue' => $prefs->addremovecolumns,
         'title' => get_string('showviewcolumns', 'account'),
         'help' => 'true'
     );
     // TODO: add a way for plugins (like blog!) to have account preferences
     $elements['multipleblogs'] = array(
-        'type' => 'checkbox',
+        'type' => 'switchbox',
         'title'=> get_string('enablemultipleblogs1' ,'account'),
-        'description' => get_string('enablemultipleblogsdescription', 'account'),
+        'description' => get_string('enablemultipleblogsdescription1', 'account'),
         'defaultvalue' => $prefs->multipleblogs,
     );
     if (get_config('showtagssideblock')) {
@@ -378,7 +379,7 @@ function general_account_prefs_form_elements($prefs) {
     );
     if (get_config('userscanhiderealnames')) {
         $elements['hiderealname'] = array(
-            'type'         => 'checkbox',
+            'type'         => 'switchbox',
             'title'        => get_string('hiderealname', 'account'),
             'description'  => get_string('hiderealnamedescription', 'account'),
             'defaultvalue' => $prefs->hiderealname,
@@ -386,7 +387,7 @@ function general_account_prefs_form_elements($prefs) {
     }
     if (get_config('homepageinfo')) {
         $elements['showhomeinfo'] = array(
-            'type' => 'checkbox',
+            'type' => 'switchbox',
             'defaultvalue' => $prefs->showhomeinfo,
             'title' => get_string('showhomeinfo2', 'account'),
             'description' => get_string('showhomeinfodescription1', 'account', hsc(get_config('sitename'))),
@@ -395,7 +396,7 @@ function general_account_prefs_form_elements($prefs) {
     }
     if (get_config('showprogressbar')) {
         $elements['showprogressbar'] = array(
-            'type' => 'checkbox',
+            'type' => 'switchbox',
             'defaultvalue' => $prefs->showprogressbar,
             'title' => get_string('showprogressbar', 'account'),
             'description' => get_string('showprogressbardescription', 'account', hsc(get_config('sitename'))),
@@ -415,16 +416,16 @@ function general_account_prefs_form_elements($prefs) {
     }
     if (get_config_plugin('artefact', 'file', 'resizeonuploadenable')) {
         $elements['resizeonuploaduserdefault'] = array(
-            'type'         => 'checkbox',
+            'type'         => 'switchbox',
             'title'        => get_string('resizeonuploaduserdefault1', 'account'),
-            'description'  => get_string('resizeonuploaduserdefaultdescription1', 'account'),
+            'description'  => get_string('resizeonuploaduserdefaultdescription2', 'account'),
             'defaultvalue' => $prefs->resizeonuploaduserdefault,
         );
     }
 
     if (get_config('userscandisabledevicedetection')) {
         $elements['devicedetection'] = array(
-            'type'         => 'checkbox',
+            'type'         => 'switchbox',
             'title'        => get_string('devicedetection', 'account'),
             'description'  => get_string('devicedetectiondescription', 'account'),
             'defaultvalue' => $prefs->devicedetection,
@@ -499,18 +500,24 @@ function plugin_account_prefs_submit(Pieform $form, $values) {
  * @param int $userid
  * @param string $field
  * @param string (or array for socialprofile) $value
+ * @param int $new - Whether the user is new (avoid unnecessary queries)
  */
-function set_profile_field($userid, $field, $value) {
+function set_profile_field($userid, $field, $value, $new = FALSE) {
     safe_require('artefact', 'internal');
 
     // this is a special case that replaces the primary email address with the
     // specified one
     if ($field == 'email') {
-        try {
-            $email = artefact_instance_from_type('email', $userid);
+        if (!$new) {
+            try {
+                $email = artefact_instance_from_type('email', $userid);
+            }
+            catch (ArtefactNotFoundException $e) {
+                // We'll create a new artefact then.
+            }
         }
-        catch (ArtefactNotFoundException $e) {
-            $email = new ArtefactTypeEmail();
+        if (!isset($email)) {
+            $email = new ArtefactTypeEmail(0, null, TRUE);
             $email->set('owner', $userid);
         }
         $email->set('title', $value);
@@ -518,7 +525,7 @@ function set_profile_field($userid, $field, $value) {
     }
     else if ($field == 'socialprofile') {
         $classname = generate_artefact_class_name($field);
-        $profile = new $classname(0, array('owner' => $userid));
+        $profile = new $classname(0, array('owner' => $userid), $new);
         $profile->set('title',       $value['socialprofile_profileurl']);
         $profile->set('description', $value['socialprofile_service']);
         $profile->set('note',        $value['socialprofile_profiletype']);
@@ -526,7 +533,7 @@ function set_profile_field($userid, $field, $value) {
     }
     else {
         $classname = generate_artefact_class_name($field);
-        $profile = new $classname(0, array('owner' => $userid));
+        $profile = new $classname(0, array('owner' => $userid), $new);
         $profile->set('title', $value);
         $profile->commit();
     }
@@ -626,13 +633,9 @@ function email_user($userto, $userfrom, $subject, $messagetext, $messagehtml='',
     }
 
 
-    require_once('phpmailer/class.phpmailer.php');
+    require_once('phpmailer/PHPMailerAutoload.php');
 
-    $mail = new phpmailer(true);
-
-    // Leaving this commented out - there's no reason for people to know this
-    //$mail->Version = 'Mahara ' . get_config('release');
-    $mail->PluginDir = get_config('libroot')  . 'phpmailer/';
+    $mail = new PHPMailer(true);
 
     $mail->CharSet = 'UTF-8';
 
@@ -1026,10 +1029,11 @@ function display_name($user, $userto=null, $nameonly=false, $realname=false, $us
         return display_default_name($user);
     }
 
+    $nousernames = get_config('nousernames');
     $userto = get_user_for_display($userto);
     $user   = get_user_for_display($user);
 
-    $addusername = $username || !empty($userto->admin) || !empty($userto->staff);
+    $addusername = ($username && empty($nousernames)) || !empty($userto->admin) || !empty($userto->staff);
 
     // if they don't have a preferred name set, just return here
     if (empty($user->preferredname)) {
@@ -1107,7 +1111,7 @@ function full_name($user=null) {
         $user->deleted   = $USER->get('deleted');
     }
 
-    return isset($user->deleted) && $user->deleted ? get_string('deleteduser') : $user->firstname . ' ' . $user->lastname;
+    return isset($user->deleted) && $user->deleted ? get_string('deleteduser') : $user->lastname . ' ' . $user->firstname;
 }
 
 /**
@@ -1808,6 +1812,7 @@ function get_users_data($userids, $getviews=true) {
     $sql = 'SELECT u.id, u.username, u.preferredname, u.firstname, u.lastname, u.admin, u.staff, u.deleted,
                 u.profileicon, u.email, u.urlid,
                 fp.requester AS pending,
+                fp.ctime AS pending_time,
                 ap.value AS hidenamepref,
                 COALESCE((SELECT ap.value FROM {usr_account_preference} ap WHERE ap.usr = u.id AND ap.field = \'messages\'), \'allow\') AS messages,
                 COALESCE((SELECT ap.value FROM {usr_account_preference} ap WHERE ap.usr = u.id AND ap.field = \'friendscontrol\'), \'auth\') AS friendscontrol,
@@ -1822,10 +1827,11 @@ function get_users_data($userids, $getviews=true) {
     $userid = $USER->get('id');
     $data = get_records_sql_assoc($sql, array_merge(array($userid, $userid, $userid, $userid), $userids));
     $allowhidename = get_config('userscanhiderealnames');
-    $showusername = get_config('searchusernames');
+    $showusername = !get_config('nousernames');
 
     $institutionstrings = get_institution_strings_for_users($userids);
     foreach ($data as &$record) {
+        $record->pending_time = format_date(strtotime($record->pending_time), 'strftimedaydate');
         $record->messages = ($record->messages == 'allow' || $record->friend && $record->messages == 'friends' || $USER->get('admin')) ? 1 : 0;
         if (isset($institutionstrings[$record->id])) {
             $record->institutions = $institutionstrings[$record->id];
@@ -2137,8 +2143,9 @@ function acceptfriend_submit(Pieform $form, $values) {
 
     // notification info
     $n = new StdClass;
-    $n->url = profile_url($USER);
+    $n->url = profile_url($USER, false);
     $n->users = array($user->id);
+    $n->fromuser = $USER->get('id');
     $lang = get_user_language($user->id);
     $displayname = display_name($USER, $user);
     $n->message = get_string_from_language($lang, 'friendrequestacceptedmessage', 'group', $displayname, $displayname);
@@ -2149,6 +2156,9 @@ function acceptfriend_submit(Pieform $form, $values) {
     insert_record('usr_friend', $f);
 
     db_commit();
+
+    require_once('activity.php');
+    activity_occurred('maharamessage', $n);
 
     handle_event('addfriend', array('user' => $f->usr2, 'friend' => $f->usr1));
 
@@ -2276,19 +2286,19 @@ function create_user($user, $profile=array(), $institution=null, $remoteauth=nul
     }
 
     if (isset($user->email) && $user->email != '') {
-        set_profile_field($user->id, 'email', $user->email);
+        set_profile_field($user->id, 'email', $user->email, TRUE);
     }
     if (isset($user->firstname) && $user->firstname != '') {
-        set_profile_field($user->id, 'firstname', $user->firstname);
+        set_profile_field($user->id, 'firstname', $user->firstname, TRUE);
     }
     if (isset($user->lastname) && $user->lastname != '') {
-        set_profile_field($user->id, 'lastname', $user->lastname);
+        set_profile_field($user->id, 'lastname', $user->lastname, TRUE);
     }
     foreach ($profile as $k => $v) {
         if (in_array($k, array('firstname', 'lastname', 'email'))) {
             continue;
         }
-        set_profile_field($user->id, $k, $v);
+        set_profile_field($user->id, $k, $v, TRUE);
     }
 
     if (!empty($institution)) {
@@ -2729,8 +2739,8 @@ function remote_avatar($email, $size, $notfound) {
         $baseurl = get_config('remoteavatarbaseurl');
     }
     // Check if it is a valid avatar
-    $result = get_headers("{$baseurl}{$md5sum}.jpg?d=404");
-    if ($result[0] === "HTTP/1.0 404 Not Found") {
+    $result = @get_headers("{$baseurl}{$md5sum}.jpg?d=404");
+    if (!$result || preg_match("#^HTTP/\d+\.\d+ 404 #i", $result[0])) {
         return $notfound;
     }
     return "{$baseurl}{$md5sum}.jpg?r=g&s=$s";

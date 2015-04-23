@@ -999,10 +999,11 @@ function get_config_plugin_instance($plugintype, $pluginid, $key) {
     global $CFG;
 
     // Must be unlikely to exist as a config option for any plugin
-    $instance = '_i_n_s_t'.$pluginid;
+    $instance = '_i_n_s_t' . $pluginid;
 
     // Suppress NOTICE with @ in case $key is not yet cached
-    @$value = $CFG->plugin->{$plugintype}->{$instance}->{$key};
+    $configname = "plugin_{$plugintype}_{$instance}_{$key}";
+    @$value = $CFG->{$configname};
     if (isset($value)) {
         return $value;
     }
@@ -1010,7 +1011,8 @@ function get_config_plugin_instance($plugintype, $pluginid, $key) {
     $records = get_records_array($plugintype . '_instance_config', 'instance', $pluginid, 'field', 'field, value');
     if (!empty($records)) {
         foreach($records as $record) {
-            $CFG->plugin->{$plugintype}->{$instance}->{$record->field} = $record->value;
+            $storeconfigname = "plugin_{$plugintype}_{$instance}_{$record->field}";
+            $CFG->{$storeconfigname} = $record->value;
             if ($record->field == $key) {
                 $value = $record->value;
             }
@@ -1048,8 +1050,9 @@ function set_config_plugin_instance($plugintype, $pluginname, $pluginid, $key, $
     }
     if ($status) {
         // Must be unlikely to exist as a config option for any plugin
-        $instance = '_i_n_s_t'.$pluginid;
-        $CFG->plugin->{$plugintype}->{$pluginname}->{$instance}->{$key} = $value;
+        $instance = '_i_n_s_t' . $pluginid;
+        $configname = "plugin_{$plugintype}_{$instance}_{$key}";
+        $CFG->{$configname} = $value;
         return true;
     }
     return false;
@@ -1465,7 +1468,14 @@ function safe_require_plugin($plugintype, $pluginname, $filename='lib.php', $fun
     }
     catch (SystemException $e) {
         if (get_field($plugintype . '_installed', 'active', 'name', $pluginname) == 1) {
+            global $SESSION;
+
             set_field($plugintype . '_installed', 'active', 0, 'name', $pluginname);
+            $SESSION->add_error_msg(get_string('missingplugindisabled', 'admin', hsc("$plugintype:$pluginname")));
+
+            // Reset the plugin cache.
+            plugins_installed('', TRUE, TRUE);
+
             // Alert site admins that the plugin is broken so was disabled
             $message = new stdClass();
             $message->users = get_column('usr', 'id', 'admin', 1);
@@ -1477,6 +1487,21 @@ function safe_require_plugin($plugintype, $pluginname, $filename='lib.php', $fun
         }
         return false;
     }
+}
+
+/**
+ * Check to see if a particular plugin is installed and is active by plugin name
+ *
+ * @param   string $pluginname Name of plugin
+ * @return  bool
+ */
+function is_plugin_active($pluginname) {
+    foreach (plugin_types() as $type) {
+        if (record_exists($type . '_installed', 'name', $pluginname, 'active', 1)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**
@@ -1517,10 +1542,16 @@ function plugin_types_installed() {
  *
  * @param string $plugintype type of plugin
  * @param bool $all - return all (true) or only active (false) plugins
+ * @param bool $reset - whether to reset the cache (when disabling a plugin due to unavailability)
  * @return array of objects with fields (version (int), release (str), active (bool), name (str))
  */
-function plugins_installed($plugintype, $all=false) {
+function plugins_installed($plugintype, $all=false, $reset=false) {
     static $records = array();
+
+    if ($reset) {
+        $records = array();
+        return false;
+    }
 
     if (defined('INSTALLER') || defined('TESTSRUNNING') || !isset($records[$plugintype][true])) {
 
@@ -1592,6 +1623,11 @@ function generate_artefact_class_name($type) {
 
 function generate_interaction_instance_class_name($type) {
     return 'Interaction' . ucfirst($type) . 'Instance';
+}
+
+function generate_generator_class_name() {
+    $args = func_get_args();
+    return 'DataGenerator' . implode('', array_map('ucfirst', $args));
 }
 
 function blocktype_namespaced_to_single($blocktype) {
@@ -2158,7 +2194,18 @@ function pieform_element_textarea_configure($element) {
 function pieform_template_dir($file, $pluginlocation='') {
     global $THEME;
 
+    $filepath = get_config('docroot') . 'local/theme/pieforms/' . $file;
+    if (is_readable($filepath)) {
+        return dirname($filepath);
+    }
+
     foreach ($THEME->inheritance as $themedir) {
+        // Check under the theme directory first
+        $filepath = get_config('docroot') . 'theme/' . $themedir . '/' . $pluginlocation . '/pieforms/' . $file;
+        if (is_readable($filepath)) {
+            return dirname($filepath);
+        }
+        // Then check under the plugin directory
         $filepath = get_config('docroot') . $pluginlocation . '/theme/' . $themedir . '/pieforms/' . $file;
         if (is_readable($filepath)) {
             return dirname($filepath);
@@ -2935,7 +2982,7 @@ function profile_sideblock() {
         if ($authobj->authname == 'xmlrpc') {
             $peer = get_peer($authobj->wwwroot);
             if ($SESSION->get('mnetuser')) {
-                $data['mnetloggedinfrom'] = get_string('youhaveloggedinfrom', 'auth.xmlrpc', $authobj->wwwroot, institution_display_name($peer->institution));
+                $data['mnetloggedinfrom'] = get_string('youhaveloggedinfrom1', 'auth.xmlrpc', $authobj->wwwroot, $peer->name);
             }
             else {
                 $data['peer'] = array('name' => $peer->name, 'wwwroot' => $peer->wwwroot);
@@ -3742,7 +3789,7 @@ function cron_event_log_expire() {
         delete_records_select(
             'event_log',
             'time < CURRENT_DATE - INTERVAL ' .
-                (is_postgres() ? "'" . $expiry . " seconds'" : $expiry . ' SECONDS')
+                (is_postgres() ? "'" . $expiry . " seconds'" : $expiry . ' SECOND')
         );
 
     }
@@ -3945,33 +3992,246 @@ function combine_arrays($first, $second) {
 }
 
 /**
+ * Returns the number of available CPU cores
+ *
+ *  Should work for Linux, Windows, Mac & BSD
+ *
+ * @return integer
+ *
+ * Copyright © 2011 Erin Millard
+ * https://gist.github.com/ezzatron/1321581
+ */
+function num_cpus() {
+    $numCpus = 1;
+
+    if (is_file('/proc/cpuinfo')) {
+        $cpuinfo = file_get_contents('/proc/cpuinfo');
+        preg_match_all('/^processor/m', $cpuinfo, $matches);
+
+        $numCpus = count($matches[0]);
+    }
+// For Windows server users you can uncomment the following to try and access server load (experimental - use at own risk)
+//    else if ('WIN' == strtoupper(substr(PHP_OS, 0, 3))) {
+//        $process = @popen('wmic cpu get NumberOfCores', 'rb');
+//
+//        if (false !== $process) {
+//            fgets($process);
+//            $numCpus = intval(fgets($process));
+//            pclose($process);
+//        }
+//    }
+    else {
+        $process = @popen('sysctl -a', 'rb');
+
+        if (false !== $process) {
+            $output = stream_get_contents($process);
+
+            preg_match('/hw.ncpu: (\d+)/', $output, $matches);
+            if ($matches) {
+                $numCpus = intval($matches[1][0]);
+            }
+            pclose($process);
+        }
+    }
+
+    return $numCpus;
+}
+
+/**
  * Perform checks to see if there is enough server capacity to run a task.
  *
  * @param  $threshold   Pass in a threshold to test against - optional
+ *     The threshold value must be in [0..1]
+ *         0: the server is completely idle
+ *         1: is fully loaded
  * @return bool
+ *     If the server is Windows, return false (bypass this feature)
  */
 function server_busy($threshold = false) {
     // Get current server load information - code from:
     // http://www.php.net//manual/en/function.sys-getloadavg.php#107243
-    if (stristr(PHP_OS, 'win')) {
-        $wmi = new COM("Winmgmts://");
-        $server = $wmi->execquery("SELECT LoadPercentage FROM Win32_Processor");
-        $cpu_num = 0;
-        $load_total = 0;
-        foreach ($server as $cpu) {
-            $cpu_num++;
-            $load_total += $cpu->loadpercentage;
-        }
-        $load = round(($load_total / $cpu_num), 2);
-    }
-    else {
+// For Windows server users you can uncomment the following to try and access server load (experimental - use at own risk)
+     if (stristr(PHP_OS, 'win')) {
+//        $wmi = new COM("Winmgmts://");
+//        $server = $wmi->execquery("SELECT LoadPercentage FROM Win32_Processor");
+//        $cpu_num = 0;
+//        $load_total = 0;
+//        foreach ($server as $cpu) {
+//            $cpu_num++;
+//            $load_total += $cpu->loadpercentage;
+//        }
+//        $load = round(($load_total / $cpu_num), 2);
+         return false;
+     }
+     else {
         $sys_load = sys_getloadavg();
-        $load = $sys_load[0];
-    }
+        $load = $sys_load[0] / num_cpus();
+     }
 
-    $threshold = ($threshold) ? $threshold : '0.75'; // TODO: find out a good base number
+    $threshold = ($threshold) ? $threshold : '0.5'; // TODO: find out a good base number
     if ($load > $threshold) {
         return true;
     }
     return false;
+}
+
+/**
+ * Find out a user's institution sort order for comments on artefacts within view page.
+ * If they belong to one institution that has specified a sort order, then this will
+ * be that institution's comment sort.
+ * If they belong to multiple institutions then the arbitrarily "first" institution's
+ * sort order will be used.
+ *
+ * @param int $userid Which user to check (defaults to $USER)
+ * @return string Sort order - either 'earliest', 'latest'.
+ */
+function get_user_institution_comment_sort_order($userid = null) {
+
+    $instsorts = get_configs_user_institutions('commentsortorder', $userid);
+    $sortorder = null;
+    // Every user belongs to at least one institution
+    foreach ($instsorts as $sort) {
+        // If the user belongs to multiple institutions, arbitrarily use the sort
+        // from the first one that has specified a sort.
+        if (!empty($sort)) {
+            $sortorder = $sort;
+            break;
+        }
+    }
+    return $sortorder;
+}
+
+/**
+ * Returns all directories of installed plugins except for local
+ * from the current codebase.
+ *
+ * This is relatively slow and not fully cached, use with care!
+ *
+ * @return array ('plugintkey' => path, ...)
+ * For example, array (
+ *     'artefact.blog' => $CFG->docroot . 'artefact/blog',
+ *     'blocktype.blog' => $CFG->docroot . 'artefact/blog/blocktype/blog',
+ *     ...
+ * )
+ */
+function get_installed_plugins_paths() {
+    $versions = array();
+    // All installed plugins
+    $plugins = array();
+    foreach (plugin_types_installed() as $plugin) {
+        $dirhandle = opendir(get_config('docroot') . $plugin);
+        while (false !== ($dir = readdir($dirhandle))) {
+            if (strpos($dir, '.') === 0 || 'CVS' == $dir) {
+                continue;
+            }
+            if (!is_dir(get_config('docroot') . $plugin . '/' . $dir)) {
+                continue;
+            }
+            try {
+                validate_plugin($plugin, $dir);
+                $plugins[] = array($plugin, $dir);
+            }
+            catch (InstallationException $_e) {
+                log_warn("Plugin $plugin $dir is not installable: " . $_e->GetMessage());
+            }
+
+            if ($plugin === 'artefact') { // go check it for blocks as well
+                $btlocation = get_config('docroot') . $plugin . '/' . $dir . '/blocktype';
+                if (!is_dir($btlocation)) {
+                    continue;
+                }
+                $btdirhandle = opendir($btlocation);
+                while (false !== ($btdir = readdir($btdirhandle))) {
+                    if (strpos($btdir, '.') === 0 || 'CVS' == $btdir) {
+                        continue;
+                    }
+                    if (!is_dir(get_config('docroot') . $plugin . '/' . $dir . '/blocktype/' . $btdir)) {
+                        continue;
+                    }
+                    $plugins[] = array('blocktype', $dir . '/' . $btdir);
+                }
+            }
+        }
+    }
+    $pluginpaths = array();
+    foreach ($plugins as $plugin) {
+        $plugintype = $plugin[0];
+        $pluginname = $plugin[1];
+        $pluginpath = "$plugin[0]/$plugin[1]";
+        $pluginkey  = "$plugin[0].$plugin[1]";
+
+        if ($plugintype == 'blocktype' && strpos($pluginname, '/') !== false) {
+            $bits = explode('/', $pluginname);
+            $pluginpath = 'artefact/' . $bits[0] . '/blocktype/' . $bits[1];
+        }
+
+        $pluginpaths[$pluginkey] = get_config('docroot') . $pluginpath;
+    }
+
+    return $pluginpaths;
+}
+
+/**
+ * Returns hash of all versions including core and all installed plugins except for local
+ * from the current codebase.
+ *
+ * This is relatively slow and not fully cached, use with care!
+ *
+ * @return string sha1 hash
+ */
+function get_all_versions_hash() {
+    $versions = array();
+    // Get core version
+    require(get_config('libroot') . 'version.php');
+    $versions['core'] = $config->version;
+    // All installed plugins
+    $pluginpaths = get_installed_plugins_paths();
+    foreach ($pluginpaths as $pluginkey => $pluginpath) {
+        require($pluginpath . '/version.php');
+        $versions[$pluginkey] = $config->version;
+    }
+
+    return sha1(serialize($versions));
+}
+
+/*
+ * Update the information on our progress so the browser can access it via
+ * json/progress.php.
+ *
+ * @param token    (Alphanumeric) An identifier unique to the page. This
+ *                 allows multiple progress meters on different tabs of a
+ *                 browser at the same time.
+ * @param numerator (Int) The top number in the fraction of work done so far.
+ * @param denominator (Int) The bottom number in the fraction of work done so
+ *                 far. If 0, no percentage will be displayed.
+ * @param message  A message to be displayed in the progress bar prior to the
+ *                 percentage.
+ */
+function set_progress_info($token, $numerator = 0, $denominator = 1, $message = '') {
+    global $SESSION;
+
+    $SESSION->set_progress($token, array(
+                'finished' => FALSE,
+                'numerator' => $numerator,
+                'denominator' => $denominator,
+                'message' => $message
+                ));
+}
+
+/**
+ * Update the information on our progress so the browser can access it via
+ * json/progress.php.
+ *
+ * @param token    (Alphanumeric) An identifier unique to the page. This
+ *                 allows multiple progress meters on different tabs of a
+ *                 browser at the same time.
+ * @param data     Any data to be passed back to the browser (instructions
+ *                 for meter_update() in js/mahara.js.
+ */
+function set_progress_done($token, $data = array()) {
+    global $SESSION;
+
+    $data['finished'] = TRUE;
+
+    $SESSION->set_progress($token, $data);
 }

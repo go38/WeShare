@@ -730,7 +730,7 @@ $string['onlineusers'] = '線上用戶';
 $string['optionalinstitutionid'] = '機構身份認證碼 (選擇性)';
 $string['organisedescription'] = '將您的歷程資料整理成<a href="%s">頁面</a>或<a href="/collection/">專輯</a>，<br/>選用素材為各觀眾建立不同的展示。';
 $string['organisesubtitle'] = '展示您的學習檔案資料';
-$string['orloginvia'] = '或經由Mozilla Persona服務登入：';
+$string['orloginvia'] = '或由下列服務登入：';
 $string['overview'] = '概觀';
 $string['password'] = '密碼';
 $string['passwordchangedok'] = '您的密碼已經成功變更了';

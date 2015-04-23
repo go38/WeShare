@@ -103,13 +103,13 @@ $viewtheme = $view->get('theme');
 if ($viewtheme && $THEME->basename != $viewtheme) {
     $THEME = new Theme($viewtheme);
 }
-$stylesheets = array('<link rel="stylesheet" type="text/css" href="' . get_config('wwwroot') . 'theme/views.css?v=' . get_config('release'). '">');
+$stylesheets = array('<link rel="stylesheet" type="text/css" href="' . append_version_number(get_config('wwwroot') . 'theme/views.css') . '">');
 $stylesheets = array_merge($stylesheets, $view->get_all_blocktype_css());
 // include slimbox2 js and css files, if it is enabled...
 if (get_config_plugin('blocktype', 'gallery', 'useslimbox2')) {
     $langdir = (get_string('thisdirection', 'langconfig') == 'rtl' ? '-rtl' : '');
-    $stylesheets = array_merge($stylesheets, array('<script type="text/javascript" src="' . get_config('wwwroot') . 'lib/slimbox2/js/slimbox2.js?v=' . get_config('release'). '"></script>',
-                     '<link rel="stylesheet" type="text/css" href="' . get_config('wwwroot') . 'lib/slimbox2/css/slimbox2' . $langdir . '.css?v=' . get_config('release'). '">'
+    $stylesheets = array_merge($stylesheets, array('<script type="application/javascript" src="' . append_version_number(get_config('wwwroot') . 'lib/slimbox2/js/slimbox2.js') . '"></script>',
+                     '<link rel="stylesheet" type="text/css" href="' . append_version_number(get_config('wwwroot') . 'lib/slimbox2/css/slimbox2' . $langdir . '.css') . '">'
                      ));
 }
 
@@ -269,6 +269,18 @@ if ($userid != $USER->get('id') && $USER->is_admin_for_user($user) && is_null($U
 } else {
     $loginas = null;
 }
+// Set up skin, if the page has one
+$viewskin = $view->get('skin');
+$owner    = $view->get('owner');
+$issiteview = $view->get('institution') == 'mahara';
+if ($viewskin && get_config('skins') && can_use_skins($owner, false, $issiteview) && (!isset($THEME->skins) || $THEME->skins !== false)) {
+    $skin = array('skinid' => $viewskin, 'viewid' => $view->get('id'));
+    $skindata = unserialize(get_field('skin', 'viewskin', 'id', $viewskin));
+}
+else {
+    $skin = false;
+}
+
 $smarty = smarty(
     $javascript,
     $stylesheets,
@@ -276,6 +288,7 @@ $smarty = smarty(
     array(
         'stylesheets' => array('style/views.css'),
         'sidebars'    => false,
+        'skin' => $skin
     )
 );
 $smarty->assign('restrictedview', $restrictedview);
@@ -322,6 +335,15 @@ if (get_config('viewmicroheaders')) {
     $smarty->assign('microheaders', true);
     $smarty->assign('microheadertitle', $view->display_title(true, false));
     $smarty->assign('maharalogofilename', 'images/site-logo-small.png');
+    // Support for normal, light, or dark small Mahara logo - to use with skins
+    if ($skin) {
+        if ($skindata['header_logo_image'] == 'light') {
+            $smarty->assign('maharalogofilename', 'images/site-logo-small-light.png');
+        }
+        else if ($skindata['header_logo_image'] == 'dark') {
+            $smarty->assign('maharalogofilename', 'images/site-logo-small-dark.png');
+        }
+    }
     if ($loggedinid && $loggedinid == $userid) {
         $microheaderlinks = array(
             array(
@@ -337,6 +359,13 @@ else {
         $smarty->assign('ownprofile', true);
     }
     $smarty->assign('pageheadinghtml', $view->display_title(false));
+    if ($skin) {
+        if ($skindata['header_logo_image'] == 'light' || $skindata['header_logo_image'] == 'dark') {
+            // override the default $smarty->assign('sitelogo') that happens
+            // in the initial call to smarty()
+            $smarty->assign('sitelogo', $THEME->header_logo($skindata['header_logo_image']));
+        }
+    }
 }
 
 if (!$restrictedview) {

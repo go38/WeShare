@@ -1,11 +1,26 @@
 <?php
 /**
+ * Mahara: Electronic portfolio, weblog, resume builder and social networking
+ * Copyright (C) 2006-2008 Catalyst IT Ltd (http://www.catalyst.net.nz)
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * @package    mahara
- * @subpackage lang
- * @author     Catalyst IT Ltd
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL version 3 or later
- * @copyright  For copyright information on Mahara, please see the README file distributed with this software.
+ * @subpackage lang/zh_tw.utf8
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL
+ * @author     
+ * @copyright  
  *
  */
 
@@ -113,6 +128,10 @@ $string['posts'] = '文章';
 $string['postscopiedfromview'] = '於%s複製文章';
 $string['posttitle'] = '標題';
 $string['progress_blog'] = '新增一本日誌';
+$string['progress_blogpost'] = array(
+'新增 1 篇文章到日誌',
+'新增 %s 篇文章到日誌',
+);
 $string['publish'] = '發表';
 $string['publishblogpost?'] = '您確定要發表這篇文章？';
 $string['published'] = '已發表';
@@ -142,7 +161,3 @@ $string['youarenottheownerofthisblogpost'] = '您不是此文章的擁有者';
 $string['youhaveblogs'] = '您有%s篇日誌。';
 $string['youhavenoblogs'] = '您沒有日誌。';
 $string['youhaveoneblog'] = '您有一篇日誌。';
-$string['progress_blogpost'] = array(
-    '新增 1 篇文章到日誌',
-    '新增 %s 篇文章到日誌',
-);

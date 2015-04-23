@@ -15,7 +15,7 @@
     <input type="hidden" name="{{$name}}_invalid[]" value="{{$email}}">
   {{/foreach}}
 {{else}}
-<script type="text/javascript">
+<script type="application/javascript">
     var {{$name}}_newrefinput = null;
     var {{$name}}_newref = null;
 
@@ -52,7 +52,7 @@
             return false;
         }
 
-        {{$name}}_newrefinput = INPUT({'type': 'text'});
+        {{$name}}_newrefinput = INPUT({'type': 'text', 'id': 'addnew{{$name}}'});
         {{$name}}_newrefsubmit = INPUT({'type': 'submit', 'class': 'btn', 'value': '{{$addbuttonstr}}'});
         {{$name}}_newref = DIV(null,{{$name}}_newrefinput,' ',{{$name}}_newrefsubmit);
 

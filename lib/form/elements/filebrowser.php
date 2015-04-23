@@ -152,6 +152,8 @@ function pieform_element_filebrowser(Pieform $form, $element) {
     $fileliststr = json_encode($filedata);
 
     $smarty->assign('prefix', $prefix);
+    $accepts = isset($element['accept']) ? 'accept="' . Pieform::hsc($element['accept']) . '"' : '';
+    $smarty->assign('accepts', $accepts);
 
     $initjs = "{$prefix} = new FileBrowser('{$prefix}', {$folder}, {$configstr}, config);
 {$prefix}.filedata = {$fileliststr};";
@@ -1492,12 +1494,17 @@ function pieform_element_filebrowser_views_js(Pieform $form, $element) {
  */
 function pieform_element_filebrowser_get_headdata($element) {
     global $THEME;
-    $headdata = array('<script type="text/javascript" src="' . get_config('wwwroot') . 'artefact/file/js/filebrowser.js"></script>');
+    $headdata = array('<script type="application/javascript" src="' . get_config('wwwroot') . 'artefact/file/js/filebrowser.js"></script>');
     if ($element['config']['upload']) {
         // only add dropzone if filebrowser is allowed to upload
-        $headdata[] = '<script type="text/javascript" src="' . get_config('wwwroot') . 'js/dropzone/dropzone.min.js"></script>';
+        $headdata[] = '<script type="application/javascript" src="' . get_config('wwwroot') . 'js/dropzone/dropzone.min.js"></script>';
         $headdata[] = '<link href="' . get_config('wwwroot') . 'js/dropzone/css/dropzone.css" type="text/css" rel="stylesheet">';
-        $headdata[] = '<script type="text/javascript" src="' . get_config('wwwroot') . 'artefact/file/js/filedropzone.js"></script>';
+        $headdata[] = '<script type="application/javascript" src="' . get_config('wwwroot') . 'artefact/file/js/filedropzone.js"></script>';
+    }
+    if ($element['config']['edit']) {
+        // Add switchbox css if filebrowser is allowed to edit
+        require_once(get_config('docroot') . 'lib/form/elements/switchbox.php');
+        $headdata[] = join(' ', pieform_element_switchbox_get_headdata($element));
     }
     $strings = PluginArtefactFile::jsstrings('filebrowser');
     $jsstrings = '';
@@ -1506,7 +1513,7 @@ function pieform_element_filebrowser_get_headdata($element) {
             $jsstrings .= "strings.$s=" . json_encode(get_raw_string($s, $section)) . ';';
         }
     }
-    $headdata[] = '<script type="text/javascript">' . $jsstrings . '</script>';
+    $headdata[] = '<script type="application/javascript">' . $jsstrings . '</script>';
 
     $pluginsheets = $THEME->get_url('style/style.css', true, 'artefact/file');
     foreach (array_reverse($pluginsheets) as $sheet) {

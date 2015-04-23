@@ -23,6 +23,7 @@ require_once(get_config('libroot') . 'objectionable.php');
 require_once('institution.php');
 require_once('group.php');
 safe_require('artefact', 'comment');
+safe_require('artefact', 'file');
 
 // access key for roaming teachers
 $mnettoken = $SESSION->get('mnetuser') ? param_alphanum('mt', null) : null;
@@ -185,7 +186,7 @@ function releaseview_submit() {
     redirect($view->get_url());
 }
 
-$javascript = array('paginator', 'viewmenu', 'expandable', 'author');
+$javascript = array('paginator', 'viewmenu', 'expandable', 'author', 'js/jquery/jquery-ui/js/jquery-ui-1.10.2.min.js');
 $blocktype_js = $view->get_all_blocktype_javascript();
 $javascript = array_merge($javascript, $blocktype_js['jsfiles']);
 $inlinejs = "addLoadEvent( function() {\n" . join("\n", $blocktype_js['initjs']) . "\n});";
@@ -209,15 +210,20 @@ if ($USER->is_logged_in()) {
 }
 
 $viewbeingwatched = (int)record_exists('usr_watchlist_view', 'usr', $USER->get('id'), 'view', $viewid);
-
-$feedback = ArtefactTypeComment::get_comments($limit, $offset, $showcomment, $view);
+$commentoptions = ArtefactTypeComment::get_comment_options();
+$commentoptions->limit = $limit;
+$commentoptions->offset = $offset;
+$commentoptions->showcomment = $showcomment;
+$commentoptions->view = $view;
+$feedback = ArtefactTypeComment::get_comments($commentoptions);
 
 // Set up theme
 $viewtheme = $view->get('theme');
 if ($viewtheme && $THEME->basename != $viewtheme) {
     $THEME = new Theme($viewtheme);
 }
-$headers = array('<link rel="stylesheet" type="text/css" href="' . get_config('wwwroot') . 'theme/views.css?v=' . get_config('release'). '">');
+$headers = array('<link rel="stylesheet" type="text/css" href="' . append_version_number(get_config('wwwroot') . 'theme/views.css') . '">');
+$headers[] = '<link rel="stylesheet" type="text/css" href="' . append_version_number(get_config('wwwroot') . 'js/jquery/jquery-ui/css/ui-lightness/jquery-ui-1.10.2.min.css') . '">';
 $headers = array_merge($headers, $view->get_all_blocktype_css());
 // Set up skin, if the page has one
 $viewskin = $view->get('skin');
@@ -238,12 +244,13 @@ if (!$view->is_public()) {
 if (get_config_plugin('blocktype', 'gallery', 'useslimbox2')) {
     $langdir = (get_string('thisdirection', 'langconfig') == 'rtl' ? '-rtl' : '');
     $headers = array_merge($headers, array(
-        '<script type="text/javascript" src="' . get_config('wwwroot') . 'lib/slimbox2/js/slimbox2.js?v=' . get_config('release'). '"></script>',
-        '<link rel="stylesheet" type="text/css" href="' . get_config('wwwroot') . 'lib/slimbox2/css/slimbox2' . $langdir . '.css?v=' . get_config('release'). '">'
+        '<script type="application/javascript" src="' . append_version_number(get_config('wwwroot') . 'lib/slimbox2/js/slimbox2.js') . '"></script>',
+        '<link rel="stylesheet" type="text/css" href="' . append_version_number(get_config('wwwroot') . 'lib/slimbox2/css/slimbox2' . $langdir . '.css') . '">'
     ));
 }
 
 $can_edit = $USER->can_edit_view($view) && !$submittedgroup && !$view->is_submitted();
+$can_copy = $view->is_copyable($view);
 
 $viewgroupform = false;
 if ($owner && $owner == $USER->get('id')) {
@@ -259,7 +266,10 @@ $viewcontent = $view->build_rows(); // Build content before initialising smarty 
 $smarty = smarty(
     $javascript,
     $headers,
-    array(),
+    array('confirmcopytitle' => 'view',
+          'confirmcopydesc' => 'view',
+          'View' => 'view',
+          'Collection' => 'collection'),
     array(
         'stylesheets' => $extrastylesheets,
         'sidebars' => false,
@@ -273,6 +283,37 @@ var showmore = {$showmore};
 addLoadEvent(function () {
     paginator = {$feedback->pagination_js}
 });
+
+\$j(function() {
+    \$j('#column-container .blockinstance-content .commentlink').each(function() {
+        var blockid = \$j(this).attr('id').match(/\d+/);
+        // only use comments expander if there are comments on the artefact
+        \$j(this).on('click', function(e) {
+            var commentlink = \$j(this);
+            var chtml = commentlink.parent().parent().find('#feedbacktable_' + blockid).parent();
+            // add a 'close' link at the bottom of the list for convenience
+            if (\$j('#closer_' + blockid).length == 0) {
+                var closer = \$j('<a id="closer_' + blockid + '" href="#" class="close-link">Close</a>').click(function(e) {
+                    \$j(this).parent().toggle(400, function() {
+                        commentlink.focus();
+                    });
+                    e.preventDefault();
+                });
+                chtml.append(closer);
+            }
+            chtml.toggle(400, function() {
+                if (chtml.is(':visible')) {
+                    chtml.find('a').first().focus();
+                }
+                else {
+                    commentlink.focus();
+                }
+            });
+            e.preventDefault();
+        });
+    });
+});
+
 EOF;
 
 // collection top navigation
@@ -310,8 +351,9 @@ if ($view->is_anonymous()) {
 
 
 $titletext = ($collection && $shownav) ? hsc($collection->get('name')) : $view->display_title(true, false, false);
-
+$smarty->assign('visitstring', $view->visit_message());
 if (get_config('viewmicroheaders')) {
+    $microheaderlinks = array();
     $smarty->assign('microheaders', true);
 
     $smarty->assign('microheadertitle', $titletext);
@@ -329,30 +371,37 @@ if (get_config('viewmicroheaders')) {
 
     if ($can_edit) {
         if ($new) {
-            $microheaderlinks = array(
-                array(
-                    'name' => get_string('back'),
-                    'url' => get_config('wwwroot') . 'view/blocks.php?id=' . $viewid . '&new=1',
-                    'type' => 'reply',
-                ),
+            $microheaderlinks[] = array(
+                'name' => get_string('back'),
+                'url' => get_config('wwwroot') . 'view/blocks.php?id=' . $viewid . '&new=1',
+                'type' => 'reply',
             );
         }
         else {
-            $microheaderlinks = array(
-                array(
-                    'name' => get_string('editthisview', 'view'),
-                    'image' => $THEME->get_url('images/btn_edit.png'),
-                    'url' => get_config('wwwroot') . 'view/blocks.php?id=' . $viewid,
-                ),
+            $microheaderlinks[] = array(
+                'name' => get_string('edit', 'mahara'),
+                'image' => $THEME->get_url('images/btn_edit.png'),
+                'url' => get_config('wwwroot') . 'view/blocks.php?id=' . $viewid,
             );
         }
-        $smarty->assign('microheaderlinks', $microheaderlinks);
     }
-
+    if ($can_copy) {
+        $microheaderlinks[] = array(
+            'name' => get_string('copy', 'mahara'),
+            'image' => $THEME->get_url('images/btn_edit.png'),
+            'url' => get_config('wwwroot') . 'view/copy.php?id=' . $viewid . (!empty($collection) ? '&collection=' . $collection->get('id') : ''),
+            'class' => 'copyview',
+        );
+    }
+    $smarty->assign('microheaderlinks', $microheaderlinks);
 }
-else if ($can_edit) {
-    $smarty->assign('visitstring', $view->visit_message());
-    $smarty->assign('editurl', get_config('wwwroot') . 'view/blocks.php?id=' . $viewid . ($new ? '&new=1' : ''));
+else {
+    if ($can_edit) {
+        $smarty->assign('editurl', get_config('wwwroot') . 'view/blocks.php?id=' . $viewid . ($new ? '&new=1' : ''));
+    }
+    if ($can_copy) {
+        $smarty->assign('copyurl', get_config('wwwroot') . 'view/copy.php?id=' . $viewid . (!empty($collection) ? '&collection=' . $collection->get('id') : ''));
+    }
 }
 
 $title = hsc(TITLE);
@@ -382,7 +431,7 @@ if ($mnetviewlist = $SESSION->get('mnetviewaccess')) {
     }
 }
 
-$smarty->assign('viewdescription', $view->get('description'));
+$smarty->assign('viewdescription', ArtefactTypeFolder::append_view_url($view->get('description'), $view->get('id')));
 $smarty->assign('viewcontent', $viewcontent);
 $smarty->assign('releaseform', $releaseform);
 if (isset($addfeedbackform)) {

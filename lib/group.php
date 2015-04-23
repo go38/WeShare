@@ -131,7 +131,7 @@ function group_user_can_edit_views($group, $userid=null) {
         return true;
     }
 
-    if (!is_logged_in()) {
+    if (empty($userid) && !is_logged_in()) {
         return false;
     }
 
@@ -811,11 +811,15 @@ function group_delete($groupid, $shortname=null, $institution=null, $notifymembe
             ),
         ));
     }
-
+    // make sure the group name + deleted suffix will fit within 128 chars
+    $delete_name = $group->name;
+    if (strlen($delete_name) > 100) {
+        $delete_name = substr($delete_name, 0, 100) . '(...)';
+    }
     update_record('group',
         array(
             'deleted' => 1,
-            'name' => $group->name . '.deleted.' . time(),
+            'name' => $delete_name . '.deleted.' . time(),
             'shortname' => null,
             'institution' => null,
             'category' => null,
@@ -932,8 +936,11 @@ function group_remove_user($groupid, $userid=null, $force=false) {
  *                userid => role,
  *                ...
  *            )
+ * @param lines_done Number of lines in the file that have been completed so far
+ * @param num_lines Number of lines in the file (this and the previous values
+ *  are used to update the progress meter.
  */
-function group_update_members($groupid, $members) {
+function group_update_members($groupid, $members, $lines_done = 0, $num_lines = 0) {
     global $USER;
 
     $groupid = group_param_groupid($groupid);
@@ -999,12 +1006,19 @@ function group_update_members($groupid, $members) {
     $removed = 0;
     $updated = 0;
 
+    $to_add = count(array_diff_key($members, $oldmembers));
+    $to_remove = count(array_diff_key($oldmembers, $members));
+    $to_update = count($members) - $to_add;
+
     db_begin();
 
     foreach ($members as $userid => $role) {
         if (!isset($oldmembers[$userid])) {
             group_add_user($groupid, $userid, $role);
             $added ++;
+            if (!(($lines_done + $added) % 25)) {
+                set_progress_info('uploadgroupmemberscsv', $num_lines + 9 * ($lines_done + count($members) * $added / ($to_add + $to_remove)), $num_lines * 10, get_string('committingchanges', 'admin'));
+            }
         }
         else if ($oldmembers[$userid]->role != $role) {
             set_field('group_member', 'role', $role, 'group', $groupid, 'member', $userid);
@@ -1016,6 +1030,9 @@ function group_update_members($groupid, $members) {
         if (!isset($members[$userid])) {
             group_remove_user($groupid, $userid, true);
             $removed ++;
+            if (!(($lines_done + $added + $removed) % 25)) {
+                set_progress_info('uploadgroupmemberscsv', $num_lines + 9 * ($lines_done + count($members) * ($added + $removed) / ($to_add + $to_remove)), $num_lines * 10, get_string('committingchanges', 'admin'));
+            }
         }
     }
 
@@ -1382,7 +1399,7 @@ function group_get_admin_ids($groupid) {
     return (array)get_column_sql("SELECT \"member\"
         FROM {group_member}
         WHERE \"group\" = ?
-        AND \"role\" = 'admin'", $groupid);
+        AND \"role\" = 'admin'", array($groupid));
 }
 
 /**
@@ -2286,7 +2303,11 @@ function install_system_grouphomepage_view() {
             'title' => '',
             'row'    => 1,
             'column' => 1,
-            'config' => array('showgroupviews' => 1, 'showsharedviews' => 1),
+            'config' => array(
+                    'showgroupviews' => 1,
+                    'showsharedviews' => 1,
+                    'showsharedcollections' => 1,
+            ),
         ),
         array(
             'blocktype' => 'groupmembers',

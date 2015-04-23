@@ -59,7 +59,19 @@ ul.colnav li a:active {
     border-radius: 0 0 5px 5px;
 }
 /* feedback */
-#feedbacktable .commentrightwrap {
+.feedbacktable .commentrightwrap {
+    background: #FFFFFF;
+}
+/* annotation */
+.viewannotationfeedback {
+    border: 0;
+    background: #f7f7fb url(../images/annotation-shad.png) repeat-x 0 0;
+    padding-top: 15px;
+    -webkit-border-radius: 0 0 5px 5px;
+    -moz-border-radius: 0 0 5px 5px;
+    border-radius: 0 0 5px 5px;
+}
+.annotationtable .commentrightwrap {
     background: #FFFFFF;
 }
 /* view menu */

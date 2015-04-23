@@ -435,6 +435,10 @@ class View {
         $blocks = get_records_array('block_instance', 'view', $view->get('id'));
         if ($blocks) {
             foreach ($blocks as $b) {
+                // As some artefact references have been changed, e.g embedded images
+                // we need to rebuild the artefact list for each block
+                $bi = new BlockInstance($b->id);
+                $bi->rebuild_artefact_list();
                 $configdata = unserialize($b->configdata);
                 if (!isset($configdata['artefactid'])) {
                     continue;
@@ -612,7 +616,7 @@ class View {
         return new View($view->get('id')); // Reread to ensure defaults are set
     }
 
-    public function default_columnsperrow() {
+    public static function default_columnsperrow() {
         $default = array(1 => (object)array('row' => 1, 'columns' => 3, 'widths' => '33,33,33'));
         if (!$id = get_field('view_layout_columns', 'id', 'columns', $default[1]->columns, 'widths', $default[1]->widths)) {
             throw new SystemException("View::default_columnsperrow: Default columns = 3, widths = '33,33,33' not in view_layout_columns table");
@@ -986,7 +990,7 @@ class View {
         // Use set_access() on the first view to get a hopefully consistent
         // and complete representation of the access list
         $firstview = new View($viewids[0]);
-        $fullaccesslist = $firstview->set_access($config['accesslist']);
+        $fullaccesslist = $firstview->set_access($config['accesslist'], $viewids);
 
         // Copy the first view's access records to all the other views
         $firstview->copy_access($viewids);
@@ -1022,10 +1026,12 @@ class View {
         db_commit();
     }
 
-    /*Return preview image for creation of custom layout
+    /* Returns preview image for creation of custom layout
+     *
+     * @param array
+     * @return string SVG preview image
      */
     public function updatecustomlayoutpreview($values) {
-        global $THEME;
         require_once(get_config('libroot') . 'layoutpreviewimage.php');
 
         $require = array('numrows');
@@ -1043,7 +1049,6 @@ class View {
             }
         }
 
-        $previewimage = 'vl-';
         $alttext = '';
         $customlayout = array();
         for ($i=0; $i<$numrows; $i++) {
@@ -1051,44 +1056,32 @@ class View {
             $widths = get_field('view_layout_columns', 'widths', 'id', $id);
             $hyphenatedwidths = str_replace(',', '-', $widths);
             $customlayout[$i+1] = $hyphenatedwidths;
-            $previewimage .= $hyphenatedwidths;
             $alttext .= $hyphenatedwidths;
-            if ($i != $numrows -1) {
-                $previewimage .= '_';
+            if ($i != $numrows - 1) {
                 $alttext .= ' / ';
             }
         }
 
-        if (LayoutPreviewImage::preview_exists($previewimage)) {
-            $img = get_config('wwwroot') . 'thumb.php?type=customviewlayout&cvl=' . $previewimage;
-            $data = array('data' => $img, 'alttext' => $alttext, 'newimage' => 0);
-            return $data;
-        }
-        else {
-            // generate thumbnail images with GD
-            $data= array();
-            $data['layout'] = $customlayout;
-            $data['description'] = 'test';
-            $data['owner'] = 1;
+        // Generate thumbnail images.
+        $data = array();
+        $data['layout'] = $customlayout;
+        $data['text'] = $alttext;
 
-            $previewlayoutimage = new LayoutPreviewImage($data);
-            $newpreviewimage = $previewlayoutimage->create_preview();
+        $previewlayoutimage = new LayoutPreviewImage($data);
+        $previewimage = $previewlayoutimage->create_preview();
 
-            if ($newpreviewimage) {
-                $img = get_config('wwwroot') . 'thumb.php?type=customviewlayout&cvl=' . $previewimage;
-                $data = array('data' => $img, 'alttext' => $alttext, 'newimage' => 1);
-                return $data;
-            }
-            else {
-                $msg = '<p>' . get_string('previewimagegenerationfailed', 'error') . '</p>';
-                $data = array('data' => $msg, 'alttext' => $alttext, 'newimage' => 0);
-                return $data;
-            }
-        }
+        return $previewimage;
     }
 
+    /*
+     * Adds custom layout records to database and returns an array
+    * with layout id and image preview.
+    *
+    * @param array
+    * @return array
+    */
     public function addcustomlayout($values) {
-        global $THEME;
+        require_once(get_config('libroot') . 'layoutpreviewimage.php');
         $require = array('numrows');
         foreach ($require as $require) {
             if (!array_key_exists($require, $values) || empty($values[$require])) {
@@ -1100,8 +1093,6 @@ class View {
         $alttext = '';
         $rowscolssql = '';
         $rowscols = array();
-        $resultids = array();
-        $layoutid = 0;
 
         for ($i=0; $i<$numrows; $i++) {
             if (array_key_exists('row'. ($i+1), $values)) {
@@ -1200,7 +1191,8 @@ class View {
 
             for ($i=0; $i<$numrows; $i++) {
                 if (array_key_exists(($i+1), $rowscols)) {
-                    $numcols = get_field('view_layout_columns', 'columns', 'id', $rowscols[$i+1]);
+                    $widths = get_field('view_layout_columns', 'widths', 'id', $rowscols[$i+1]);
+                    $structure['layout']['row' . ($i + 1)] = get_string($widths, 'view');
                     $newrec = insert_record('view_layout_rows_columns', (object) array('viewlayout' => $newlayoutid, 'row' => ($i+1), 'columns' => $rowscols[$i+1]));
                     if (!$newrec) {
                         db_rollback();
@@ -1210,7 +1202,13 @@ class View {
             }
 
             db_commit();
-            $data = array('layoutid' => $newlayoutid, 'newlayout' => 1, 'alttext' => $alttext);
+
+            // Generate new custom layout preview.
+            $structure['text'] = $alttext;
+            $layoutpreview = new LayoutPreviewImage($structure);
+            $preview = $layoutpreview->create_preview();
+            $data = array('layoutid' => $newlayoutid, 'newlayout' => 1, 'layoutpreview' => $preview);
+
             return $data;
         }
     }
@@ -1239,7 +1237,7 @@ class View {
         return false;
     }
 
-    public function set_access($accessdata) {
+    public function set_access($accessdata, $viewids = null) {
         global $USER;
         require_once('activity.php');
         require_once('group.php');
@@ -1346,6 +1344,17 @@ class View {
         $data = new StdClass;
         $data->view = $this->get('id');
         $data->oldusers = $beforeusers;
+        if (!empty($viewids) && sizeof($viewids) > 1) {
+            $views = array();
+            foreach ($viewids as $viewid) {
+                $view = new View($viewid);
+                $views[] = array('id' => $view->get('id'),
+                                 'title' => $view->get('title'),
+                                 );
+            }
+            $data->views = $views;
+        }
+
         activity_occurred('viewaccess', $data);
         handle_event('saveview', $this->get('id'));
 
@@ -1591,7 +1600,12 @@ class View {
     public function build_category_list($category, $new=0) {
         $categories = $this->get_category_data();
         $flag = false;
-        foreach ($categories as &$cat) {
+        foreach ($categories as $i => &$cat) {
+            // The "shortcut" category should be treated special.
+            if ($cat['name'] == 'shortcut') {
+                unset($categories[$i]);
+                continue;
+            }
             $classes = '';
             if (!$flag) {
                 $flag = true;
@@ -1982,13 +1996,15 @@ class View {
 
     /**
      * Build_rows - for each row build_columms
+     * @param boolean $editing    whether we are in the edit more or not
+     * @param boolean $exporting  whether we are in the process of an export
      * Returns the HTML for the rows of this view
      */
-    public function build_rows($editing=false) {
+    public function build_rows($editing=false, $exporting=false) {
         $numrows = $this->get('numrows');
         $result = '';
         for ($i = 1; $i <= $numrows; $i++) {
-            $result .= $this->build_columns($i, $editing);
+            $result .= $this->build_columns($i, $editing, $exporting);
         }
         return $result;
     }
@@ -1996,14 +2012,14 @@ class View {
     /**
      * Returns the HTML for the columns of this view
      */
-    public function build_columns($row, $editing=false) {
+    public function build_columns($row, $editing=false, $exporting=false) {
         global $USER;
         $columnsperrow = $this->get('columnsperrow');
         $currentrownumcols = $columnsperrow[$row]->columns;
 
         $result = '';
         for ($i = 1; $i <= $currentrownumcols; $i++) {
-            $result .= $this->build_column($row, $i, $editing);
+            $result .= $this->build_column($row, $i, $editing, $exporting);
         }
 
         $smarty = smarty_core();
@@ -2024,9 +2040,10 @@ class View {
      * Returns the HTML for a particular column
      *
      * @param int $column   The column to build
-     * @param int $editing  Whether the view is being built in edit mode
+     * @param boolean $editing    Whether the view is being built in edit mode
+     * @param boolean $exporting  Whether the view is being built for export
      */
-    public function build_column($row, $column, $editing=false) {
+    public function build_column($row, $column, $editing=false, $exporting=false) {
         global $USER;
         $data = $this->get_column_datastructure($row, $column);
         static $installed = array();
@@ -2035,25 +2052,20 @@ class View {
             $installed = array_map(create_function('$a', 'return $a->name;'), $installed);
         }
 
-        if ($editing) {
-            $renderfunction = 'render_editing';
-        }
-        else {
-            $renderfunction = 'render_viewing';
-        }
         $blockcontent = '';
         foreach($data['blockinstances'] as $blockinstance) {
             if (!in_array($blockinstance->get('blocktype'), $installed)) {
                 continue; // this plugin has been disabled
             }
-            $result = $blockinstance->$renderfunction();
             if ($editing) {
+                $result = $blockinstance->render_editing();
                 $blockcontent .= $result['html'];
                 // NOTE: build_column is always called in the context of column
                 // operations, so the javascript returned, which is currently
                 // for configuring block instances only, is not necessary
             }
             else {
+                $result = $blockinstance->render_viewing($exporting);
                 $blockcontent .= $result;
             }
         }
@@ -2323,7 +2335,7 @@ class View {
                     $hrefs = array_reverse($hrefs);
 
                     foreach ($hrefs as $href) {
-                        $cssfiles[] = '<link rel="stylesheet" type="text/css" href="' . $href . '?v=' . get_config('release'). '">';
+                        $cssfiles[] = '<link rel="stylesheet" type="text/css" href="' . append_version_number($href) . '">';
                     }
                 }
             }
@@ -2509,14 +2521,10 @@ class View {
                     if ($currentcol > $prevrownumcolumns) {
                         $currentcol = 1;
                     }
-                    if ($currentcol == $values['column']) {
-                        $currentcol++; // don't redistrubute blocks here!
-                    }
                     if (!array_key_exists($currentcol, $prevrowcolumnmax)) {
                         $prevrowcolumnmax[$currentcol] = $this->get_current_max_order($values['row']-1, $currentcol);
                     }
                     $this->shuffle_cell($values['row']-1, $currentcol, $prevrowcolumnmax[$currentcol]+1);
-                    $this->shuffle_cell($values['row'], $currentcol, null, $block->get('order'));
                     $block->set('row', $values['row']-1);
                     $block->set('column', $currentcol);
                     $block->set('order', $prevrowcolumnmax[$currentcol]+1);
@@ -2710,7 +2718,7 @@ class View {
             $extravalues = array();
         }
 
-        // first move them one but switch to negtaive
+        // first move them one but switch to negative
         $sql = 'UPDATE {block_instance}
                     SET "' . $field .'" = (-1 * ("' . $field . '") ' . (($direction == 'up') ? '-' : '+') . ' 1)
                     WHERE "view" = ? AND "' . $field . '"' . $operator . ' ? ' . $extrawhere;
@@ -2928,7 +2936,6 @@ class View {
      *               what fields are available.
      */
     public function export_config($format='') {
-        $data = $this->get_row_datastructure();
         $config = array(
             'title'       => $this->get('title'),
             'description' => $this->get('description'),
@@ -2939,6 +2946,8 @@ class View {
             'ownerformat' => $this->get('ownerformat'),
         );
 
+        // Export view content
+        $data = $this->get_row_datastructure();
         foreach ($data as $rowkey => $row) {
             foreach ($row as $colkey => $column) {
                 $config['rows'][$rowkey]['columns'][$colkey] = array();
@@ -2961,6 +2970,24 @@ class View {
         return $config;
     }
 
+    /**
+     * Returns embedded image artefact IDs in the description of given views
+     *
+     * @param array $viewids
+     * @return array artefact IDs
+     */
+    public static function get_embedded_artefacts(array $viewids) {
+        if (!$aids = get_column_sql("
+            SELECT fileid
+            FROM {artefact_file_embedded}
+            WHERE resourcetype = ?
+                AND resourceid IN (" . join(',', array_map('intval', $viewids)) . ')'
+            , array('description'))) {
+            return array();
+        }
+        return $aids;
+
+    }
     /**
      * Given a data structure like the one created by {@link export_config},
      * creates and returns a View object representing the config.
@@ -3241,7 +3268,7 @@ class View {
                 }
 
                 if (empty($sortorder)) {
-                    $sortorder .= 'ORDER BY ';
+                    $sortorder .= ' ORDER BY ';
                 }
                 else {
                     $sortorder .= ', ';
@@ -3622,7 +3649,12 @@ class View {
             $limit = $userlimit;
         }
         $offset = param_integer('offset', 0);
-        $orderby = param_variable('orderby', null);
+        // load default page order from user settings as default and overwrite, if changed
+        $usersettingorderby = get_account_preference($USER->get('id'), 'orderpagesby');
+        $orderby = param_variable('orderby', $usersettingorderby);
+        if ($usersettingorderby !== $orderby) {
+            set_account_preference($USER->get('id'), 'orderpagesby', $orderby);
+        }
 
         $query  = param_variable('query', null);
         $tag    = param_variable('tag', null);
@@ -3825,6 +3857,24 @@ class View {
     }
 
     /**
+     * Check if the view is copyable by the user.
+     *
+     * @return bool
+     */
+    public function is_copyable() {
+        global $USER;
+
+        $search = new StdClass;
+        $search->copyableby = (object) array('group' => null, 'institution' => null, 'owner' => $USER->get('id'));
+        $results = self::view_search('', '', null, $search->copyableby, null, null, true, null, null, false, null, null, $this->id);
+        // Check that the this view is one the user is allowed to copy
+        if (!empty($results->count)) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * Get all views visible to a user.  Complicated because a view v
      * is visible to a user u at time t if any of the following are
      * true:
@@ -3852,10 +3902,11 @@ class View {
      * @param bool     $collection  Use query against collection names and descriptions
      * @param array    $accesstypes Only return views visible due to the given access types
      * @param array    $tag         Only return views with this tag
+     * @param integer  $viewid      Only return a particular view (find by view id)
      *
      */
     public static function view_search($query=null, $ownerquery=null, $ownedby=null, $copyableby=null, $limit=null, $offset=0,
-                                       $extra=true, $sort=null, $types=null, $collection=false, $accesstypes=null, $tag=null) {
+                                       $extra=true, $sort=null, $types=null, $collection=false, $accesstypes=null, $tag=null, $viewid=null) {
         global $USER;
         $admin = $USER->get('admin');
         $loggedin = $USER->is_logged_in();
@@ -3940,8 +3991,8 @@ class View {
                     OR c.name $like '%' || ? || '%' OR c.description $like '%' || ? || '%' ";
                 array_push($whereparams, $query, $query);
             }
-            if (get_config('searchusernames')) {
-                // If the site setting 'Search usernames' is enabled, allow searching by username.
+            if ($admin || $USER->get('staff') || !get_config('nousernames')) {
+                // If the site setting 'Never display usernames' is disabled, allow searching by username.
                 $where .= "
                     OR qu.username $like '%' || ? || '%' ";
                 array_push($whereparams, $query);
@@ -4120,7 +4171,7 @@ class View {
                     $orderby .= (!empty($item['tablealias']) ? $item['tablealias'] : 'v') . '.' . $item['column'];
                 }
 
-                if ($item['desc']) {
+                if (!empty($item['desc'])) {
                     $orderby .= ' DESC';
                 }
                 else {
@@ -4128,7 +4179,11 @@ class View {
                 }
             }
         }
-
+        // if we need to just check one view
+        if (!empty($viewid)) {
+            $where .= " AND v.id = ?";
+            $whereparams = array_merge($whereparams, array($viewid));
+        }
         $ph = array_merge($fromparams, $whereparams);
         $count = count_records_sql('SELECT COUNT(*) ' . $from . $where, $ph);
 
@@ -4323,8 +4378,15 @@ class View {
     /**
      * Get views which have been explicitly shared to a group and are
      * not owned by the group excluding the view in collections
+     *
+     * @param int $limit
+     * @param int $offset
+     * @param int $groupid
+     * @param boolean $membersonly Only return pages owned by members of the group
+     * @param string $orderby Columns to sort by (defaults to (title, id) if empty)
+     * @throws AccessDeniedException
      */
-    public static function get_sharedviews_data($limit=10, $offset=0, $groupid) {
+    public static function get_sharedviews_data($limit=10, $offset=0, $groupid, $membersonly = false, $orderby = null) {
         global $USER;
         $userid = $USER->get('id');
         require_once(get_config('libroot') . 'group.php');
@@ -4335,15 +4397,32 @@ class View {
             FROM {view} v
             INNER JOIN {view_access} a ON (a.view = v.id)
             INNER JOIN {group_member} m ON (a.group = m.group AND (a.role = m.role OR a.role IS NULL))
-            WHERE a.group = ? AND m.member = ? AND (v.group IS NULL OR v.group != ?)
+        ';
+        $where = 'WHERE a.group = ? AND m.member = ? AND (v.group IS NULL OR v.group != ?)
+               AND (a.startdate <= CURRENT_TIMESTAMP OR a.startdate IS NULL)
+               AND (a.stopdate > CURRENT_TIMESTAMP OR a.stopdate IS NULL)
                AND NOT EXISTS (SELECT 1 FROM {collection_view} cv WHERE cv.view = v.id)';
         $ph = array($groupid, $userid, $groupid);
-
-        $count = count_records_sql('SELECT COUNT(DISTINCT(v.id)) ' . $from, $ph);
+        if ($membersonly) {
+            $from .= ' INNER JOIN {group_member} m2 ON m2.member = v.owner ';
+            $where .= ' AND m2.group = ? ';
+            $ph[] = $groupid;
+        }
+        $count = count_records_sql('SELECT COUNT(DISTINCT(v.id)) ' . $from . $where, $ph);
+        if ($orderby === null) {
+            $ordersql = ' ORDER BY v.title, v.id';
+        }
+        else {
+            $ordersql = ' ORDER BY ' . $orderby . ', v.id';
+        }
         $viewdata = get_records_sql_assoc('
-            SELECT DISTINCT v.id,v.title,v.startdate,v.stopdate,v.description,v.group,v.owner,v.ownerformat,v.institution,v.urlid ' . $from . '
-            ORDER BY v.title, v.id',
-            $ph, $offset, $limit
+            SELECT DISTINCT v.id, v.title, v.startdate, v.stopdate, v.description, v.group, v.owner, v.ownerformat, v.institution, v.urlid, v.ctime, v.mtime '
+                . $from
+                . $where
+                . $ordersql,
+            $ph,
+            $offset,
+            $limit
         );
 
         if ($viewdata) {
@@ -4362,13 +4441,322 @@ class View {
     }
 
     /**
+     * Get all group views and its participation info excluding the view in collections
+     *
+     * @param int $groupid ID of the group
+     * @param string $sort in ('title', 'owner', 'membercommentcount', 'nonmembercommentcount')
+     * @param string $direction = 'asc' or 'desc'
+     * @param int $limit
+     * @param int $offset
+     * @throws AccessDeniedException if the logged-in user is not the group admin or member
+     * @return array(
+            'data'   => array(),
+            'count'  => $count,
+            'limit'  => $limit,
+            'offset' => $offset,
+        );
+     */
+    public static function get_participation_groupviews_data($groupid, $sort, $direction, $limit=10, $offset=0) {
+        global $USER;
+        $userid = $USER->get('id');
+        require_once(get_config('libroot') . 'group.php');
+        if (!group_user_access($groupid)) {
+            throw new AccessDeniedException(get_string('accessdenied', 'error'));
+        }
+        // Query group views with number of member comments
+        $sql1 = "
+        SELECT DISTINCT v.id, count(DISTINCT ac.artefact) AS membercommentcount
+        FROM {view} v
+            LEFT JOIN (
+                SELECT c.*
+                FROM {artefact_comment_comment} c
+                INNER JOIN {artefact} a ON (a.id = c.artefact)
+                WHERE EXISTS (SELECT 1 FROM {group_member} m2 WHERE m2.group = ? AND m2.member = a.author)
+            ) ac ON (ac.onview = v.id)
+        WHERE v.group = ?
+            AND NOT EXISTS (SELECT 1 FROM {collection_view} cv WHERE cv.view = v.id)
+        GROUP BY v.id ";
+        $ph = array($groupid, $groupid);
+        // Query shared views with number of non-member comments
+        $sql2 = "
+        SELECT DISTINCT v.id, count(DISTINCT ac.artefact) AS nonmembercommentcount
+        FROM {view} v
+            LEFT JOIN (
+                SELECT c.*
+                FROM {artefact_comment_comment} c
+                INNER JOIN {artefact} a ON (a.id = c.artefact)
+                WHERE NOT EXISTS (SELECT 1 FROM {group_member} m2 WHERE m2.group = ? AND m2.member = a.author)
+            ) ac ON (ac.onview = v.id)
+        WHERE v.group = ?
+            AND NOT EXISTS (SELECT 1 FROM {collection_view} cv WHERE cv.view = v.id)
+        GROUP BY v.id ";
+        $ph = array_merge($ph, array($groupid, $groupid));
+        $from = '
+            FROM {view} v
+            INNER JOIN (' . $sql1 . ') pv1 ON (pv1.id = v.id)
+            INNER JOIN (' . $sql2 . ') pv2 ON (pv2.id = v.id) ';
+
+        $count = count_records_sql('SELECT COUNT(DISTINCT(v.id)) ' . $from, $ph);
+        if (in_array($sort, array('title', 'owner', 'membercommentcount', 'nonmembercommentcount'))
+             && in_array($direction, array('asc', 'desc'))) {
+            $ordersql = "$sort $direction";
+        }
+        else {
+            $ordersql = "v.title, v.id";
+        }
+        $viewdata = get_records_sql_assoc('
+            SELECT DISTINCT v.id,v.title,v.startdate,v.stopdate,v.description,v.group,v.owner,v.ownerformat,v.institution,v.urlid, membercommentcount, nonmembercommentcount'
+            . $from . '
+            ORDER BY '. $ordersql,
+            $ph, $offset, $limit
+        );
+
+        if ($viewdata) {
+            // Get more info about view comments
+            foreach ($viewdata as &$view) {
+                if (isset($view->group)) {
+                    $view->groupname = get_field('group', 'name', 'id', $view->group);
+                }
+
+                $viewobj = new View($view->id);
+                $view->url = $viewobj->get_url();
+
+                self::get_view_comment_info($view, $groupid);
+            }
+        }
+        else {
+            $viewdata = array();
+        }
+
+        return array(
+            'data'   => array_values($viewdata),
+            'count'  => $count,
+            'limit'  => $limit,
+            'offset' => $offset,
+        );
+    }
+
+    /**
+     * Get (views + their participation info) which have been explicitly shared to a group and are
+     * not owned by the group excluding the view in collections
+     *
+     * @param int $groupid ID of the group
+     * @param string $sort in ('title', 'owner', 'membercommentcount', 'nonmembercommentcount')
+     * @param string $direction = 'asc' or 'desc'
+     * @param int $limit
+     * @param int $offset
+     * @throws AccessDeniedException if the logged-in user is not the group admin or member
+     * @return array(
+            'data'   => array(),
+            'count'  => $count,
+            'limit'  => $limit,
+            'offset' => $offset,
+        );
+     */
+    public static function get_participation_sharedviews_data($groupid, $sort, $direction, $limit=10, $offset=0) {
+    global $USER;
+        $userid = $USER->get('id');
+        require_once(get_config('libroot') . 'group.php');
+        if (!group_user_access($groupid)) {
+            throw new AccessDeniedException(get_string('accessdenied', 'error'));
+        }
+        // Query shared views with number of member comments
+        $sql1 = "
+        SELECT DISTINCT v.id, count(DISTINCT ac.artefact) AS membercommentcount
+        FROM {view} v
+            INNER JOIN {view_access} va ON (va.view = v.id)
+            LEFT JOIN (
+                SELECT c.*
+                FROM {artefact_comment_comment} c
+                INNER JOIN {artefact} a ON (a.id = c.artefact)
+                WHERE EXISTS (SELECT 1 FROM {group_member} m2 WHERE m2.group = ? AND m2.member = a.author)
+            ) ac ON (ac.onview = v.id)
+        WHERE va.group = ? AND (v.group IS NULL OR v.group != ?)
+            AND NOT EXISTS (SELECT 1 FROM {collection_view} cv WHERE cv.view = v.id)
+        GROUP BY v.id ";
+        $ph = array($groupid, $groupid, $groupid);
+        // Query shared views with number of non-member comments
+        $sql2 = "
+        SELECT DISTINCT v.id, count(DISTINCT ac.artefact) AS nonmembercommentcount
+        FROM {view} v
+            INNER JOIN {view_access} va ON (va.view = v.id)
+            LEFT JOIN (
+                SELECT c.*
+                FROM {artefact_comment_comment} c
+                INNER JOIN {artefact} a ON (a.id = c.artefact)
+                WHERE NOT EXISTS (SELECT 1 FROM {group_member} m2 WHERE m2.group = ? AND m2.member = a.author)
+            ) ac ON (ac.onview = v.id)
+        WHERE va.group = ? AND (v.group IS NULL OR v.group != ?)
+            AND NOT EXISTS (SELECT 1 FROM {collection_view} cv WHERE cv.view = v.id)
+        GROUP BY v.id ";
+        $ph = array_merge($ph, array($groupid, $groupid, $groupid));
+        $from = '
+            FROM {view} v
+            INNER JOIN (' . $sql1 . ') pv1 ON (pv1.id = v.id)
+            INNER JOIN (' . $sql2 . ') pv2 ON (pv2.id = v.id) ';
+
+        $count = count_records_sql('SELECT COUNT(DISTINCT(v.id)) ' . $from, $ph);
+        if (in_array($sort, array('title', 'owner', 'membercommentcount', 'nonmembercommentcount'))
+             && in_array($direction, array('asc', 'desc'))) {
+            $ordersql = "$sort $direction";
+        }
+        else {
+            $ordersql = "v.title, v.id";
+        }
+        $viewdata = get_records_sql_assoc('
+            SELECT DISTINCT v.id,v.title,v.startdate,v.stopdate,v.description,v.group,v.owner,v.ownerformat,v.institution,v.urlid, membercommentcount, nonmembercommentcount'
+            . $from . '
+            ORDER BY '. $ordersql,
+            $ph, $offset, $limit
+        );
+
+        if ($viewdata) {
+            // Get more info about view comments
+            foreach ($viewdata as &$view) {
+                if (isset($view->group)) {
+                    $view->groupname = get_field('group', 'name', 'id', $view->group);
+                }
+
+                $viewobj = new View($view->id);
+                $view->url = $viewobj->get_url();
+
+                self::get_view_comment_info($view, $groupid);
+            }
+        }
+        else {
+            $viewdata = array();
+        }
+
+        return array(
+            'data'   => array_values($viewdata),
+            'count'  => $count,
+            'limit'  => $limit,
+            'offset' => $offset,
+        );
+    }
+
+    /**
+     * Add comment info to a group view
+     *  - mcommenters: number of group member comments
+     *  - ecommenters: number of nonmember comments
+     *  - mcomments: list of group member comments
+     *  - ecomments: list of group nonmember comments
+     *  - comments: list of all comments
+     *
+     * @param $view a view object with $view->id
+     * @param $groupid a ID of the group that the view is shared with
+     */
+    public static function get_view_comment_info(&$view, $groupid) {
+        $viewcomments = get_records_sql_array('
+            SELECT
+                a.id, a.author, a.authorname, a.ctime, a.mtime, a.description, a.group,
+                c.private, c.deletedby, c.requestpublic, c.rating, c.lastcontentupdate,
+                u.username, u.firstname, u.lastname, u.preferredname, u.email, u.staff, u.admin,
+                u.deleted, u.profileicon, u.urlid
+            FROM {artefact} a
+            INNER JOIN {artefact_comment_comment} c ON a.id = c.artefact
+                LEFT JOIN {usr} u ON a.author = u.id
+            WHERE c.onview = ?'
+            , array($view->id));
+
+        $extcommenters = 0;
+        $membercommenters = 0;
+        $extcomments = 0;
+        $membercomments = 0;
+        $commenters = array();
+        if ($viewcomments && is_array($viewcomments)) {
+            foreach ($viewcomments as $c) {
+                if (empty($c->author)) {
+                    if (!isset($commenters[$c->authorname])) {
+                        $commenters[$c->authorname] = array();
+                    }
+                    $commenters[$c->authorname]['commenter'] = $c->authorname;
+                    $commenters[$c->authorname]['count'] = (isset($commenters[$c->authorname]['count']) ? $commenters[$c->authorname]['count'] + 1 : 1);
+                    if ($commenters[$c->authorname]['count'] == 1) {
+                        $extcommenters++;
+                    }
+                    $extcomments++;
+                }
+                else {
+                    if (!isset($commenters[$c->author])) {
+                        $commenters[$c->author] = array();
+                    }
+                    $commenters[$c->author]['commenter'] = (int) $c->author;
+                    $commenters[$c->author]['member'] = group_user_access($groupid, $c->author);
+                    $commenters[$c->author]['count'] = (isset($commenters[$c->author]['count']) ? $commenters[$c->author]['count'] + 1 : 1);
+                    if (empty($commenters[$c->author]['member'])) {
+                        if ($commenters[$c->author]['count'] == 1) {
+                            $extcommenters++;
+                        }
+                        $extcomments++;
+                    }
+                    else {
+                        if ($commenters[$c->author]['count'] == 1) {
+                            $membercommenters++;
+                        }
+                        $membercomments++;
+                    }
+                }
+            }
+        }
+
+        $view->mcommenters = $membercommenters;
+        $view->ecommenters = $extcommenters;
+        $view->mcomments = $membercomments;
+        $view->ecomments = $extcomments;
+        $view->comments = $commenters;
+    }
+
+    /**
+     * This function renders a list of participation shared views as html
+     *
+     * @param array views = array(
+                        'data'   => array of view objects,
+                        'count'  => $count,
+                        'limit'  => $limit,
+                        'offset' => $offset,
+                    )
+     * @param string template
+     * @param array options
+     * @param array pagination
+     */
+    public function render_participation_views(&$views, $template, &$pagination) {
+        $smarty = smarty_core();
+        $smarty->assign('items', $views['data']);
+
+        $views['tablerows'] = $smarty->fetch($template);
+
+        if ($views['limit'] && $pagination) {
+            $pagination = build_pagination(array(
+                'id' => $pagination['id'],
+                'class' => 'center',
+                'datatable' => $pagination['datatable'],
+                'url' => $pagination['baseurl'],
+                'jsonscript' => $pagination['jsonscript'],
+                'setlimit' => $pagination['setlimit'],
+                'count' => $views['count'],
+                'limit' => $views['limit'],
+                'offset' => $views['offset'],
+                'numbersincludefirstlast' => false,
+                'resultcounttextsingular' => $pagination['resultcounttextsingular'] ? $pagination['resultcounttextsingular'] : get_string('result'),
+                'resultcounttextplural' => $pagination['resultcounttextplural'] ? $pagination['resultcounttextplural'] :get_string('results'),
+            ));
+            $views['pagination'] = $pagination['html'];
+            $views['pagination_js'] = $pagination['javascript'];
+        }
+    }
+
+    /**
      * Get collections which have been explicitly shared to a group and are
      * not owned by the group
-     * @param $limit, $offset for pagination
-     * @param $groupid
+     * @param integer $limit
+     * @param integer $offset
+     * @param integer $groupid
+     * @param boolean $membersonly Only return collections owned by members of the gorup
+     * @param array $sort Columns to sort by (defaults to (title, id) if empty)
      * @return array of collections
      */
-    public static function get_sharedcollections_data($limit=10, $offset=0, $groupid) {
+    public static function get_sharedcollections_data($limit=10, $offset=0, $groupid, $membersonly = false, $sort = null) {
         global $USER;
 
         $userid = $USER->get('id');
@@ -4382,14 +4770,36 @@ class View {
             FROM {collection} c
                 INNER JOIN {collection_view} cv ON (cv.collection = c.id)
                 INNER JOIN {view_access} a ON (a.view = cv.view)
-                INNER JOIN {group_member} m ON (a.group = m.group AND (a.role = m.role OR a.role IS NULL))
-            WHERE a.group = ? AND m.member = ? AND (c.group IS NULL OR c.group != ?)';
+                INNER JOIN {group_member} m ON (a.group = m.group AND (a.role = m.role OR a.role IS NULL)) ';
+        $where = ' WHERE a.group = ? AND m.member = ? AND (c.group IS NULL OR c.group != ?) ';
         $ph = array($groupid, $userid, $groupid);
+        if ($membersonly) {
+            $from .= ' INNER JOIN {group_member} m2 ON m2.member = c.owner ';
+            $where .= ' AND m2.group = ? ';
+            $ph[] = $groupid;
+        }
 
-        $count = count_records_sql('SELECT COUNT(DISTINCT c.id) ' . $from, $ph);
-        $collectiondata = get_records_sql_assoc('
-            SELECT DISTINCT c.id,c.name,c.description,c.owner,c.group,c.institution ' . $from . '
-            ORDER BY c.name, c.id',
+        $count = count_records_sql('SELECT COUNT(DISTINCT c.id) ' . $from . $where, $ph);
+        $select = 'SELECT DISTINCT c.id, c.name, c.description, c.owner, c.group, c.institution';
+        $orderby = ' ORDER BY ';
+        if (is_array($sort)) {
+            foreach ($sort as $sortitem) {
+                $select .= ", {$sortitem['column']}";
+                $orderby .= " {$sortitem['column']}";
+                if (!empty($sortitem['desc'])) {
+                    $orderby .= " DESC";
+                }
+            }
+            $orderby .= ', c.id';
+        }
+        else {
+            $orderby = ' ORDER BY c.name, c.id';
+        }
+        $collectiondata = get_records_sql_assoc(
+            $select
+            . $from
+            . $where
+            . $orderby,
             $ph, $offset, $limit
         );
 
@@ -4434,7 +4844,7 @@ class View {
                     INNER JOIN {artefact_installed_type} t ON a.artefacttype = t.name
                     WHERE va.view IN (' . $viewidlist . ')
                     GROUP BY va.view, va.artefact, a.title, a.artefacttype, t.plugin
-                    ORDER BY a.title, va.artefact', '');
+                    ORDER BY a.title, va.artefact', array());
                 if ($artefacts) {
                     foreach ($artefacts as $artefactrec) {
                         safe_require('artefact', $artefactrec->plugin);
@@ -4667,16 +5077,16 @@ class View {
 
 
     public function copy_contents($template) {
+        $artefactcopies = array(); // Correspondence between original artefact ids and id of the copy
         $this->set('numcolumns', $template->get('numcolumns'));
         $this->set('numrows', $template->get('numrows'));
         $this->set('layout', $template->get('layout'));
-        $this->set('description', $template->get('description'));
+        $this->set('description', $this->copy_description($template, $artefactcopies));
         $this->set('tags', $template->get('tags'));
         $this->set('columnsperrow', $template->get('columnsperrow'));
         $blocks = get_records_array('block_instance', 'view', $template->get('id'));
-        $numcopied = array('blocks' => 0, 'artefacts' => 0);
+        $numcopied = array('blocks' => 0);
         if ($blocks) {
-            $artefactcopies = array(); // Correspondence between original artefact ids and id of the copy
             foreach ($blocks as $b) {
                 safe_require('blocktype', $b->blocktype);
                 $oldblock = new BlockInstance($b->id, $b);
@@ -4684,17 +5094,17 @@ class View {
                     $numcopied['blocks']++;
                 }
             }
-            // Go back and fix up artefact references in the new artefacts so
-            // they also point to new artefacts.
-            if ($artefactcopies) {
-                foreach ($artefactcopies as $oldid => $copyinfo) {
-                    $a = artefact_instance_from_id($copyinfo->newid);
-                    $a->update_artefact_references($this, $template, $artefactcopies, $oldid);
-                    $a->commit();
-                }
-            }
-            $numcopied['artefacts'] = count($artefactcopies);
         }
+        // Go back and fix up artefact references in the new artefacts so
+        // they also point to new artefacts.
+        if ($artefactcopies) {
+            foreach ($artefactcopies as $oldid => $copyinfo) {
+                $a = artefact_instance_from_id($copyinfo->newid);
+                $a->update_artefact_references($this, $template, $artefactcopies, $oldid);
+                $a->commit();
+            }
+        }
+        $numcopied['artefacts'] = count($artefactcopies);
         return $numcopied;
     }
 
@@ -4714,6 +5124,63 @@ class View {
             }
         }
         return $title . $ext;
+    }
+
+    /**
+     * Copy the description of the view template
+     * and its embedded image artefacts
+     *
+     * @param View $template the view template
+     * @param array &$artefactcopies the artefact mapping
+     * @return string updated description
+     */
+    private function copy_description(View $template, array &$artefactcopies) {
+        $new_description = $template->get('description');
+        if (!empty($new_description)
+            && strpos($new_description, 'artefact/file/download.php?file=') !== false) {
+            // Get all possible embedded artefacts
+            $artefactids = array_unique(artefact_get_references_in_html($new_description));
+            // Copy these image artefacts
+            foreach ($artefactids as $aid) {
+                try {
+                    $a = artefact_instance_from_id($aid);
+                }
+                catch (Exception $e) {
+                    continue;
+                }
+                if ($a instanceof ArtefactTypeImage) {
+                    $artefactcopies[$aid] = (object) array(
+                        'oldid' => $aid,
+                        'oldparent' => $a->get('parent')
+                    );
+                    $artefactcopies[$aid]->newid = $a->copy_for_new_owner(
+                        $this->get('owner'),
+                        $this->get('group'),
+                        $this->get('institution')
+                    );
+                }
+            }
+            // Update the image urls in the description
+            if (!empty($artefactcopies)) {
+                $regexp = array();
+                $replacetext = array();
+                foreach ($artefactcopies as $oldaid => $newobj) {
+                    // Change the old image id to the new one
+                    $regexp[] = '#<img([^>]+)src=("|\\")'
+                            . preg_quote(
+                                    get_config('wwwroot')
+                                    . 'artefact/file/download.php?file=' . $oldaid
+                            )
+                            . '(&|&amp;)embedded=1([^"]*)"#';
+                    $replacetext[] = '<img$1src="'
+                            . get_config('wwwroot')
+                            . 'artefact/file/download.php?file=' . $newobj->newid
+                            . '&embedded=1"';
+                }
+                $new_description = preg_replace($regexp, $replacetext, $new_description);
+            }
+        }
+        return $new_description;
     }
 
     /**
@@ -5154,10 +5621,11 @@ class View {
      * @param string  $matchconfig record all matches with given config hash (see set_access)
      * @param boolean $includeprofile include profile view
      * @param integer $submittedgroup return only views & collections submitted to this group
+     * @param $string $sort Order to sort by (defaults to 'c.name, v.title')
      *
      * @return array, array
      */
-    function get_views_and_collections($owner=null, $group=null, $institution=null, $matchconfig=null, $includeprofile=true, $submittedgroup=null) {
+    function get_views_and_collections($owner=null, $group=null, $institution=null, $matchconfig=null, $includeprofile=true, $submittedgroup=null, $sort=null) {
 
         $excludelocked = $group && group_user_access($group) != 'admin';
         // Anonymous public viewing of a group with 'Allow submissions' checked needs to avoid including the dummy root profile page.
@@ -5193,7 +5661,12 @@ class View {
             $values[] = (int) $submittedgroup;
         }
 
-        $sql .= 'ORDER BY c.name, v.title';
+        if ($sort == null) {
+            $sql .= 'ORDER BY c.name, v.title';
+        }
+        else {
+            $sql .= "ORDER BY {$sort}";
+        }
         $records = get_records_sql_assoc($sql, $values);
 
         $collections = array();
@@ -5622,6 +6095,64 @@ function createview_submit(Pieform $form, $values) {
     }
 
     redirect(get_config('wwwroot') . 'view/edit.php?new=1&id=' . $view->get('id'));
+}
+
+/**
+ * Copy a view via a 'copy' url
+ * Currently for copying a page via a 'copy' button on view/view.php
+ *
+ * @param integer $id           View id
+ * @param bool $istemplate      (optional) If you want to mark as template
+ * @param integer $groupid      (optional) The group to copy the view to
+ * @param integer $collectionid (optional) Provide the collection id to indicate we want
+ *                                         to copy collection the view belongs to
+ */
+function copyview($id, $istemplate = false, $groupid = null, $collectionid = null) {
+    global $USER, $SESSION;
+
+    // check that the user can copy view
+    $view = new View($id);
+    if (!$view->is_copyable()) {
+        throw new AccessDeniedException(get_string('thisviewmaynotbecopied', 'view'));
+    }
+
+    // set up a packet of values to send to the create_from_template function
+    $values = array('new' => 1,
+                    'owner' => $USER->get('id'),
+                    'template' => (int) $istemplate,
+                    );
+    if (!empty($groupid) && is_int($groupid)) {
+        $values['group'] = $groupid;
+    }
+
+    if (!empty($collectionid)) {
+        require_once(get_config('libroot') . 'collection.php');
+        list($collection, $template, $copystatus) = Collection::create_from_template($values, $collectionid);
+        if (isset($copystatus['quotaexceeded'])) {
+            $SESSION->add_error_msg(get_string('collectioncopywouldexceedquota', 'collection'));
+            redirect(get_config('wwwroot') . 'view/view.php?id=' . $id);
+        }
+        $SESSION->add_ok_msg(get_string('copiedpagesblocksandartefactsfromtemplate', 'collection',
+                                        $copystatus['pages'],
+                                        $copystatus['blocks'],
+                                        $copystatus['artefacts'],
+                                        $template->get('name'))
+                             );
+        redirect(get_config('wwwroot') . 'collection/edit.php?copy=1&id=' . $collection->get('id'));
+    }
+    else {
+        list($view, $template, $copystatus) = View::create_from_template($values, $id);
+        if (isset($copystatus['quotaexceeded'])) {
+            $SESSION->add_error_msg(get_string('viewcopywouldexceedquota', 'view'));
+            redirect(get_config('wwwroot') . 'view/view.php?id=' . $id);
+        }
+        $SESSION->add_ok_msg(get_string('copiedblocksandartefactsfromtemplate', 'view',
+                                        $copystatus['blocks'],
+                                        $copystatus['artefacts'],
+                                        $template->get('title'))
+                             );
+        redirect(get_config('wwwroot') . 'view/edit.php?new=1&id=' . $view->get('id'));
+    }
 }
 
 function createview_cancel_submit(Pieform $form, $values) {

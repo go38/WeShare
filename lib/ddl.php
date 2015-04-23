@@ -138,7 +138,7 @@ function table_column($table, $oldfield, $field, $type='integer', $size='10',
 
             return execute_sql('ALTER TABLE '. $CFG->prefix . $table .' '. $operation .' '. $type .' '. $signed .' '. $default .' '. $null .' '. $after);
 
-        case 'postgres7':        // From Petri Asikainen
+        case 'postgres':        // From Petri Asikainen
             //Check db-version
             $dbinfo = $db->ServerInfo();
             $dbver = substr($dbinfo['version'],0,3);
@@ -682,7 +682,9 @@ function uninstall_from_xmldb_file($file) {
 
     if ($tables = array_reverse($structure->getTables())) {
         foreach ($tables as $table) {
-            if ($indexes = $table->getIndexes()) {
+            // for MySQL, skip dropping indices and keys
+            // as they will be dropped when the table is dropped
+            if (!is_mysql() && $indexes = $table->getIndexes()) {
                 foreach ($indexes as $index) {
                     if ($index->getName() == 'usernameuk' && is_postgres()) {
                         // this is a giant hack, but adodb cannot handle resolving
@@ -694,7 +696,7 @@ function uninstall_from_xmldb_file($file) {
                     drop_index($table, $index);
                 }
             }
-            if ($keys = $table->getKeys()) {
+            if (!is_mysql() && $keys = $table->getKeys()) {
                 $sortkeys = array();
                 foreach ($keys as $key) {
                     $sortkeys[] = $key->type;
@@ -924,9 +926,9 @@ function rename_table($table, $newname, $continue=true, $feedback=true) {
  * @param boolean feedback to specify to show status info (true) or not (false)
  * @return boolean true on success, false on error
  */
-function add_field($table, $field, $continue=true, $feedback=true) {
+function add_field(XMLDBTable $table, $field, $continue=true, $feedback=true) {
 
-    global $CFG, $db;
+    global $CFG, $db, $INSERTRECORD_TABLE_COLUMNS;
 
     $status = true;
 
@@ -947,6 +949,7 @@ function add_field($table, $field, $continue=true, $feedback=true) {
         return true; //Empty array = nothing to do = no error
     }
 
+    unset($INSERTRECORD_TABLE_COLUMNS[$table->getName()]);
     return execute_sql_arr($sqlarr, $continue, $feedback);
 }
 
@@ -963,7 +966,7 @@ function add_field($table, $field, $continue=true, $feedback=true) {
  */
 function drop_field($table, $field, $continue=true, $feedback=true) {
 
-    global $CFG, $db;
+    global $CFG, $db, $INSERTRECORD_TABLE_COLUMNS;
 
     $status = true;
 
@@ -984,6 +987,7 @@ function drop_field($table, $field, $continue=true, $feedback=true) {
         return true; //Empty array = nothing to do = no error
     }
 
+    unset($INSERTRECORD_TABLE_COLUMNS[$table->getName()]);
     return execute_sql_arr($sqlarr, $continue, $feedback);
 }
 
@@ -1411,3 +1415,200 @@ function rename_index($table, $index, $newname, $continue=true, $feedback=true) 
 
     return execute_sql_arr($sqlarr, $continue, $feedback);
 }
+
+/**
+ * Return structure info of tables from a xmldb file
+ *
+ * @param string $file
+ * @return array(XMLDBTable)
+ * @throws InstallationException
+ */
+function get_tables_from_xmldb_file($file) {
+    global $CFG, $db;
+
+    $status = true;
+    $xmldb_file = new XMLDBFile($file);
+
+    if (!$xmldb_file->fileExists()) {
+        throw new InstallationException($xmldb_file->path . " doesn't exist.");
+    }
+
+    $loaded = $xmldb_file->loadXMLStructure();
+    if (!$loaded || !$xmldb_file->isLoaded()) {
+        throw new InstallationException("Could not load " . $xmldb_file->path);
+    }
+
+    $structure = $xmldb_file->getStructure();
+
+    return array_reverse($structure->getTables());
+
+}
+
+/**
+ * Return structure info of tables from mahara xmldb files
+ *
+ * @return array(XMLDBTable)
+ */
+function get_tables_from_xmldb() {
+    static $tables = array();
+    if (!empty($tables)) {
+        return $tables;
+    }
+    // Get database structure from plugins' tables
+    foreach (array_reverse(plugin_types_installed()) as $t) {
+        if ($installed = plugins_installed($t, true)) {
+            foreach ($installed  as $p) {
+                $location = get_config('docroot') . $t . '/' . $p->name. '/db/';
+                if (is_readable($location . 'install.xml')) {
+                    $tables = array_merge($tables, get_tables_from_xmldb_file($location . 'install.xml'));
+                }
+            }
+        }
+    }
+    $tables = array_merge($tables, get_tables_from_xmldb_file(get_config('docroot') . 'lib/db/install.xml'));
+
+    return $tables;
+}
+
+/**
+ * Return all columns of a table in current db
+ *
+ * @param string $tablename not including the dbprefix
+ * @return array of ADOFieldObject
+ */
+function get_columns($tablename) {
+
+    global $CFG, $db;
+
+    $fulltablename = $CFG->dbprefix . $tablename;
+    $columns = $db->MetaColumns($fulltablename);
+    // Update the field auto_increment if postgres
+    // Only apply for "ID" field
+    if (is_postgres() && isset($columns['ID'])) {
+        $idcolumn = $columns['ID'];
+        if (isset($idcolumn->default_value)
+            && strpos($idcolumn->default_value, 'nextval(') !== false ) {
+            if (record_exists($tablename)) {
+                $rec = get_record_sql('SELECT last_value FROM "' . $fulltablename . '_id_seq"');
+                $idcolumn->auto_increment = $rec->last_value + 1;
+            }
+            else {
+                $idcolumn->auto_increment = 1;
+            }
+        }
+        $columns['ID'] = $idcolumn;
+    }
+    return $columns;
+}
+
+/**
+ * Return current foreign key constraints in given table
+ *
+ * @param string $tablename not including the dbprefix
+ * @return array of array(
+ *     'constraintname' => string
+ *     'table' => string
+ *     'fields' => array
+ *     'reftable' => string
+ *     'reffields' => array
+ *     )
+ */
+function get_foreign_keys($tablename) {
+    global $CFG;
+
+    $tablename = $CFG->dbprefix . $tablename;
+    $foreignkeys = array();
+    // Get foreign key constraints from information_schema tables
+    if (is_postgres()) {
+        $dbfield = 'catalog';
+        // The query to find all the columns for a foreign key constraint
+        $fkcolsql = "
+            SELECT
+                ku.column_name,
+                ccu.table_name AS reftable_name,
+                ccu.column_name AS refcolumn_name
+            FROM
+                information_schema.key_column_usage ku
+                INNER JOIN information_schema.constraint_column_usage ccu
+                    ON ku.constraint_name = ccu.constraint_name
+                    AND ccu.constraint_schema = ku.constraint_schema
+                    AND ccu.constraint_catalog = ku.constraint_catalog
+                    AND ccu.table_catalog = ku.constraint_catalog
+                    AND ccu.table_schema = ku.constraint_schema
+            WHERE
+                ku.constraint_catalog = ?
+                AND ku.constraint_name = ?
+                AND ku.table_name = ?
+                AND ku.table_catalog = ?
+            ORDER BY ku.ordinal_position, ku.position_in_unique_constraint
+        ";
+    }
+    else {
+        $dbfield = 'schema';
+        // The query to find all the columns for a foreign key constraint
+        $fkcolsql = '
+            SELECT
+                ku.column_name,
+                ku.referenced_table_name AS reftable_name,
+                ku.referenced_column_name AS refcolumn_name
+            FROM information_schema.key_column_usage ku
+            WHERE
+                ku.constraint_schema = ?
+                AND ku.constraint_name = ?
+                AND ku.table_name = ?
+                AND ku.table_schema = ?
+            ORDER BY ku.ordinal_position, ku.position_in_unique_constraint
+        ';
+    }
+    $sql = "
+        SELECT tc.constraint_name
+        FROM information_schema.table_constraints tc
+        WHERE
+            tc.table_name = ?
+            AND tc.table_{$dbfield} = ?
+            AND tc.constraint_{$dbfield} = ?
+            AND tc.constraint_type = ?
+    ";
+    $dbname = get_config('dbname');
+    if ($constraintrec = get_records_sql_array($sql, array($tablename, $dbname, $dbname, 'FOREIGN KEY'))) {
+        // Get foreign key constraint info
+        foreach ($constraintrec as $c) {
+            $fields = array();
+            $reftable = '';
+            $reffields = array();
+            if ($colrecs = get_records_sql_array($fkcolsql, array($dbname, $c->constraint_name, $tablename, $dbname))) {
+                foreach ($colrecs as $colrec) {
+                    if (empty($reftable)) {
+                        $reftable = $colrec->reftable_name;
+                    }
+                    $fields[] = $colrec->column_name;
+                    $reffields[] = $colrec->refcolumn_name;
+                }
+            }
+            if (!empty($fields) && !empty($reftable) && !empty($reffields)) {
+                $foreignkeys[] = array(
+                    'table'          => $tablename,
+                    'constraintname' => $c->constraint_name,
+                    'fields'         => $fields,
+                    'reftable'       => $reftable,
+                    'reffields'      => $reffields,
+                );
+            }
+        }
+    }
+
+    return $foreignkeys;
+}
+
+/**
+ * Return the server info
+ *
+ * @return an array of containing two elements 'description' and 'version'
+ */
+function get_server_info() {
+
+    global $CFG, $db;
+
+    return $db->ServerInfo();
+}
+

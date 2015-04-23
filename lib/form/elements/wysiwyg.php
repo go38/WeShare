@@ -80,7 +80,7 @@ function pieform_element_wysiwyg_rule_required(Pieform $form, $value, $element, 
 function pieform_element_wysiwyg_get_headdata() {
     global $_PIEFORM_WYSIWYGS;
     if (is_html_editor_enabled()) {
-        $result = '<script type="text/javascript">'
+        $result = '<script type="application/javascript">'
          . "\nvar editor_to_focus;"
          . "\nPieformManager.connect('onsubmit', null, tinyMCE.triggerSave);"
          . "\nPieformManager.connect('onload', null, function() {\n";
@@ -95,7 +95,16 @@ function pieform_element_wysiwyg_get_headdata() {
             $result .= "    tinyMCE.execCommand('mceRemoveEditor', false, '$editor');\n";
         }
         $result .= "});</script>";
-        return array('tinymce', $result);
+        require_once(get_config('docroot') . 'artefact/file/lib.php');
+        $strings = PluginArtefactFile::jsstrings('filebrowser');
+        $jsstrings = '';
+        foreach ($strings as $section => $sectionstrings) {
+            foreach ($sectionstrings as $s) {
+                $jsstrings .= "strings.$s=" . json_encode(get_raw_string($s, $section)) . ';';
+            }
+        }
+        $headdata = '<script type="application/javascript">' . $jsstrings . '</script>';
+        return array('tinymce', $result, $headdata);
     }
     return array();
 }

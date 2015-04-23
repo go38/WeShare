@@ -16,6 +16,7 @@ define('SECTION_PLUGINNAME', 'view');
 define('SECTION_PAGE', 'edit');
 
 require(dirname(dirname(__FILE__)) . '/init.php');
+require_once(get_config('docroot') . 'blocktype/lib.php');
 require_once(get_config('libroot') . 'view.php');
 require_once(get_config('libroot') . 'group.php');
 
@@ -204,7 +205,11 @@ function editview_submit(Pieform $form, $values) {
     global $new, $view, $SESSION, $urlallowed;
 
     $view->set('title', $values['title']);
-    $view->set('description', $values['description']);
+    if (trim($values['description']) !== '') {
+        // Add or update embedded images in the view description
+        require_once('embeddedimage.php');
+        $view->set('description', EmbeddedImage::prepare_embedded_images($values['description'], 'description', $view->get('id')));
+    }
     $view->set('tags', $values['tags']);
     if (isset($values['locked'])) {
         $view->set('locked', (int)$values['locked']);
@@ -247,5 +252,5 @@ if (get_config('viewmicroheaders')) {
     $smarty->assign('microheadertitle', $view->display_title(true, false, false));
 }
 $smarty->assign('issiteview', isset($institution) && ($institution == 'mahara'));
-
+$smarty->assign('PAGEHEADING', TITLE);
 $smarty->display('view/edit.tpl');

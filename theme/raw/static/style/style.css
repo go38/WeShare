@@ -35,7 +35,9 @@ select,
 option,
 legend,
 fieldset,
-button {
+button,
+.select2-container-multi .select2-choices .select2-search-field input,
+.select2-search input {
     font-family: Arial, "Nimbus Sans L", Helvetica, sans-serif;
 }
 #container,
@@ -85,6 +87,9 @@ p span {
 /* links styling for accessibility */
 :focus {
     outline: 2px solid #FFFF00;
+}
+div:focus {
+    outline: 0;
 }
 html:focus {
     outline: 0;
@@ -246,6 +251,90 @@ form.oneline.inline div,
 img.close:focus {
     border: 1px solid #FFFF00;
 }
+/******************** UI dialog ********************/
+.ui-widget-overlay {
+    opacity: 0.7;
+    background: #000000;
+    filter: alpha(opacity=70);
+}
+.ui-dialog {
+    background: #FFFFFF;
+    border: 5px solid #DDDDDD;
+    -webkit-border-radius: 10px;
+    -moz-border-radius: 10px;
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 0.75em;
+}
+.ui-dialog .ui-dialog-titlebar {
+    border-bottom: 2px solid #D1D1D1;
+    background: none;
+    padding: 3px 0;
+}
+.ui-dialog .ui-dialog-title {
+    margin: 3px 0;
+    color: #333333;
+    font-size: 1.333em;
+    font-weight: bold;
+}
+.ui-dialog .ui-dialog-titlebar-close {
+    background: transparent url(../images/btn_close.png) no-repeat 0 0;
+    border: 0 !important;
+    margin-right: 0 !important;
+    width: 24px;
+    height: 24px;
+    padding: 0px;
+    vertical-align: top;
+    cursor: pointer !important;
+}
+.ui-dialog .ui-dialog-titlebar-close .ui-icon {
+    background: none;
+}
+.ui-dialog .ui-dialog-content {
+    padding: 0;
+    margin: 10px 0;
+}
+.ui-dialog .ui-dialog-buttonpane {
+    border-top: 0;
+    padding: 0;
+}
+.ui-dialog .ui-dialog-buttonpane .ui-dialog-buttonset {
+    float: none;
+}
+/******************** MCE Modal ********************/
+#mce-modal-block {
+    opacity: 0.7 !important;
+    background: #000000 !important;
+    filter: alpha(opacity=70) !important;
+}
+.mce-window {
+    background: #FFFFFF !important;
+    border: 5px solid #DDDDDD !important;
+    -webkit-border-radius: 10px !important;
+    -moz-border-radius: 10px !important;
+    border-radius: 10px !important;
+    padding: 10px !important;
+    font-size: 0.75em !important;
+    font-family: Arial, "Nimbus Sans L", Helvetica, sans-serif !important;
+}
+.mce-window-head {
+    padding: 3px 0 3px 0 !important;
+    border-bottom: 2px solid #D1D1D1 !important;
+}
+button.mce-close {
+    background: transparent url(../images/btn_close.png) no-repeat 0 0 !important;
+    width: 24px !important;
+    height: 24px !important;
+    font-size: 1px;
+    text-indent: -9999px;
+    overflow: hidden;
+    right: 0 !important;
+    top: 0 !important;
+}
+.mce-foot {
+    background: none !important;
+    border: 0 !important;
+}
 /******************** Ajax login ********************/
 #ajax-login-form {
     border: 5px solid #DDDDDD;
@@ -273,7 +362,7 @@ img.close:focus {
 .contextualHelp {
     padding: 10px;
     margin: 0;
-    width: 500px;
+    max-width: 500px;
     max-height: 400px;
     overflow: auto;
     background-color: #F9F9F9;
@@ -468,8 +557,12 @@ thead th {
 .bytes th,
 .date th,
 .password th,
-.multitext th {
+.multitext th,
+.autocomplete th {
     padding-top: 8px;
+}
+.switchbox th {
+    padding-top: 10px;
 }
 td {
     padding: 3px 5px;
@@ -594,39 +687,55 @@ label {
     font-weight: normal;
 }
 /* fieldset */
-fieldset {
+fieldset,
+.pseudofieldset {
     padding: 10px 15px;
     margin: 10px 0;
-    border-radius: 10px;
     -moz-border-radius: 10px;
     -webkit-border-radius: 10px;
+    border-radius: 10px;
     border: 1px solid #d1d1d1;
+}
+.pseudofieldset {
+    padding: 20px;
 }
 fieldset.collapsible {
     padding: 10px 15px;
     margin: 5px 0;
 }
-fieldset.collapsed {
+.pseudofieldset.collapsible {
+    padding: 20px;
+    margin: 30px 0;
+}
+fieldset.collapsed,
+.pseudofieldset.collapsed {
     padding: 0 15px;
     margin: 5px 0;
     border-left: 0;
     border-right: 0;
     border-bottom: 0;
-    border-radius: 0;
     -moz-border-radius: 0;
     -webkit-border-radius: 0;
+    border-radius: 0;
+}
+.pseudofieldset.collapsed {
+    clear: both;
+    margin-top: 30px;
 }
 .no-js fieldset.collapsed {
     padding: 10px 15px;
-    border-radius: 10px;
     -moz-border-radius: 10px;
     -webkit-border-radius: 10px;
+    border-radius: 10px;
     border: 1px solid #d1d1d1;
 }
 fieldset.collapsed div,
-fieldset.collapsed table {
+fieldset.collapsed table,
+.pseudofieldset.collapsed div,
+.pseudofieldset.collapsed table,
+.pseudofieldset.collapsed pre {
     position: absolute;
-    display: none;
+    display: none !important;
     padding: 0;
     border: 0;
     margin: 0;
@@ -641,30 +750,47 @@ fieldset.collapsed table {
     padding: 0;
 }
 /* legend */
-legend {
+legend,
+.pseudolegend {
     font-weight: bold;
     font-size: 1.333em;
 }
-legend h4 {
+legend h4,
+.pseudolegend h4 {
     font-size: 1em;
     margin: 0;
+}
+.pseudofieldset .pseudolegend {
+    margin-top: -28px;
+    float: left;
+    padding: 0 2px;
+    background-color: #FFFFFF;
+}
+.pseudofieldset.collapsed .pseudolegend {
+    margin-top: -8px;
 }
 fieldset.collapsible legend {
     font-size: 1.167em;
 }
-fieldset.collapsible legend a {
+.pseudofieldset.collapsible .pseudolegend {
+    font-size: 1.0em;
+}
+fieldset.collapsible legend a,
+.pseudofieldset.collapsible .pseudolegend a {
     padding-left: 15px;
-    background: url(../images/expanded.png) 0 center no-repeat;
+    background: #FFFFFF url(../images/expanded.png) 0 center no-repeat;
     text-decoration: none;
 }
-fieldset legend a:hover {
+fieldset legend a:hover,
+.pseudofieldset .pseudolegend a:hover {
     text-decoration: none;
 }
-fieldset.collapsed legend a {
-    background: url(../images/expand.png) 0 center no-repeat;
+fieldset.collapsed legend a,
+.pseudofieldset.collapsed .pseudolegend a {
+    background: #FFFFFF url(../images/expand.png) 0 center no-repeat;
 }
 .no-js fieldset.collapsed legend a {
-    background: url(../images/expanded.png) 0 center no-repeat;
+    background: #FFFFFF url(../images/expanded.png) 0 center no-repeat;
 }
 /* select */
 select {
@@ -698,6 +824,38 @@ select#uploadcsv_authinstance,
 select#adduser_authinstance {
     max-width: 380px;
 }
+/* select2 */
+.select2-container-multi .select2-choices {
+    border-top: 1px solid #ABADB3;
+    border-right: 1px solid #DBDFE6;
+    border-bottom: 1px solid #E3E9EF;
+    border-left: 1px solid #E2E3EA;
+    font-size: 1em;
+    background: #FFFFFF;
+}
+.select2-container-multi .select2-choices .select2-search-field input {
+    margin: 0;
+    font-size: 1em;
+}
+.select2-drop {
+    -webkit-border-radius: 0;
+    -moz-border-radius: 0;
+    border-radius: 0;
+}
+.select2-results .select2-no-results,
+.select2-results .select2-searching,
+.select2-results .select2-ajax-error,
+.select2-results .select2-selection-limit {
+    margin: 0;
+    padding: 3px 5px;
+    font-size: 0.75em;
+}
+.select2-results li {
+    margin: 0;
+}
+.tagexcluded {
+    background: #ffd9d9 !important;
+}
 /* radio & checkbox */
 .radio,
 .checkbox {
@@ -715,7 +873,7 @@ hr {
 }
 /* textarea */
 textarea {
-    padding: 0;
+    padding: 3px 5px;
     margin: 0;
     border-top: 1px solid #ABADB3;
     border-right: 1px solid #DBDFE6;
@@ -725,11 +883,15 @@ textarea {
     font-size: 1em;
 }
 textarea:focus {
-    outline: 2px solid #FFFF00;
+    border: 1px solid #5897fb;
+    -webkit-box-shadow: 0 0 5px 0 rgba(0,0,0,0.3);
+    box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.3);
+    outline: none;
 }
 /* resizable textbox */
 .resizable-textarea {
     max-width: 100% !important;
+    width: 100%;
 }
 div.grippie {
     background: #EEEEEE url(../images/grippie.png) no-repeat scroll 100% 50%;
@@ -752,7 +914,10 @@ input.text:focus,
 input.password:focus,
 input[type=text]:focus,
 input[type=password]:focus {
-    outline: 2px solid #FFFF00;
+    border: 1px solid #5897fb;
+    -webkit-box-shadow: 0 0 5px 0 rgba(0,0,0,0.3);
+    box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.3);
+    outline: none;
 }
 input.submit:focus {
     outline: none;
@@ -787,7 +952,6 @@ button.ui-datepicker-trigger {
 input.calendar.required {
     background-color: #FFF2F2;
 }
-
 /* mceEditor */
 .mceEditor {
     display: inline-block;
@@ -800,6 +964,13 @@ input.calendar.required {
 }
 .mce-stack-layout-item .hidden {
     display: none;
+}
+.mce-menubtn span {
+    line-height: 16px !important;
+    font-size: 0.866em;
+}
+.mce-btn button {
+    line-height: 16px !important;
 }
 /* files */
 a.btn-addfile {
@@ -820,7 +991,9 @@ input#files_filebrowser_edit_artefact,
 .btn:link,
 .btn:visited,
 ul.groupuserstatus li.invite span,
-ul.groupuserstatus li.jointhisgroup form {
+ul.groupuserstatus li.jointhisgroup form,
+.ui-dialog .ui-dialog-buttonpane .ui-dialog-buttonset .ui-button,
+.feedbacktablewrapper .close-link {
     font-size: 1em;
     line-height: 1.333em;
     border: 1px solid #919191;
@@ -845,7 +1018,9 @@ input.select:hover,
 input#files_filebrowser_edit_artefact:hover,
 .btn:hover,
 ul.groupuserstatus li.invite span:hover,
-ul.groupuserstatus li.jointhisgroup form:hover {
+ul.groupuserstatus li.jointhisgroup form:hover,
+.ui-dialog .ui-dialog-buttonpane .ui-dialog-buttonset .ui-button:hover,
+.feedbacktablewrapper .close-link:hover {
     border-color: #3C7FB1;
     background: url(../images/btn_bkgd_hover.png) repeat-x 0 50%;
     text-decoration: none;
@@ -862,7 +1037,9 @@ input.select:focus,
 input#files_filebrowser_edit_artefact:focus,
 .btn:focus,
 ul.groupuserstatus li.invite span:focus,
-ul.groupuserstatus li.jointhisgroup form:focus {
+ul.groupuserstatus li.jointhisgroup form:focus,
+.ui-dialog .ui-dialog-buttonpane .ui-dialog-buttonset .ui-button:focus,
+.feedbacktablewrapper .close-link:focus {
     border-color: #3C7FB1;
     background: url(../images/btn_bkgd_hover.png) repeat-x 0 50%;
     text-decoration: none;
@@ -880,7 +1057,9 @@ input.select:active,
 input#files_filebrowser_edit_artefact:active,
 .btn:active,
 ul.groupuserstatus li.invite span:active,
-ul.groupuserstatus li.jointhisgroup form:active {
+ul.groupuserstatus li.jointhisgroup form:active,
+.ui-dialog .ui-dialog-buttonpane .ui-dialog-buttonset .ui-button:active,
+.feedbacktablewrapper .close-link:active {
     border-color: #3C7FB1;
     background: url(../images/btn_bkgd_focus.png) repeat-x 0 50%;
     color: #333333;
@@ -899,9 +1078,7 @@ input#deletetaskform_submit,
 input#deleteprofileform_submit,
 input#delete_all_notifications_submit,
 #activitylist input.btn-del,
-input#edituser_institution_rhmoodle_remove,
 input#settings_delete,
-input#edituser_institution_massey_remove,
 input#account_delete_submit {
     border-color: #707070;
     background: url(../images/btn_bkgd_red.png) repeat-x 0 50%;
@@ -920,9 +1097,7 @@ input#deletetaskform_submit:hover,
 input#deleteprofileform_submit:hover,
 input#delete_all_notifications_submit:hover,
 #activitylist input.btn-del:hover,
-input#edituser_institution_rhmoodle_remove:hover,
 input#settings_delete:hover,
-input#edituser_institution_massey_remove:hover,
 input#account_delete_submit:hover {
     border-color: #950000;
     background: url(../images/btn_bkgd_red_hover.png) repeat-x 0 50%;
@@ -940,9 +1115,7 @@ input#delete_delete:focus,
 input#deletetaskform_submit:focus,
 input#delete_all_notifications_submit:focus,
 #activitylist input.btn-del:focus,
-input#edituser_institution_rhmoodle_remove:focus,
 input#settings_delete:focus,
-input#edituser_institution_massey_remove:focus,
 input#account_delete_submit:focus {
     border-color: #950000;
     background: url(../images/btn_bkgd_red_hover.png) repeat-x 0 50%;
@@ -961,20 +1134,11 @@ input#deletetaskform_submit:active,
 input#deleteprofileform_submit:active,
 input#delete_all_notifications_submit:active,
 #activitylist input.btn-del:active,
-input#edituser_institution_rhmoodle_remove:active,
 input#settings_delete:active,
-input#edituser_institution_massey_remove:active,
 input#account_delete_submit:active {
     border-color: #F23131;
     background: url(../images/btn_bkgd_red_focus.png) repeat-x 0 50%;
     color: #FFFFFF;
-}
-table#socialprofilelist {
-    width:100%;
-    table-layout:fixed;
-}
-table#socialprofilelist th.icons {
-    width: 32px;
 }
 /* Other button customisation */
 /* bolding some buttons */
@@ -987,6 +1151,7 @@ table#socialprofilelist th.icons {
 #viewlayout input.submit,
 #add_feedback_form #add_feedback_form_submit,
 #objection_form #objection_form_submit,
+.add_annotation_feedback_form #add_annotation_feedback_form_submit,
 .submitcancel .submit,
 #export #export_submit,
 #forumbtns a.editforumtitle,
@@ -1050,16 +1215,12 @@ input#cancel_import_submit {
 }
 /* exceptions to the bigger and need to be made back to regular */
 input#delete_all_notifications_submit,
-input#edituser_institution_rhmoodle_submit,
-input#edituser_institution_rhmoodle_remove,
 input#edituser_institution_add,
 input#friendscontrol_submit,
 input#addviews_submit,
 input#edituser_suspend_submit,
 input#edituser_delete_submit,
 input#institution_suspend_submit,
-input#edituser_institution_massey_submit,
-input#edituser_institution_massey_remove,
 .pagetabs .btn,
 .pagetabs input.submit,
 input#usertype_typesubmit,
@@ -1182,6 +1343,9 @@ ul.groupuserstatus li .btn {
     vertical-align: top;
     cursor: pointer !important;
     overflow: hidden;
+    -webkit-border-radius: 0px !important;
+    -moz-border-radius: 0px !important;
+    border-radius: 0px !important;
 }
 .btn-big-edit {
     background: transparent url(../images/btn_edit.png) no-repeat 0 0 !important;
@@ -1220,6 +1384,9 @@ input#instconf_artefactids_close_upload_browse {
     vertical-align: top;
     cursor: pointer !important;
     float: right;
+    -webkit-border-radius: 0px !important;
+    -moz-border-radius: 0px !important;
+    border-radius: 0px !important;
 }
 .btn-big-close:hover,
 input#editpost_filebrowser_close_upload_browse:hover,
@@ -1628,7 +1795,7 @@ div.rel {
 #sub-nav li a,
 #sub-nav li a:link,
 #sub-nav li a:visited {
-    padding: 5px 10px;
+    padding: 8px 10px;
     display: inline-block;
     text-decoration: none;
 }
@@ -1682,12 +1849,79 @@ div.rel {
 .main-nav .dropdown-sub li a:focus {
     background: #DDDDDD;
 }
+.main-nav .dropdown-sub li.has-sub a {
+    background-image: url(../images/expand.png);
+    background-repeat: no-repeat;
+    background-position: calc(100% - 8px) 50%;
+}
+/******************** Tertiary navigation ********************/
+#tertiary-nav {
+    background: none repeat scroll 0 0 #cccccc;
+}
+#tertiary-nav ul {
+    margin: 0 auto;
+    max-width: 1280px;
+    min-width: 960px;
+}
+#tertiary-nav li {
+    display: inline-block;
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    vertical-align: middle;
+}
+#tertiary-nav li a,
+#tertiary-nav li a:link,
+#tertiary-nav li a:visited,
+#tertiary-nav li a:active {
+    display: inline-block;
+    padding: 5px 10px;
+    text-decoration: none;
+}
+#tertiary-nav li.selected a,
+#tertiary-nav li.selected a:link,
+#tertiary-nav li.selected a:visited,
+#tertiary-nav li.selected a:active {
+    color: #333333;
+    font-weight: bold;
+}
+/******************** Dropdown tertiary navigation ********************/
+.main-nav .dropdown-tertiary {
+    display: none;
+    position: absolute;
+    left: 100%;
+    top: 0;
+    z-index: 3;
+    clear: both;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+}
+.main-nav .dropdown-sub li.has-sub .dropdown-tertiary li a {
+    background-image: none;
+}
+
+.main-nav ul ul li:hover .dropdown-tertiary,
+.main-nav ul ul li .dropdown-tertiary.show-menu {
+    display: block;
+}
+.main-nav .dropdown-tertiary li {
+    list-style: none;
+    display: block;
+}
+.main-nav .dropdown-sub li.selected li a {
+    font-weight: normal;
+}
+.main-nav .dropdown-sub li.selected li.selected a {
+    font-weight: bold;
+}
 /******************** Tabs ********************/
 /* reset responsive tabs (profile tabs are in the form not template) */
 .rd-tab-title {
     display: none;
 }
-ul.in-page-tabs {
+ul.in-page-tabs,
+ul.artefactchooser-tabs {
     font-size: 1.167em;
     list-style: none;
     margin: 0;
@@ -1696,7 +1930,8 @@ ul.in-page-tabs {
     z-index: 1;
     clear: both;
 }
-ul.in-page-tabs li {
+ul.in-page-tabs li,
+ul.artefactchooser-tabs li {
     display: table-cell;
     padding: 0;
     margin: 0;
@@ -1708,7 +1943,11 @@ ul.in-page-tabs li a:visited,
 ul.in-page-tabs li a:active,
 ul.in-page-tabs li input.linkbtn,
 ul.in-page-tabs li button.linkbtn,
-ul.searchtab li span.inactive {
+ul.searchtab li span.inactive,
+ul.artefactchooser-tabs li a,
+ul.artefactchooser-tabs li a:link,
+ul.artefactchooser-tabs li a:visited,
+ul.artefactchooser-tabs li a:active {
     text-decoration: none;
     display: inline-block;
     padding: 10px 6px;
@@ -1724,7 +1963,10 @@ ul.in-page-tabs li a.current-tab:link,
 ul.in-page-tabs li a.current-tab:visited,
 ul.in-page-tabs li a.current-tab:active,
 ul.in-page-tabs li input.current-tab,
-ul.in-page-tabs li button.current-tab {
+ul.in-page-tabs li button.current-tab,
+ul.artefactchooser-tabs li.current a,
+ul.artefactchooser-tabs li.current a:link,
+ul.artefactchooser-tabs li.current a:visited {
     color: #333333;
     text-decoration: none;
     cursor: default;
@@ -1733,12 +1975,17 @@ ul.in-page-tabs li button.current-tab {
     background: 0;
 }
 ul.in-page-tabs li a:focus,
-ul.in-page-tabs li a.current-tab:focus {
+ul.in-page-tabs li a.current-tab:focus,
+ul.artefactchooser-tabs li a:active,
+ul.artefactchooser-tabs li a:focus,
+ul.artefactchooser-tabs li.current a:active,
+ul.artefactchooser-tabs li.current a:focus {
     outline: none;
     background: #D4D4D4;
 }
 /* tab body */
-.subpage {
+.subpage,
+#artefactchooser-body {
     border: 1px solid #D4D4D4;
     padding: 10px;
     margin-top: -1px;
@@ -1748,6 +1995,29 @@ ul.in-page-tabs li a.current-tab:focus {
     -webkit-border-radius: 0 0 5px 5px;
     -moz-border-radius: 0 0 5px 5px;
     border-radius: 0 0 5px 5px;
+}
+/* sub tabs */
+ul.artefactchooser-subtabs {
+    margin: 10px 0;
+    padding: 0;
+    line-height: 2em;
+    list-style: none;
+}
+ul.artefactchooser-subtabs li {
+    display: inline;
+    padding: 0 5px;
+    margin: 0;
+}
+ul.artefactchooser-subtabs li.current a,
+ul.artefactchooser-subtabs li.current a:link,
+ul.artefactchooser-subtabs li.current a:visited,
+ul.artefactchooser-subtabs li.current a:active {
+    font-weight: bold;
+    text-decoration: none;
+    color: #333333;
+}
+ul.artefactchooser-subtabs li.showrightborder {
+    border-right: 1px solid #D1D1D1;
 }
 /******************** Sidebar ********************/
 /* general sidebar styles */
@@ -2358,6 +2628,11 @@ a:active .home-info-box p {
     background-position: 12px 15px;
     padding-left: 55px;
 }
+a #home-info-create,
+a #home-info-share,
+a #home-info-engage {
+    cursor: pointer;
+}
 #editdashboard {
     margin-top: 40px;
     margin-bottom: -15px;
@@ -2367,6 +2642,13 @@ a:active .home-info-box p {
 /* Content > Profile */
 #profileform_topsubmit_container th,
 #profileform_submit_container th {
+    display: none;
+}
+#profileform .tabbed-fieldsets table {
+    width: 100%;
+}
+#profileform tr#profileform_socialdescription_container th,
+#profileform tr#profileform_socialprofile_container th {
     display: none;
 }
 /* Content > Profile pictures */
@@ -2441,6 +2723,15 @@ a:active .home-info-box p {
 .filelist td.filedate {
     padding: 8px 5px;
 }
+
+/* Get the filename to wrap nicely. Important for dialogs */
+td.filename {
+    word-wrap: break-word;
+    white-space: normal;
+    word-break: break-all;
+    width: auto;
+}
+
 /* edit row background */
 tr.editrow,
 tr.editrow td,
@@ -2610,7 +2901,7 @@ th.resumeattachments {
 .compositedesc {
     margin: 5px 0 10px 0;
 }
-/* attachment notice in Résumé fieldsets */ /* TO DO: Designer check where this is */
+/* attachment notice in Résumé fieldsets */ /* TODO: Designer check where this is */
 .attachmessage {
     font-size: 0.917em;
     font-style: italic;
@@ -2632,6 +2923,9 @@ tr.incomplete td {
 .plantaskdescription {
     padding-top: 8px;
 }
+.plansblocktable .completiondate {
+    padding-top: 3px;
+}
 /* Content > My notes */
 #notes td.note-name .detail iframe {
     overflow-x: hidden;
@@ -2648,6 +2942,12 @@ tr.incomplete td {
     margin-bottom: 3px;
 }
 #searchviews #searchviews_query {
+    margin-right: 3px;
+}
+#searchviews #searchviews_orderby_container {
+    margin-left: 5px;
+}
+#searchviews #searchviews_orderby_container label {
     margin-right: 3px;
 }
 /* page/collection submission form */
@@ -2731,7 +3031,7 @@ table.templateresults td.right input.submit {
 #viewlayout .layoutthumb {
     display: block;
 }
-#viewlayout .layoutthumb img {
+#viewlayout .layoutthumb svg {
     margin-top: 5px;
     background: #FFFFFF;
     border: 1px solid #CCCCCC;
@@ -2820,6 +3120,14 @@ table.templateresults td.right input.submit {
     border: 1px solid #CCCCCC;
     padding: 5px;
 }
+#viewlayout .layoutthumb rect.layout1,
+#custompreview rect.layout1 {
+    fill: #666666;
+}
+#viewlayout .layoutthumb rect.layout0,
+#custompreview rect.layout0 {
+    fill: #4d4d4d;
+}
 #addlayout {
     margin: 0;
 }
@@ -2882,14 +3190,20 @@ ul.favorskins {
     margin: 0 0 5px 0;
     float: right;
 }
-#collectionviews td {
-    vertical-align: middle;
+#collectionviews .removepage {
+    margin: 3px 5px;
 }
-#collectionviews td form table td {
-    padding: 0;
+#collectionviews .displayordercontrols {
+    float: left;
+    margin: 3px 0 0 5px;
 }
-.displayordercontrols div.justdown {
+#collectionviews .displayordercontrols div.justdown {
     padding-left: 35px;
+}
+.collectionpage strong {
+    margin-left: 10px;
+    line-height: 2.5;
+    height: 30px;
 }
 #collectionviews form input.submit {
     background: url(../images/btn_deleteremove.png) no-repeat 0 0;
@@ -2910,7 +3224,7 @@ ul.favorskins {
 }
 fieldset#pagestoadd {
     width: 250px;
-    margin: 10px 0 10px -270px;
+    margin: 10px 0 35px -270px;
     float: left;
     padding: 10px;
     background: #dddddd;
@@ -2918,23 +3232,22 @@ fieldset#pagestoadd {
     -moz-border-radius: 5px 0 0 5px;
     border-radius: 5px 0 0 5px;
     border: 0;
+    position: relative;
 }
 fieldset#pagestoadd legend {
-    margin-top: -35px;
+    position: absolute;
+    top: -25px;
 }
-fieldset#pagestoadd table {
-    margin: 0;
-    width: 100%;
+fieldset#pagestoadd .pieform .checkbox {
+    padding: 1px 5px 2px 0;
 }
-fieldset#pagestoadd .pieform tr.checkbox th {
-    padding: 1px 5px 1px 0;
-}
-fieldset#pagestoadd .pieform tr.checkbox td {
+fieldset#pagestoadd .pieform div.checkbox input {
+    vertical-align: middle;
     padding: 5px 0;
     width: 24px;
 }
-fieldset#pagestoadd .pieform tr.checkbox th label {
-    display: block;
+fieldset#pagestoadd .pieform div.checkbox label {
+    display: inline-block;
     background: #f7f7f7;
     border: 1px solid #dadada;
     color: #333333;
@@ -2943,8 +3256,9 @@ fieldset#pagestoadd .pieform tr.checkbox th label {
     -moz-border-radius: 3px;
     border-radius: 3px;
     font-weight: normal;
+    width:78%;
 }
-fieldset#pagestoadd .pieform tr.checkbox th label.ui-draggable-dragging {
+fieldset#pagestoadd .pieform .ui-draggable-dragging label {
     width: 205px !important;
     background: #989898;
     border-color: #989898;
@@ -2952,22 +3266,16 @@ fieldset#pagestoadd .pieform tr.checkbox th label.ui-draggable-dragging {
     z-index: 1;
     position: relative;
 }
+
+fieldset#pagestoadd .pieform .ui-draggable-dragging input {
+    display: none;
+}
 #collectionviews label.ui-sortable-placeholder {
     min-height: 30px;
     display: block;
 }
-#collectionviews tr.dropped-in-row td {
-    background: #f5f5f5;
-    min-height: 30px;
-    padding: 8px 10px;
-}
-fieldset#pagestoadd .pieform tr.checkbox th {
-    vertical-align: middle;
-}
-fieldset#pagestoadd tr#addviews_submit_container th,
-fieldset#pagestoadd tr#addviews_submit_container td {
-    float: left;
-    padding: 10px 0 0 0;
+fieldset#pagestoadd #addviews_submit_container {
+    margin-top: 10px;
 }
 fieldset#pagesadded {
     -webkit-box-shadow: 0 0 1px 1px #888888;
@@ -2983,7 +3291,8 @@ fieldset#pagesadded {
     padding: 10px;
 }
 fieldset#pagesadded legend {
-    margin-top: -35px;
+    position: absolute;
+    top: -25px;
 }
 #collectiondonewrap {
     padding: 10px 0;
@@ -3378,9 +3687,9 @@ textarea#designskinform_view_custom_css {
 .no-js form#designskinform fieldset {
     padding: 10px 15px;
     margin: 10px 0;
-    border-radius: 10px;
     -moz-border-radius: 10px;
     -webkit-border-radius: 10px;
+    border-radius: 10px;
     border: 1px solid #d1d1d1;
 }
 .no-js form#designskinform fieldset.collapsed div#designskinform_body_background_image_open_upload_browse_container,
@@ -3437,6 +3746,9 @@ textarea#designskinform_view_custom_css {
     padding: 0 3px;
 }
 #export #includefeedback {
+    margin: 3px 0 0 1px;
+}
+#export #includeannotation {
     margin: 3px 0 0 1px;
 }
 /* Portfolio > Export > Export generating */
@@ -3529,7 +3841,6 @@ fieldset.indent1 .indent2 .listrow {
 a.showexistingblog {
     padding-left: 10px;
     background: url(../images/dividerdot.png) no-repeat 0 5px;
-    ;
     display: inline-block;
     margin-top: 5px;
 }
@@ -4172,6 +4483,9 @@ form#requestfriendship {
 /* Settings > Notifications */
 
 /* Inbox */
+#activitylist {
+    margin: 10px 0;
+}
 #activitylist th {
     vertical-align: bottom;
 }
@@ -4183,7 +4497,7 @@ form#requestfriendship {
 #delete_all_notifications {
     float: right;
     position: relative;
-    top: -30px;
+    top: -26px;
 }
 #delete_all_notifications td {
     text-align: right;
@@ -4596,4 +4910,112 @@ li.wallpost {
 }
 .wallpost .controls a {
     margin: 0;
+}
+
+/**************** Image Browser via Tinymce **********************/
+#imagebrowser.blockinstance.configure {
+    text-align: left;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 10px;
+    z-index: 300004 !important;
+    max-width: 85%;
+    font-size: 0.75em;
+    border: 7px solid #EEEEEE;
+    background: #FFFFFF;
+    border-radius: 10px;
+    -moz-border-radius: 10px;
+    -webkit-border-radius: 10px;
+}
+#imagebrowser.blockinstance.configure .title {
+    margin: 0;
+    font-size: 1.5em;
+    border-bottom: 2px solid #D1D1D1;
+    padding-bottom: 3px;
+}
+#imagebrowser.blockinstance.configure .uploadform label {
+	display:inline-block;
+	width:100px;
+}
+#imagebrowser.blockinstance.configure .filename, .filedescription {
+	word-break:break-all;
+	word-wrap:break-word;
+}
+#imgbrowserconf_toggleformatting_container {
+    cursor: pointer;
+    clear: left;
+    margin: 10px 0;
+}
+#imgbrowserconf_toggleformatting_container label {
+	cursor: pointer;
+    font-weight: bold;
+    font-size: 1.25em;
+}
+#imgbrowserconf_toggleformatting_container .arrow {
+    padding-left: 15px;
+    background: #FFFFFF url(../images/expanded.png) 0 center no-repeat;
+    text-decoration: none;
+}
+#imgbrowserconf_toggleformatting_container .retracted.arrow {
+    background: #FFFFFF url(../images/expand.png) 0 center no-repeat;
+}
+#imgbrowserconf_formattingoptions_container {
+    padding-left: 15px;
+}
+#imagebrowser input.deletebutton {
+    float: right;
+}
+#imagebrowser div .text,
+#imgbrowserconf_align_container,
+#imgbrowserconf_align {
+    margin: 0 0 6px 5px;
+}
+#imagebrowser #imgbrowserconf_style_container {
+    margin: 6px 0 10px 5px;
+}
+#imagebrowser div .text label,
+#imgbrowserconf_align_container label {
+    display: inline-block;
+    width: 100px;
+}
+#imagebrowser div #imgbrowserconf_constrain_container {
+    vertical-align:none;
+    margin:15px 0 0 20px;
+}
+#imagebrowser #imgbrowserconf_url_container {
+    margin-bottom: 20px;
+}
+#imgbrowserconf_width_container,
+#imgbrowserconf_height_container,
+#imgbrowserconf_constrain_container {
+    float:left;
+}
+#imgbrowserconf_vspace_container {
+    clear:both;
+}
+#imgbrowserconf_artefactid_foldernav {
+    margin: 10px 0;
+}
+#imgbrowserconf_action_submitimage_container{
+    margin-top: 20px;
+    text-align: center;
+}
+input#imgbrowserconf_style {
+    width: 300px;
+}
+/* Class applied by Javascript */
+.blockinstance.configure.vertcentre {
+    left: 50%;
+    margin-left: auto;
+    margin-right: auto;
+    max-width: 90%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    -ms-transform: translate(-50%, -50%);
+    width: -moz-max-content;
+    width: -webkit-max-content;
+}
+
+body.dialog_visible {
+    overflow: hidden;
 }

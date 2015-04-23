@@ -16,6 +16,9 @@ require(dirname(dirname(__FILE__)) . '/init.php');
 require_once(get_config('libroot') . 'view.php');
 require_once('pieforms/pieform.php');
 define('TITLE', get_string('sharedwithme', 'view'));
+define('SECTION_PLUGINTYPE', 'core');
+define('SECTION_PLUGINNAME', 'view');
+define('SECTION_PAGE', 'sharedviews');
 
 $query  = param_variable('query', null);
 $tag    = param_variable('tag', null);
@@ -67,7 +70,7 @@ $shareoptions = array(
 if ($USER->get('institutions')) {
     $shareoptions['institution'] = get_string('myinstitutions', 'group');
 }
-$shareoptions['loggedin'] = get_string('loggedin', 'view');
+$shareoptions['loggedin'] = get_string('registeredusers', 'view');
 if (get_config('allowpublicviews')) {
     $shareoptions['public'] = get_string('public', 'view');
 }
@@ -134,6 +137,9 @@ $pagination = build_pagination(array(
     'count' => $data->count,
     'limit' => $limit,
     'offset' => $offset,
+    'setlimit' => true,
+    'jumplinks' => 8,
+    'numbersincludeprevnext' => 2,
 ));
 
 $smarty = smarty(array('paginator'));

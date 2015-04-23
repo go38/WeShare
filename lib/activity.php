@@ -242,10 +242,14 @@ function watchlist_record_changes($event){
         return;
     }
     if ($event instanceof BlockInstance) {
-        if (record_exists('usr_watchlist_view', 'view', $event->get('view'))) {
+        $viewid = $event->get('view');
+        if ($viewid) {
+            set_field('view', 'mtime', db_format_timestamp(time()), 'id', $viewid);
+        }
+        if (record_exists('usr_watchlist_view', 'view', $viewid)) {
             $whereobj = new stdClass();
             $whereobj->block = $event->get('id');
-            $whereobj->view = $event->get('view');
+            $whereobj->view = $viewid;
             $whereobj->usr = $USER->get('id');
             $dataobj = clone $whereobj;
             $dataobj->changed_on = date('Y-m-d H:i:s');
@@ -269,12 +273,16 @@ function watchlist_record_changes($event){
         }
 
         foreach ($relations as $rel) {
-            if (!record_exists('usr_watchlist_view', 'view', $rel->view)) {
+            $viewid = $rel->view;
+            if ($viewid) {
+                set_field('view', 'mtime', db_format_timestamp(time()), 'id', $viewid);
+            }
+            if (!record_exists('usr_watchlist_view', 'view', $viewid)) {
                 continue;
             }
             $whereobj = new stdClass();
             $whereobj->block = $rel->block;
-            $whereobj->view = $rel->view;
+            $whereobj->view = $viewid;
             $whereobj->usr = $USER->get('id');
             $dataobj = clone $whereobj;
             $dataobj->changed_on = date('Y-m-d H:i:s');
@@ -283,6 +291,9 @@ function watchlist_record_changes($event){
     }
     else if (!is_object($event) && !empty($event['id'])) {
         $viewid = $event['id'];
+        if ($viewid) {
+            set_field('view', 'mtime', db_format_timestamp(time()), 'id', $viewid);
+        }
         if (record_exists('usr_watchlist_view', 'view', $viewid)) {
             $whereobj = new stdClass();
             $whereobj->view = $viewid;
@@ -955,7 +966,7 @@ class ActivityTypeObjectionable extends ActivityTypeAdmin {
             return get_string_from_language(
                 $user->lang, 'objectionablecontentviewartefacttext', 'activity',
                 $this->view->get('title'), $this->artefact->get('title'), display_default_name($this->reporter), $ctime,
-                $this->message, $this->view->get_url(), $reporterurl
+                $this->message, get_config('wwwroot') . "artefact/artefact.php?artefact=" . $this->artefact->get('id') . "&view=" . $this->view->get('id'), $reporterurl
             );
         }
     }
@@ -978,7 +989,7 @@ class ActivityTypeObjectionable extends ActivityTypeAdmin {
             return get_string_from_language(
                 $user->lang, 'objectionablecontentviewartefacthtml', 'activity',
                 $viewtitle, hsc($this->artefact->get('title')), $reportername, $ctime,
-                $message, $this->view->get_url(), $viewtitle,
+                $message, get_config('wwwroot') . "artefact/artefact.php?artefact=" . $this->artefact->get('id') . "&view=" . $this->view->get('id'), hsc($this->artefact->get('title')),
                 $reporterurl, $reportername
             );
         }
@@ -1274,6 +1285,7 @@ class ActivityTypeViewAccess extends ActivityType {
 
     protected $view;
     protected $oldusers; // this can be empty though
+    protected $views; // optional array of views by id being changed
 
     private $title, $ownername;
 
@@ -1308,18 +1320,42 @@ class ActivityTypeViewAccess extends ActivityType {
         $this->ownername = $viewinfo->formatted_owner();
     }
 
+    public function get_view_titles() {
+        $views = (!empty($this->views) && is_array($this->views) && sizeof($this->views) > 1) ? $this->views : false;
+        if (!$views) {
+            return false;
+        }
+        $titles = array();
+        foreach ($views as $view) {
+            $titles[$view['id']] = $view['title'];
+        }
+        return $titles;
+    }
     public function get_subject($user) {
-        return $this->incollection ? get_string('newcollectionaccesssubject', 'activity', $this->title) : get_string('newviewaccesssubject1', 'activity', $this->title);
+        if ($titles = $this->get_view_titles()) {
+            // because we may be updating access rules on pages both in and not in a collection
+            // it is easiest just to return a list of the pages we have updated
+            return get_string('newviewaccesssubjectviews', 'activity', implode('", "', $titles));
+        }
+        else {
+            return $this->incollection ? get_string('newcollectionaccesssubject', 'activity', $this->title) : get_string('newviewaccesssubject1', 'activity', $this->title);
+        }
     }
 
     public function get_message($user) {
-        $newaccessmessagestr = $this->incollection ? 'newcollectionaccessmessage' : 'newviewaccessmessage';
-        $newaccessmessagenoownerstr = $this->incollection ? 'newcollectionaccessmessagenoowner' : 'newviewaccessmessagenoowner';
+        $title = $this->title;
+        $plural = '';
+        if ($titles = $this->get_view_titles()) {
+            $title = implode('", "', $titles);
+            $plural = 'views';
+        }
+        $newaccessmessagestr = $this->incollection ? 'newcollectionaccessmessage' . $plural : 'newviewaccessmessage' . $plural;
         if ($this->ownername) {
             return get_string_from_language($user->lang, $newaccessmessagestr, 'activity',
-                                            $this->title, $this->ownername);
+                                            $title, $this->ownername, $this->title);
         }
-        return get_string_from_language($user->lang, $newaccessmessagenoownerstr, 'activity', $this->title);
+        $newaccessmessagenoownerstr = $this->incollection ? 'newcollectionaccessmessagenoowner' : 'newviewaccessmessagenoowner' . $plural;
+        return get_string_from_language($user->lang, $newaccessmessagenoownerstr, 'activity', $title, $this->title);
     }
 
     public function get_required_parameters() {
@@ -1560,6 +1596,12 @@ function get_notification_settings_elements($user = null, $sitedefaults = false)
             $elements[$key]['options']['none'] = get_string('none');
         }
     }
+
+    $title = array();
+    foreach ($elements as $key => $row) {
+      $title[$key] = $row['title'];
+    }
+    array_multisort($title, SORT_ASC, $elements);
 
     return $elements;
 }

@@ -35,7 +35,7 @@ function db_quote_table_placeholders($sql) {
  * A callback function used only in db_quote_table_placeholders
  * @param array $matches
  */
-function _db_quote_table_placeholders_callback($matches) {
+function _db_quote_table_placeholders_callback(array $matches) {
     return db_table_name($matches[1]);
 }
 
@@ -49,7 +49,10 @@ function _db_quote_table_placeholders_callback($matches) {
 function db_quote_identifier($identifier) {
     // Currently, postgres and mysql (in postgres compat. mode) both support
     // the sql standard "
-    if (strpos($identifier, '"') !== false) {
+    $identifier = trim($identifier);
+    if (strpos($identifier, '"') !== false
+        || $identifier === '*'
+        || preg_match('/\(/i', $identifier)) {
         return $identifier;
     }
     return '"' . $identifier . '"';
@@ -125,7 +128,7 @@ function column_collation_is_default($table, $column) {
  * @return boolean
  * @throws SQLException
  */
-function execute_sql($command, $values=null) {
+function execute_sql($command, array $values=null) {
     global $db;
 
     if (!is_a($db, 'ADOConnection')) {
@@ -186,7 +189,7 @@ function record_exists($table, $field1=null, $value1=null, $field2=null, $value2
  * @return bool true if a matching record exists, else false.
  * @throws SQLException
  */
-function record_exists_select($table, $select='', $values=null) {
+function record_exists_select($table, $select='', array $values=null) {
 
     global $CFG;
 
@@ -207,7 +210,7 @@ function record_exists_select($table, $select='', $values=null) {
  * @return bool true if the SQL executes without errors and returns at least one record.
  * @throws SQLException
  */
-function record_exists_sql($sql, $values=null) {
+function record_exists_sql($sql, array $values=null) {
     $rs = get_recordset_sql($sql, $values, 0, 1);
     return $rs->RecordCount() > 0;
 }
@@ -241,7 +244,7 @@ function count_records($table, $field1=null, $value1=null, $field2=null, $value2
  * @return int The count of records returned from the specified criteria.
  * @throws SQLException
  */
-function count_records_select($table, $select='', $values=null, $countitem='COUNT(*)') {
+function count_records_select($table, $select='', array $values=null, $countitem='COUNT(*)') {
     if ($select) {
         $select = 'WHERE ' . $select;
     }
@@ -262,7 +265,7 @@ function count_records_select($table, $select='', $values=null, $countitem='COUN
  * @return int        The count.
  * @throws SQLException
  */
-function count_records_sql($sql, $values=null) {
+function count_records_sql($sql, array $values=null) {
     $rs = get_recordset_sql($sql, $values);
     return reset($rs->fields);
 }
@@ -299,7 +302,7 @@ function get_record($table, $field1, $value1, $field2=null, $value2=null, $field
  * @return Found record as object. False if not found
  * @throws SQLException
  */
-function get_record_sql($sql, $values=null) {
+function get_record_sql($sql, array $values=null) {
     $limitfrom = 0;
     $limitnum  = 0;
     # regex borrowed from htdocs/lib/adodb/adodb-lib.inc.php
@@ -336,7 +339,7 @@ function get_record_sql($sql, $values=null) {
  * @return object Returns an array of found records (as objects)
  * @throws SQLException
  */
-function get_record_select($table, $select='', $values=null, $fields='*') {
+function get_record_select($table, $select='', array $values=null, $fields='*') {
     if ($select) {
         $select = 'WHERE '. $select;
     }
@@ -375,7 +378,7 @@ function get_record_select($table, $select='', $values=null, $fields='*') {
  * @param string $fields a comma separated list of fields to return (optional, by default all fields are returned).
  * @param int $limitfrom return a subset of records, starting at this point (optional, required if $limitnum is set).
  * @param int $limitnum return a subset comprising this many records (optional, required if $limitfrom is set).
- * @return mixed an ADODB RecordSet object.
+ * @return ADORecordSet an ADODB RecordSet object.
  * @throws SQLException
  */
 function get_recordset($table, $field='', $value='', $sort='', $fields='*', $limitfrom='', $limitnum='') {
@@ -405,10 +408,10 @@ function get_recordset($table, $field='', $value='', $sort='', $fields='*', $lim
  * @param string $fields a comma separated list of fields to return (optional, by default all fields are returned).
  * @param int $limitfrom return a subset of records, starting at this point (optional, required if $limitnum is set).
  * @param int $limitnum return a subset comprising this many records (optional, required if $limitfrom is set).
- * @return mixed an ADODB RecordSet object
+ * @return ADORecordSet an ADODB RecordSet object
  * @throws SQLException
  */
-function get_recordset_select($table, $select='', $values=null, $sort='', $fields='*', $limitfrom='', $limitnum='') {
+function get_recordset_select($table, $select='', array $values=null, $sort='', $fields='*', $limitfrom='', $limitnum='') {
     if ($select) {
         $select = ' WHERE '. $select;
     }
@@ -438,10 +441,10 @@ function get_recordset_select($table, $select='', $values=null, $sort='', $field
  * @param array $values When using prepared statements, this is the value array (optional).
  * @param int $limitfrom return a subset of records, starting at this point (optional, required if $limitnum is set).
  * @param int $limitnum return a subset comprising this many records (optional, required if $limitfrom is set).
- * @return mixed an ADODB RecordSet object
+ * @return ADORecordSet an ADODB RecordSet object
  * @throws SQLException
  */
-function get_recordset_sql($sql, $values=null, $limitfrom=null, $limitnum=null) {
+function get_recordset_sql($sql, array $values=null, $limitfrom=null, $limitnum=null) {
     global $db;
 
     if (!is_a($db, 'ADOConnection')) {
@@ -449,6 +452,13 @@ function get_recordset_sql($sql, $values=null, $limitfrom=null, $limitnum=null) 
     }
 
     $sql = db_quote_table_placeholders($sql);
+
+    if ($values === null || $values === array()) {
+        $values = false;
+    }
+    else if (!is_array($values)) {
+        throw new SQLException('Invalid values parameter sent to get_recordset_sql.');
+    }
 
     try {
         if ($limitfrom || $limitnum) {
@@ -458,7 +468,7 @@ function get_recordset_sql($sql, $values=null, $limitfrom=null, $limitnum=null) 
             $rs = $db->SelectLimit($sql, $limitnum, $limitfrom, $values);
         } else {
             $rs = false;
-            if (!empty($values) && is_array($values) && count($values) > 0) {
+            if ($values) {
                 $stmt = $db->Prepare($sql);
                 $rs = $db->Execute($stmt, $values);
             } else {
@@ -476,11 +486,11 @@ function get_recordset_sql($sql, $values=null, $limitfrom=null, $limitnum=null) 
 /**
  * Utility function to turn a result set into an array of records
  *
- * @param object an ADODB RecordSet object.
+ * @param ADORecordSet an ADODB RecordSet object.
  * @return mixed an array of objects, or false if the RecordSet was empty.
  * @throws SQLException
  */
-function recordset_to_array($rs) {
+function recordset_to_array(ADORecordSet $rs) {
     if ($rs && $rs->RecordCount() > 0) {
         $array = $rs->GetArray();
         foreach ($array as &$a) {
@@ -503,12 +513,12 @@ function recordset_to_array($rs) {
  * This method turns a result set into a hash of records (keyed by the first
  * field in the result set)
  *
- * @param  object $rs An ADODB RecordSet object.
- * @return mixed  An array of objects, or false if the RecordSet was empty.
+ * @param  ADORecordSet $rs An ADODB RecordSet object.
+ * @return mixed An array of objects, or false if the RecordSet was empty.
  * @throws SQLException
  * @access private
  */
-function recordset_to_assoc($rs) {
+function recordset_to_assoc(ADORecordSet $rs) {
     if ($rs && $rs->RecordCount() > 0) {
         // First of all, we are going to get the name of the first column
         // to introduce it back after transforming the recordset to assoc array
@@ -615,7 +625,7 @@ function get_records_select_assoc($table, $select='', $values=null, $sort='', $f
  * @return mixed an array of objects, or false if no records were found.
  * @throws SQLException
  */
-function get_records_select_array($table, $select='', $values=null, $sort='', $fields='*', $limitfrom='', $limitnum='') {
+function get_records_select_array($table, $select='', array $values=null, $sort='', $fields='*', $limitfrom='', $limitnum='') {
     $rs = get_recordset_select($table, $select, $values, $sort, $fields, $limitfrom, $limitnum);
     return recordset_to_array($rs);
 }
@@ -632,7 +642,7 @@ function get_records_select_array($table, $select='', $values=null, $sort='', $f
  * @return mixed an array of objects, or false if no records were found.
  * @throws SQLException
  */
-function get_records_sql_assoc($sql,$values, $limitfrom='', $limitnum='') {
+function get_records_sql_assoc($sql, array $values = null, $limitfrom = '', $limitnum = '') {
     $rs = get_recordset_sql($sql, $values, $limitfrom, $limitnum);
     return recordset_to_assoc($rs);
 }
@@ -649,7 +659,7 @@ function get_records_sql_assoc($sql,$values, $limitfrom='', $limitnum='') {
  * @return mixed an array of objects, or false if no records were found.
  * @throws SQLException
  */
-function get_records_sql_array($sql,$values, $limitfrom='', $limitnum='') {
+function get_records_sql_array($sql, array $values = null, $limitfrom = '', $limitnum = '') {
     $rs = get_recordset_sql($sql, $values, $limitfrom, $limitnum);
     return recordset_to_array($rs);
 }
@@ -662,11 +672,11 @@ function get_records_sql_array($sql,$values, $limitfrom='', $limitnum='') {
 /**
  * Utility function used by the following 3 methods.
  *
- * @param object $rs an ADODB RecordSet object with two columns.
+ * @param ADORecordSet $rs an ADODB RecordSet object with two columns.
  * @return mixed an associative array, or false if an error occurred or the RecordSet was empty.
  * @access private
  */
-function recordset_to_menu($rs) {
+function recordset_to_menu(ADORecordSet $rs) {
     global $CFG;
 
     if ($rs && $rs->RecordCount() > 0) {
@@ -723,7 +733,7 @@ function get_records_menu($table, $field='', $value='', $sort='', $fields='*') {
  * @param string $fields A comma separated list of fields to be returned from the chosen table.
  * @return mixed an associative array, or false if no records were found or an error occurred.
  */
-function get_records_select_menu($table, $select='', $values=null, $sort='', $fields='*') {
+function get_records_select_menu($table, $select='', array $values=null, $sort='', $fields='*') {
     $rs = get_recordset_select($table, $select, $values, $sort, $fields);
     return recordset_to_menu($rs);
 }
@@ -738,7 +748,7 @@ function get_records_select_menu($table, $select='', $values=null, $sort='', $fi
  * @param array $values When using prepared statements, this is the value array (optional).
  * @return mixed an associative array, or false if no records were found or an error occured.
  */
-function get_records_sql_menu($sql,$values=null) {
+function get_records_sql_menu($sql, array $values=null) {
     $rs = get_recordset_sql($sql,$values);
     return recordset_to_menu($rs);
 }
@@ -766,7 +776,7 @@ function get_field($table, $field, $field1=null, $value1=null, $field2=null, $va
     $select = where_clause_prepared($field1, $field2, $field3);
     $values = where_values_prepared($value1, $value2, $value3);
 
-    return get_field_sql('SELECT ' . $field . ' FROM ' . db_table_name($table) . ' ' . $select, $values);
+    return get_field_sql('SELECT ' . db_quote_identifier($field) . ' FROM ' . db_table_name($table) . ' ' . $select, $values);
 }
 
 /**
@@ -777,7 +787,7 @@ function get_field($table, $field, $field1=null, $value1=null, $field2=null, $va
  * @return mixed the specified value.
  * @throws SQLException
  */
-function get_field_sql($sql, $values=null) {
+function get_field_sql($sql, array $values=null) {
     $rs = get_recordset_sql($sql, $values);
     if ($rs && $rs->RecordCount() == 1) {
         return reset($rs->fields);
@@ -809,7 +819,7 @@ function get_column($table, $field, $field1=null, $value1=null, $field2=null, $v
     $select = where_clause_prepared($field1, $field2, $field3);
     $values = where_values_prepared($value1, $value2, $value3);
 
-    return get_column_sql('SELECT ' . $field . ' FROM ' . db_table_name($table) . ' ' . $select, $values);
+    return get_column_sql('SELECT ' . db_quote_identifier($field) . ' FROM ' . db_table_name($table) . ' ' . $select, $values);
 }
 
 /**
@@ -820,13 +830,18 @@ function get_column($table, $field, $field1=null, $value1=null, $field2=null, $v
  * @return mixed the specified value.
  * @throws SQLException
  */
-function get_column_sql($sql, $values=null) {
+function get_column_sql($sql, array $values=null) {
     global $db;
 
     $sql = db_quote_table_placeholders($sql);
 
     try {
-        return $db->GetCol($sql, $values);
+        if (!empty($values) && is_array($values) && count($values) > 0) {
+            return $db->GetCol($sql, $values);
+        }
+        else {
+            return $db->GetCol($sql);
+        }
     }
     catch (ADODB_Exception $e) {
         throw new SQLException(create_sql_exception_message($e, $sql, $values));
@@ -851,7 +866,7 @@ function get_column_sql($sql, $values=null) {
  * @param string $value2 the value field2 must have (requred if field2 is given, else optional).
  * @param string $field3 the third field to check (optional).
  * @param string $value3 the value field3 must have (requred if field3 is given, else optional).
- * @return mixed An ADODB RecordSet object with the results from the SQL call or false.
+ * @return ADORecordSet An ADODB RecordSet object with the results from the SQL call or false.
  * @throws SQLException
  */
 function set_field($table, $newfield, $newvalue, $field1=null, $value1=null, $field2=null, $value2=null, $field3=null, $value3=null) {
@@ -863,7 +878,7 @@ function set_field($table, $newfield, $newvalue, $field1=null, $value1=null, $fi
     return set_field_select($table, $newfield, $newvalue, $select, $values);
 }
 
-function set_field_select($table, $newfield, $newvalue, $select, $values) {
+function set_field_select($table, $newfield, $newvalue, $select, array $values) {
     global $db;
 
     // @todo Catalyst IT Ltd
@@ -900,7 +915,7 @@ function set_field_select($table, $newfield, $newvalue, $select, $values) {
  * @param string $value2 the value field2 must have (requred if field2 is given, else optional).
  * @param string $field3 the third field to check (optional).
  * @param string $value3 the value field3 must have (requred if field3 is given, else optional).
- * @return mixed An ADODB RecordSet object with the results from the SQL call or false.
+ * @return ADORecordSet An ADODB RecordSet object with the results from the SQL call or false.
  * @throws SQLException
  */
 function delete_records($table, $field1=null, $value1=null, $field2=null, $value2=null, $field3=null, $value3=null) {
@@ -926,10 +941,10 @@ function delete_records($table, $field1=null, $value1=null, $field2=null, $value
  * @param string $table The database table to be checked against.
  * @param string $select A fragment of SQL to be used in a where clause in the SQL call (used to define the selection criteria).
  * @param array $values When using prepared statements, this is the value array (optional).
- * @return object A PHP standard object with the results from the SQL call.
+ * @return ADORecordSet An ADODB RecordSet object with the results from the SQL call or false.
  * @throws SQLException
  */
-function delete_records_select($table, $select='',$values=null) {
+function delete_records_select($table, $select='', array $values=null) {
     if ($select) {
         $select = 'WHERE '.$select;
     }
@@ -941,7 +956,7 @@ function delete_records_select($table, $select='',$values=null) {
  * it has with the $values parameter should be merged with the execute_sql
  * function
  */
-function delete_records_sql($sql, $values=null) {
+function delete_records_sql($sql, array $values=null) {
     global $db;
 
     $sql = db_quote_table_placeholders($sql);
@@ -974,26 +989,19 @@ function delete_records_sql($sql, $values=null) {
  * @param bool $returnpk Should the id of the newly created record entry be returned? If this option is not requested then true/false is returned.
  * @throws SQLException
  */
+global $INSERTRECORD_TABLE_COLUMNS;
+$INSERTRECORD_TABLE_COLUMNS = array();
 function insert_record($table, $dataobject, $primarykey=false, $returnpk=false) {
-    // $INSERTRECORD_NOCACHE is yet another work around of dmllib/adodb's ineptitude.
-    // It's all nice to cache the table columns lookup, but what if the table
-    // columns change over the life of the page load? This happens when an
-    // upgrade is running. All of a sudden, the table_column cache is out of
-    // date and we can't insert new data properly.
-    // Temporary solution: set INSERTRECORD_NOCACHE to true before your calls
-    // that need a new lookup, and unset it afterwards
-    global $db, $INSERTRECORD_NOCACHE;
-    static $table_columns;
-
+    global $db, $INSERTRECORD_TABLE_COLUMNS;
     // Determine all the fields in the table
-    if (empty($INSERTRECORD_NOCACHE) && is_array($table_columns) && array_key_exists($table, $table_columns)) {
-        $columns = $table_columns[$table];
+    if (array_key_exists($table, $INSERTRECORD_TABLE_COLUMNS)) {
+        $columns = $INSERTRECORD_TABLE_COLUMNS[$table];
     }
     else {
         if (!$columns = $db->MetaColumns(get_config('dbprefix') . $table)) {
             throw new SQLException('Table "' . get_config('dbprefix') . $table . '" does not appear to exist');
         }
-        $table_columns[$table] = $columns;
+        $INSERTRECORD_TABLE_COLUMNS[$table] = $columns;
     }
 
     if (!empty($primarykey)) {
@@ -1370,7 +1378,7 @@ function column_type($table, $column) {
  */
 // in dml not ddl because we want to keep ddl 'clean upstream' - p
 
-function execute_sql_arr($sqlarr, $continue=true, $feedback=true) {
+function execute_sql_arr(array $sqlarr, $continue=true, $feedback=true) {
 
     if (!is_array($sqlarr)) {
         return false;
@@ -1432,7 +1440,7 @@ function db_format_timestamp($ts) {
 function db_format_tsfield($field, $as = null) {
     $tsfield = '';
     if (is_postgres()) {
-        $tsfield = "FLOOR(EXTRACT(EPOCH FROM $field))";
+        $tsfield = "FLOOR(EXTRACT(EPOCH FROM {$field} AT TIME ZONE CURRENT_SETTING('TIMEZONE')))";
     }
     else if (is_mysql()) {
         $tsfield = "IF($field >= '1970-01-01', UNIX_TIMESTAMP($field), TIMESTAMPDIFF(SECOND, '1970-01-01', $field))";
@@ -1498,7 +1506,7 @@ function is_mysql() {
  *
  * @param array $array input array
  */
-function db_array_to_ph($array) {
+function db_array_to_ph(array $array) {
     return array_pad(array(), count($array), '?');
 }
 
@@ -1660,7 +1668,7 @@ function db_random() {
  *
  * @param array $replacearray keys = search, values = replacements.
  */
-function db_replace($replacearray) {
+function db_replace(array $replacearray) {
 
     global $db;
 
@@ -1804,8 +1812,8 @@ function db_drop_trigger($name, $table) {
     if (is_postgres()) {
         $functionname = $name . '_function';
         $triggername  = $name . '_trigger';
-        execute_sql('DROP TRIGGER IF EXISTS {' . $triggername . '} ON {' . $table . '}');
-        execute_sql('DROP FUNCTION IF EXISTS {' . $functionname . '}()');
+        execute_sql('DROP TRIGGER IF EXISTS {' . $triggername . '} ON {' . $table . '} CASCADE');
+        execute_sql('DROP FUNCTION IF EXISTS {' . $functionname . '}() CASCADE');
     }
     else if (is_mysql()) {
         $triggername = $name . '_trigger';

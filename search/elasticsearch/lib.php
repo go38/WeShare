@@ -336,7 +336,14 @@ class PluginSearchElasticsearch extends PluginSearch {
         return $config;
     }
 
-    public static function save_config_options($form, $values) {
+    public static function validate_config_options(Pieform $form, $values) {
+        // First check that there isn't an elasticsearch cron indexing the site
+        if (get_record('config', 'field', '_cron_lock_search_elasticsearch_cron')) {
+            $form->set_error(null, get_string('indexingrunning', 'search.elasticsearch'));
+        }
+    }
+
+    public static function save_config_options(Pieform $form, $values) {
         set_config_plugin('search', 'elasticsearch', 'cronlimit', $values['cronlimit']);
 
         // Changes in artefact types:
@@ -364,9 +371,16 @@ class PluginSearchElasticsearch extends PluginSearch {
 
         // If they chose to reset all the indexes, do that.
         if (isset($values['allreset'])) {
+            // set the cron lock before beginning re index to stop the cron indexing at same time
+            $start = time();
+            insert_record('config', (object) array('field' => '_cron_lock_search_elasticsearch_cron', 'value' => $start));
+
             self::reset_all_searchtypes();
             // Send the first batch of records to the elasticsearch server now, for instant gratification
             self::index_queued_items();
+
+            // free the cron lock
+            delete_records('config', 'field', '_cron_lock_search_elasticsearch_cron', 'value', $start);
         }
         // TODO: Make single-searchtype reset work properly. For now we'll just comment this out in hopes
         // it will aid a future developer.
@@ -570,6 +584,7 @@ class PluginSearchElasticsearch extends PluginSearch {
 
         $artefacttypesmap_array = self::elasticsearchartefacttypesmap_to_array();
 
+        $documents = array();
         foreach ($records as $record) {
             $deleteitem = false;
             $tmp = null;
@@ -594,14 +609,18 @@ class PluginSearchElasticsearch extends PluginSearch {
             if ($deleteitem == true) {
                 $tmp = $elasticaClient->deleteIds(array($record->itemid), $indexname, $record->type);
             }
-            // Index item
+            // Add item for bulk index
             else {
-                $elasticaType = $elasticaIndex->getType($record->type);
-                $doc = new \Elastica\Document($record->itemid, $item->getMapping());
-                $elasticaType->addDocument($doc);
+                $documents[$record->type][] = new \Elastica\Document($record->itemid, $item->getMapping());
             }
             delete_records('search_elasticsearch_queue', 'id', $record->id);
         }
+        // Bulk index
+        foreach ($documents as $type => $docs) {
+            $elasticaType = $elasticaIndex->getType($type);
+            $elasticaType->addDocuments($docs);
+        }
+
         // Refresh Index
         $elasticaIndex->refresh();
 

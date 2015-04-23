@@ -61,7 +61,7 @@ class PluginNotificationEmail extends PluginNotification {
             if ($data->activityname == 'usermessage') {
                 // Do not include the message body in user messages when they are sent by email
                 // because it encourages people to reply to the email.
-                $messagebody .= get_string_from_language($lang, 'newusermessageemailbody', 'group', display_name($data->userfrom), $data->url);
+                $messagebody .= get_string_from_language($lang, 'newusermessageemailbody', 'group', display_name($data->userfrom, $user), $data->url);
             }
             else {
                 $messagebody .= $data->message;
@@ -76,14 +76,18 @@ class PluginNotificationEmail extends PluginNotification {
             $messagebody .=  "\n\n" . get_string_from_language($lang, 'emailfooter', 'notification.email', $sitename, $prefurl);
         }
 
-        // Bug 738263: Put the user's email address in the Reply-to field; email_user() will put the site address in 'From:'
         $userfrom = null;
-        if (!empty($data->fromuser) && !$data->hideemail) {
-            $user_data = get_record('usr', 'id', $data->fromuser);
-            if (empty($data->customheaders)) {
-                $data->customheaders = array();
+        if (!empty($data->fromuser)) {
+            $userfrom = get_record('usr', 'id', $data->fromuser);
+            if ($data->hideemail) {
+                $userfrom->email = get_config('noreplyaddress');
             }
-            $data->customheaders[] = "Reply-to: {$user_data->email}";
+            else {
+                if (empty($data->customheaders)) {
+                    $data->customheaders = array();
+                }
+                $data->customheaders[] = "reply-to: {$userfrom->email}";
+            }
         }
         email_user($user, $userfrom, $subject, $messagebody, $messagehtml, !empty($data->customheaders) ? $data->customheaders : null);
     }

@@ -119,11 +119,15 @@ $viewtheme = $view->set_user_theme();
 $allowedthemes = get_user_accessible_themes();
 
 // Pull in cross-theme view stylesheet and file stylesheets
-$stylesheets = array('<link rel="stylesheet" type="text/css" href="' . get_config('wwwroot') . 'theme/views.css?v=' . get_config('release'). '">');
+$stylesheets = array('<link rel="stylesheet" type="text/css" href="' . append_version_number(get_config('wwwroot') . 'theme/views.css') . '">');
 foreach (array_reverse($THEME->get_url('style/style.css', true, 'artefact/file')) as $sheet) {
-    $stylesheets[] = '<link rel="stylesheet" type="text/css" href="' . $sheet . '?v=' . get_config('release'). '">';
+    $stylesheets[] = '<link rel="stylesheet" type="text/css" href="' . append_version_number($sheet) . '">';
 }
-$stylesheets[] = '<link rel="stylesheet" type="text/css" href="' . get_config('wwwroot') . 'js/jquery/jquery-ui/css/ui-lightness/jquery-ui-1.10.2.min.css?v=' . get_config('release'). '">';
+foreach (array_reverse($THEME->get_url('style/select2.css', true)) as $sheet) {
+    $stylesheets[] = '<link rel="stylesheet" type="text/css" href="' . append_version_number($sheet) . '">';
+}
+$stylesheets[] = '<link rel="stylesheet" type="text/css" href="' . append_version_number(get_config('wwwroot') . 'js/jquery/jquery-ui/css/ui-lightness/jquery-ui-1.10.2.min.css') . '">';
+$stylesheets[] = '<link rel="stylesheet" type="text/css" href="' . append_version_number(get_config('wwwroot') . 'theme/raw/static/style/switchbox.css') . '">';
 $stylesheets = array_merge($stylesheets, $view->get_all_blocktype_css());
 // Tell the user to change the view theme if the current one is no
 // longer available to them.
@@ -139,7 +143,9 @@ if ($viewtheme && !isset($allowedthemes[$viewtheme])) {
     exit;
 }
 
-$javascript = array('views', 'tinymce', 'paginator', 'expandable', 'js/jquery/jquery-ui/js/jquery-ui-1.10.2.min.js', 'tablerenderer', 'artefact/file/js/filebrowser.js', 'lib/pieforms/static/core/pieforms.js','js/jquery/modernizr.custom.js');
+$javascript = array('views', 'tinymce', 'paginator', 'expandable', 'js/jquery/jquery-ui/js/jquery-ui-1.10.2.min.js',
+                    'js/jquery/jquery-ui/js/jquery-ui.touch-punch.min.js', 'tablerenderer', 'artefact/file/js/filebrowser.js',
+                    'lib/pieforms/static/core/pieforms.js','js/jquery/modernizr.custom.js', 'js/select2/select2.js');
 $blocktype_js = $view->get_all_blocktype_javascript();
 $javascript = array_merge($javascript, $blocktype_js['jsfiles']);
 $inlinejs = "addLoadEvent( function() {\n" . join("\n", $blocktype_js['initjs']) . "\n});";
@@ -168,7 +174,7 @@ $addform = pieform(array(
         ),
         'submit' => array(
             'type' => 'submitcancel',
-            'value' => array(get_string('save'), get_string('cancel')),
+            'value' => array(get_string('add'), get_string('cancel')),
         ),
     ),
 ));
@@ -196,6 +202,9 @@ $smarty->assign('addform', $addform);
 
 // The list of categories for the tabbed interface
 $smarty->assign('category_list', $view->build_category_list($category, $new));
+
+// The list of shortcut blocks
+$smarty->assign('shortcut_list', $view->build_blocktype_list('shortcut'));
 
 // The list of blocktypes for the default category
 $smarty->assign('blocktype_list', $view->build_blocktype_list($category));
@@ -264,7 +273,6 @@ if (get_config('userscanchooseviewthemes') && $view->is_themeable() && $view->ge
 }
 
 $smarty->assign('viewid', $view->get('id'));
-$smarty->assign('viewtitle', $viewtitle);
 
 if ($blockid) {
     // Configuring a single block
@@ -281,5 +289,5 @@ $smarty->assign('issiteview', isset($institution) && ($institution == 'mahara'))
 if ($view->get('owner') == "0") {
     $smarty->assign('issitetemplate', true);
 }
-
+$smarty->assign('PAGEHEADING', TITLE);
 $smarty->display('view/blocks.tpl');

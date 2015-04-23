@@ -338,7 +338,7 @@ function xmldb_core_upgrade($oldversion=0) {
                         delete_records('usr_watchlist_view','view',$viewid);
                         if ($blockinstanceids = get_column('block_instance', 'id', 'view', $viewid)) {
                             foreach ($blockinstanceids as $id) {
-                                if (table_exists('blocktype_wall_post')) {
+                                if (table_exists(new XMLDBTable('blocktype_wall_post'))) {
                                     delete_records('blocktype_wall_post', 'instance', $id);
                                 }
                                 delete_records('view_artefact', 'block', $id);
@@ -407,6 +407,7 @@ function xmldb_core_upgrade($oldversion=0) {
     }
 
     if ($oldversion < 2009101600) {
+        require_once(get_config('docroot').'/lib/stringparser_bbcode/lib.php');
         // Remove bbcode formatting from existing feedback
         if ($records = get_records_sql_array("SELECT * FROM {view_feedback} WHERE message LIKE '%[%'", array())) {
             foreach ($records as &$r) {
@@ -589,7 +590,7 @@ function xmldb_core_upgrade($oldversion=0) {
             GROUP BY u.id
             HAVING COUNT(a.id) != 1";
 
-        $manyblogusers = get_records_sql_array($sql, null);
+        $manyblogusers = get_records_sql_array($sql, array());
 
         if ($manyblogusers) {
             foreach($manyblogusers as $u) {
@@ -3140,7 +3141,60 @@ function xmldb_core_upgrade($oldversion=0) {
     }
 
     if ($oldversion < 2014032600) {
-        install_watchlist_notification();
+        set_config('watchlistnotification_delay', 20);
+
+        if (!table_exists(new XMLDBTable('watchlist_queue'))) {
+            $table = new XMLDBTable('watchlist_queue');
+            $table->addFieldInfo('id', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL, XMLDB_SEQUENCE);
+            $table->addFieldInfo('usr', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL);
+            $table->addFieldInfo('block', XMLDB_TYPE_INTEGER, 10, null, false);
+            $table->addFieldInfo('view', XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL);
+            $table->addFieldInfo('changed_on', XMLDB_TYPE_DATETIME,  null, null, XMLDB_NOTNULL);
+            $table->addKeyInfo('viewfk', XMLDB_KEY_FOREIGN, array('view'), 'view', array('id'));
+            $table->addKeyInfo('blockfk', XMLDB_KEY_FOREIGN, array('block'), 'block_instance', array('id'));
+            $table->addKeyInfo('usrfk', XMLDB_KEY_FOREIGN, array('usr'), 'usr', array('id'));
+            $table->addKeyInfo('primary', XMLDB_KEY_PRIMARY, array('id'));
+            create_table($table);
+        }
+
+        // new event type: delete blockinstance
+        $e = new stdClass();
+        $e->name = 'deleteblockinstance';
+        ensure_record_exists('event_type', $e, $e);
+
+        // install the core event subscriptions
+        $subs = array(
+            array(
+                'event'         => 'blockinstancecommit',
+                'callfunction'  => 'watchlist_record_changes',
+            ),
+            array(
+                'event'         => 'deleteblockinstance',
+                'callfunction'  => 'watchlist_block_deleted',
+            ),
+            array(
+                'event'         => 'saveartefact',
+                'callfunction'  => 'watchlist_record_changes',
+            ),
+            array(
+                'event'         => 'saveview',
+                'callfunction'  => 'watchlist_record_changes',
+            ),
+        );
+
+        foreach ($subs as $sub) {
+            ensure_record_exists('event_subscription', (object)$sub, (object)$sub);
+        }
+
+        // install the cronjobs...
+        $cron = new stdClass();
+        $cron->callfunction = 'watchlist_process_notifications';
+        $cron->minute       = '*';
+        $cron->hour         = '*';
+        $cron->day          = '*';
+        $cron->month        = '*';
+        $cron->dayofweek    = '*';
+        ensure_record_exists('cron', $cron, $cron);
     }
 
     if ($oldversion < 2014032700) {
@@ -3270,16 +3324,44 @@ function xmldb_core_upgrade($oldversion=0) {
         add_field($table, $field);
 
         // Fill the new field with path data.
-        $artefacts = get_records_array('artefact', '', '', '', 'id, parent');
-        $artefact_relations = get_records_menu('artefact', '', '', '', 'id, parent');
-        if ($artefacts && $artefact_relations) {
-            foreach ($artefacts as $artefact) {
-                $path = '/' . implode('/', artefact_get_lineage($artefact_relations, $artefact->id));
-                $todb = new stdClass();
-                $todb->id = $artefact->id;
-                $todb->path = $path;
-                update_record('artefact', $todb);
-            }
+        // Set all artefacts to the path they'd have if they have no parent.
+        log_debug('Filling in parent artefact paths');
+        execute_sql("UPDATE {artefact} SET path = '/' || id WHERE parent IS NULL");
+        $newcount = count_records_select('artefact', 'path IS NULL');
+        if ($newcount) {
+            $childlevel = 0;
+            do {
+                $childlevel++;
+                $lastcount = $newcount;
+                log_debug("Filling in level-{$childlevel} child artefact paths");
+                if (is_postgres()) {
+                    execute_sql("
+                        UPDATE {artefact}
+                        SET path = p.path || '/' || {artefact}.id
+                        FROM {artefact} p
+                        WHERE
+                            {artefact}.parent=p.id
+                            AND {artefact}.path IS NULL
+                            AND p.path IS NOT NULL
+                    ");
+                }
+                else {
+                    execute_sql("
+                        UPDATE
+                            {artefact} a
+                            INNER JOIN {artefact} p
+                            ON a.parent = p.id
+                        SET a.path=p.path || '/' || a.id
+                        WHERE
+                            a.path IS NULL
+                            AND p.path IS NOT NULL
+                    ");
+                }
+                $newcount = count_records_select('artefact', 'path IS NULL');
+                // There may be some bad records whose paths can't be filled in,
+                // so stop looping if the count stops going down.
+            } while ($newcount > 0 && $newcount < $lastcount);
+            log_debug("Done filling in child artefact paths");
         }
     }
 
@@ -3409,6 +3491,7 @@ function xmldb_core_upgrade($oldversion=0) {
     }
 
     if ($oldversion < 2014062000) {
+        $where = array('callfunction' => 'auth_clean_expired_password_requests');
         $data = array('callfunction' => 'auth_clean_expired_password_requests',
                       'minute' => '5',
                       'hour' => '0',
@@ -3416,7 +3499,7 @@ function xmldb_core_upgrade($oldversion=0) {
                       'month' => '*',
                       'dayofweek' => '*',
                       );
-        ensure_record_exists('cron', (object)$data, (object)$data);
+        ensure_record_exists('cron', (object)$where, (object)$data);
     }
 
     // Add feedbacknotify option to group table
@@ -3673,7 +3756,7 @@ function xmldb_core_upgrade($oldversion=0) {
         }
     }
 
-    if ($oldversion < 2014092303) {
+    if ($oldversion < 2014101300) {
         // Make sure the 'system messages' and 'messages from other users' have a notification method set
         // It was possible after earlier upgrades to set method to 'none'.
         // Also make sure old defaultmethod is respected.
@@ -3699,12 +3782,7 @@ function xmldb_core_upgrade($oldversion=0) {
         }
     }
 
-    // Unlock root user grouphomepage template in case it is locked
-    if ($oldversion < 2014092304) {
-        set_field('view', 'locked', 0, 'type', 'grouphomepage', 'owner', 0);
-    }
-
-    if ($oldversion < 2014092305) {
+    if ($oldversion < 2014101500) {
         if ($fonts = get_records_assoc('skin_fonts', 'fonttype', 'google')) {
             $fontpath = get_config('dataroot') . 'skins/fonts/';
             foreach ($fonts as $font) {
@@ -3746,6 +3824,203 @@ function xmldb_core_upgrade($oldversion=0) {
                     }
                 }
             }
+        }
+    }
+
+    // Unlock root user grouphomepage template in case it is locked
+    if ($oldversion < 2014101501) {
+        set_field('view', 'locked', 0, 'type', 'grouphomepage', 'owner', 0);
+    }
+
+    if ($oldversion < 2014110500) {
+        // Adding cacheversion, as an arbitrary number appended to the end of JS & CSS files in order
+        // to tell cacheing software when they've been updated. (Without having to use the Mahara
+        // minor version for that purpose.)
+        // Set this to a random starting number to make minor version slightly harder to detect
+        if (!get_config('cacheversion')) {
+            set_config('cacheversion', rand(1000, 9999));
+        }
+    }
+
+    if ($oldversion < 2014110700) {
+        // Increment all the existing sorts by 1 to make room...
+        $cats = get_records_array('blocktype_category', '', '', 'sort desc');
+        foreach ($cats as $cat) {
+            $cat->sort = $cat->sort + 1;
+            update_record('blocktype_category', $cat, 'name');
+        }
+
+        $todb = new stdClass();
+        $todb->name = 'shortcut';
+        $todb->sort = '0';
+        insert_record('blocktype_category', $todb);
+    }
+
+    if ($oldversion < 2014112700) {
+        // Need to find the group homepages that have more than one groupview on them
+        // and merge their data into one groupview as we shouldn't allow more than one groupview block
+        // as it breaks pagination
+
+        // First get any pages that have more than one groupview on them
+        // and find the status of the groupview blocks
+        if ($records = get_records_sql_array("SELECT v.id AS view, bi.id AS block FROM {view} v
+            INNER JOIN {block_instance} bi ON v.id = bi.view
+            WHERE v.id IN (
+                SELECT v.id FROM {view} v
+                 INNER JOIN {block_instance} bi ON v.id = bi.view
+                 WHERE bi.blocktype = 'groupviews'
+                  AND v.type = 'grouphomepage'
+                 GROUP BY v.id
+                 HAVING COUNT(v.id) > 1
+            )
+            AND bi.blocktype='groupviews'
+            ORDER BY v.id, bi.id", array())) {
+                require_once(get_config('docroot') . 'blocktype/lib.php');
+                $lastview = 0;
+                // set default
+                $info = array();
+                $x = -1;
+                foreach ($records as $record) {
+                    if ($lastview != $record->view) {
+                        $x++;
+                        $info[$x]['in']['showgroupviews'] = 0;
+                        $info[$x]['in']['showsharedviews'] = 0;
+                        $info[$x]['in']['view'] = $record->view;
+                        $info[$x]['in']['block'] = $record->block;
+                        $lastview = $record->view;
+                    }
+                    else {
+                        $info[$x]['out'][] = $record->block;
+                    }
+                    $bi = new BlockInstance($record->block);
+                    $configdata = $bi->get('configdata');
+                    if (!empty($configdata['showgroupviews'])) {
+                        $info[$x]['in']['showgroupviews'] = 1;
+                    }
+                    if (!empty($configdata['showsharedviews'])) {
+                        $info[$x]['in']['showsharedviews'] = 1;
+                    }
+                }
+
+                // now that we have info on the state of play we need to save one of the blocks
+                // with correct data and delete the not needed blocks
+                foreach ($info as $item) {
+                    $bi = new BlockInstance($item['in']['block']);
+                    $configdata = $bi->get('configdata');
+                    $configdata['showgroupviews'] = $item['in']['showgroupviews'];
+                    $configdata['showsharedviews'] = $item['in']['showsharedviews'];
+                    $bi->set('configdata', $configdata);
+                    $bi->commit();
+                    foreach ($item['out'] as $old) {
+                        $bi = new BlockInstance($old);
+                        $bi->delete();
+                    }
+                }
+        }
+    }
+
+    if ($oldversion < 2014121200) {
+        require_once('file.php');
+        $layoutdir = get_config('dataroot') . 'images/layoutpreviewthumbs';
+        if (file_exists($layoutdir)) {
+            rmdirr($layoutdir);
+        }
+    }
+
+    if ($oldversion < 2015013000) {
+        // Add a sortorder column to blocktype_installed_category
+        $table = new XMLDBTable('blocktype_installed_category');
+
+        $field = new XMLDBField('sortorder');
+        $field->setAttributes(XMLDB_TYPE_INTEGER, 10, null, XMLDB_NOTNULL, null, null, null, 100000, 'category');
+        add_field($table, $field);
+    }
+
+    if ($oldversion < 2015021000) {
+        // Need to update any dashboard pages to not have skins
+        // and seen as we are updating and selecting from the same table
+        // we need to use a temptable for it to work in mysql
+        execute_Sql("UPDATE {view} SET skin = NULL WHERE id IN ( SELECT vid FROM (SELECT id AS vid FROM {view} WHERE type = 'dashboard' AND skin IS NOT NULL) AS temptable)");
+    }
+
+    if ($oldversion < 2015021900) {
+        require_once(get_config('docroot').'/lib/stringparser_bbcode/lib.php');
+        // Remove bbcode formatting from existing wall posts
+        if ($records = get_records_sql_array("SELECT id, text FROM {blocktype_wall_post} WHERE text LIKE '%[%'", array())) {
+            foreach ($records as &$r) {
+                $r->text = parse_bbcode($r->text);
+                update_record('blocktype_wall_post', $r);
+            }
+        }
+    }
+
+    if ($oldversion < 2015030400) {
+        if (get_config('searchusernames') === 1) {
+            set_config('nousernames', 0);
+        }
+        else {
+            set_config('nousernames', 1);
+        }
+        delete_records('config', 'field', 'searchusernames');
+    }
+
+    if ($oldversion < 2015030403) {
+        if ($blocktypes = plugins_installed('blocktype', true)) {
+            foreach ($blocktypes as $bt) {
+                // Hack to deal with contactinfo block deletion
+                if ($bt->name == 'contactinfo') {
+                    continue;
+                }
+                install_blocktype_categories_for_plugin(blocktype_single_to_namespaced($bt->name, $bt->artefactplugin));
+            }
+        }
+    }
+
+    if ($oldversion < 2015030404) {
+        log_debug("Updating TinyMCE emoticon locations in mahara database");
+        // Seeing as tinymce has moved the location of the emoticons
+        // we need to fix up a few places where users could have added emoticons.
+        // $replacements is key = table, value = column
+        $replacements = array('view' => 'description',
+                              'artefact' => 'title',
+                              'artefact' => 'description',
+                              'group' => 'description',
+                              'interaction_forum_post' => 'body',
+                              'notification_internal_activity' => 'message',
+                              'blocktype_wall_post' => 'text',
+                              'site_content' => 'content');
+        foreach ($replacements as $key => $value) {
+            execute_sql("UPDATE {" . $key . "} SET " . $value . " = REPLACE(" . $value . ", '/emotions/img', '/emoticons/img') WHERE " . $value . " LIKE '%/emotions/img%'");
+        }
+        // we need to handle block_instance configdata in a special way
+        if ($results = get_records_sql_array("SELECT id FROM {block_instance} WHERE configdata LIKE '%/emotions/img%'", array())) {
+            require_once(get_config('docroot') . 'blocktype/lib.php');
+            $count = 0;
+            $limit = 1000;
+            $total = count($results);
+            foreach ($results as $result) {
+                $bi = new BlockInstance($result->id);
+                $configdata = $bi->get('configdata');
+                foreach ($configdata as $key => $value) {
+                    $configdata[$key] = preg_replace('/\/emotions\/img/', '/emotions/img', $value);
+                }
+                $bi->set('configdata', $configdata);
+                $bi->commit();
+                $count++;
+                if (($count % $limit) == 0 || $count == $total) {
+                    log_debug("$count/$total");
+                    set_time_limit(30);
+                }
+            }
+        }
+    }
+
+    if ($oldversion < 2015030408) {
+        if ($data = check_upgrades('artefact.annotation')) {
+            upgrade_plugin($data);
+        }
+        if ($data = check_upgrades('auth.webservice')) {
+            upgrade_plugin($data);
         }
     }
 

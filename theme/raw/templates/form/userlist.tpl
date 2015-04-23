@@ -1,4 +1,4 @@
-<script type="text/javascript">
+<script type="application/javascript">
     var {{$name}}_d;
 
     var {{$name}}_searchparams;
@@ -102,12 +102,12 @@
         // Update the counters if they are present
         if ($('{{$name}}_userlimit')) {
             if (from.id == '{{$name}}_potential') {
-                replaceChildNodes('{{$name}}_userlimit', parseInt($('{{$name}}_userlimit').innerHTML) - list.length);
-                replaceChildNodes('{{$name}}_usercount', parseInt($('{{$name}}_usercount').innerHTML) - list.length);
+                replaceChildNodes('{{$name}}_userlimit', parseInt($('{{$name}}_userlimit').innerHTML, 10) - list.length);
+                replaceChildNodes('{{$name}}_usercount', parseInt($('{{$name}}_usercount').innerHTML, 10) - list.length);
             }
             else {
-                replaceChildNodes('{{$name}}_userlimit', parseInt($('{{$name}}_userlimit').innerHTML) + list.length);
-                replaceChildNodes('{{$name}}_usercount', parseInt($('{{$name}}_usercount').innerHTML) + list.length);
+                replaceChildNodes('{{$name}}_userlimit', parseInt($('{{$name}}_userlimit').innerHTML, 10) + list.length);
+                replaceChildNodes('{{$name}}_usercount', parseInt($('{{$name}}_usercount').innerHTML, 10) + list.length);
             }
         }
 

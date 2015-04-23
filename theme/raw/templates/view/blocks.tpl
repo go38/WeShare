@@ -2,7 +2,6 @@
   {include file="viewmicroheader.tpl"}
 {else}
   {include file="header.tpl"}
-  <h1>{$viewtitle}</h1>
 {/if}
 
 {include file="view/editviewtabs.tpl" selected='content' new=$new issiteview=$issiteview}
@@ -42,7 +41,7 @@
                     <div class="cb"></div>
                 </div>
             </div>
-            <script type="text/javascript">
+            <script type="application/javascript">
             {literal}
             insertSiblingNodesAfter('bottom-pane', DIV({'id': 'views-loading'}, IMG({'src': config.theme['images/loading.gif'], 'alt': ''}), ' ', get_string('loading')));
             {/literal}
@@ -78,10 +77,10 @@
             {$block.html|safe}
         </div>
     </div>
-    {if $block.javascript}<script type="text/javascript">{$block.javascript|safe}</script>{/if}
+    {if $block.javascript}<script type="application/javascript">{$block.javascript|safe}</script>{/if}
 {/if}
 </div>
-<div id="addblock" class="blockinstance cb configure hidden" role="dialog" aria-labelledby="addblock-heading" tabindex="-1">
+<div id="addblock" class="blockinstance cb configure vertcentre hidden" role="dialog" aria-labelledby="addblock-heading" tabindex="-1">
     <div class="blockinstance-controls">
         <input type="image" src="{theme_url filename=images/btn_close.png}" class="deletebutton" name="action_removeblockinstance_id_{$id}" alt="{str tag=Close}">
     </div>
@@ -92,7 +91,7 @@
         {$addform|safe}
     </div>
 </div>
-<div id="configureblock" class="blockinstance cb configure hidden" role="dialog">
+<div id="configureblock" class="blockinstance cb configure vertcentre hidden" role="dialog">
     <div class="blockinstance-controls">
         <input type="image" src="{theme_url filename=images/btn_close.png}" class="deletebutton" name="close_configuration" alt="{str tag=closeconfiguration section=view}">
     </div>

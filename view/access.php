@@ -336,8 +336,8 @@ function ptimetotime($ptime) {
         $ptime['tm_hour'],
         $ptime['tm_min'],
         $ptime['tm_sec'],
-        1,
-        $ptime['tm_yday'] + 1,
+        $ptime['tm_mon'] + 1,
+        $ptime['tm_mday'],
         $ptime['tm_year'] + 1900
     );
 }
@@ -355,7 +355,7 @@ function editaccess_validate(Pieform $form, $values) {
 
     $accesstypestrings = array(
         'public'      => get_string('public', 'view'),
-        'loggedin'    => get_string('loggedin', 'view'),
+        'loggedin'    => get_string('registeredusers', 'view'),
         'friends'     => get_string('friends', 'view'),
         'user'        => get_string('user', 'group'),
         'group'       => get_string('group', 'group'),

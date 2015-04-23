@@ -2,14 +2,17 @@
 
 {if $notrudeform}<div class="message deletemessage">{$notrudeform|safe}</div>{/if}
 
-{if !$microheaders && ($mnethost || $editurl)}
+{if !$microheaders && ($mnethost || $editurl || $copyurl)}
 <div class="viewrbuttons">
   {if $editurl}{strip}
     {if $new}
       <a class="btn" href="{$editurl}">{str tag=back}</a>
     {else}
-      <a title="{str tag=editthisview section=view}" href="{$editurl}" class="btn editview">{str tag=editthisview section=view}</a>
+      <a title="{str tag=editthisview section=view}" href="{$editurl}" class="btn editview">{str tag=edit section=mahara}</a>
     {/if}
+  {/strip}{/if}
+  {if $copyurl}{strip}
+    <a title="{str tag=copythisview section=view}" href="{$copyurl}" class="btn copyview">{str tag=copy section=mahara}</a>
   {/strip}{/if}
   {if $mnethost}<a href="{$mnethost.url}" class="btn">{str tag=backto arg1=$mnethost.name}</a>{/if}
 </div>
@@ -43,7 +46,7 @@
     {if $feedback->position eq 'base'}
         {if $feedback->count || $enablecomments}
         <h3 class="title">{str tag="feedback" section="artefact.comment"}</h3>
-        <div id="feedbacktable" class="fullwidth">
+        <div id="feedbacktable" class="feedbacktable fullwidth">
             {$feedback->tablerows|safe}
         </div>
         {$feedback->pagination|safe}
